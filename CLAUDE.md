@@ -40,9 +40,21 @@ estava tudo bem enquanto não estava.
 
 ## Comandos
 
+**Primeira coisa, num clone novo:**
+
+```bash
+bash scripts/build-app.sh     # compila o whisper.cpp estático em vendor/
+```
+
+`vendor/` não é versionado (são binários), e sem ele o `swift build` falha com
+`could not build Objective-C module 'CWhisper'` — mensagem que não diz a causa.
+O script clona o whisper.cpp num commit fixo, confere, compila e guarda o
+resultado. Leva alguns minutos na primeira vez, ~1 s nas seguintes.
+
+Depois disso:
+
 ```bash
 swift build && swift test     # 29 testes
-bash scripts/build-app.sh     # compila, empacota e assina
 bash scripts/install.sh       # instala em /Applications
 bash scripts/bench.sh         # mede latência e qualidade por modelo
 ```

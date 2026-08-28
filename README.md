@@ -135,8 +135,12 @@ gerar outro certificado, e o macOS pede Acessibilidade de novo.
 ## Desenvolvimento
 
 ```bash
+bash scripts/build-app.sh     # primeira vez: compila o whisper.cpp em vendor/
 swift build && swift test
 ```
+
+`vendor/` não é versionado. Sem ele o `swift build` falha com
+`could not build Objective-C module 'CWhisper'` — mensagem que não diz a causa.
 
 29 testes em **swift-testing**, não XCTest — o XCTest só existe com o Xcode
 completo instalado, e este projeto compila com Command Line Tools.
