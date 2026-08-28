@@ -1,0 +1,24 @@
+# Áudio de fixture nunca vai pro repositório — pode conter vocabulário
+# interno e é a sua voz. Só o README fica versionado.
+fixtures/*
+!fixtures/README.md
+
+# Modelos Whisper: centenas de MB, baixados por scripts/setup-bench.sh
+models/
+
+# Saída bruta da bancada
+bench-out/
+
+# Build
+.build/
+build/
+*.o
+*.a
+
+.DS_Store
+
+# Ferramental de conversão de modelo (venv, assets, intermediários)
+.cache/
+
+# whisper.cpp compilado estático (produzido por scripts/build-app.sh)
+vendor/

@@ -1,0 +1,12 @@
+// Ponte para o whisper.cpp compilado estático em vendor/whisper.
+//
+// Caminhos relativos a este arquivo: SwiftPM resolve headers de um alvo
+// `systemLibrary` na hora do import, antes de qualquer flag do consumidor.
+//
+// `ggml-backend.h` entra junto porque `ggml_backend_load_all()` mora lá e não é
+// exposto por `whisper.h`.
+module CWhisper [system] {
+    header "../../vendor/whisper/include/whisper.h"
+    header "../../vendor/whisper/include/ggml-backend.h"
+    export *
+}
