@@ -35,6 +35,13 @@ if [ -n "$(git -C "$REPO_ROOT" status --porcelain)" ]; then
       própria — commitar, guardar em stash ou descartar é decisão dela."
 fi
 
+# Conferido antes do fetch porque `git fetch` num repositório sem remoto nenhum
+# retorna zero sem fazer nada — e a falha só apareceria três linhas depois, numa
+# mensagem mandando configurar `origin/...` que não existe.
+[ -n "$(git -C "$REPO_ROOT" remote)" ] || fail "este clone não tem remoto configurado.
+      Não há de onde buscar versão nova. Se o repositório foi copiado em vez de
+      clonado, clone de novo — ou peça a URL a quem te passou o projeto."
+
 info "Procurando versão nova"
 git -C "$REPO_ROOT" fetch --quiet || fail "não consegui falar com o remoto. Rede?"
 
