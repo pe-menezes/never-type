@@ -315,6 +315,48 @@ honesta no README, no lugar do "não há vocabulário customizado" que estava l�
 
 ## 6. Higiene
 
+### H13 · O README passou no cold-read de forma e falhou no de estrutura — G
+Medido em 29/08/2026 por dois leitores limpos, com tetos declarados antes de o
+texto em inglês existir. Rodada 1 sobre `e8044dd`: 4 de 14 tetos estourados
+(antítese, família inteira, 41 contra 6; clivada 8 contra 2; meta-comentário 2
+contra 1; auto-plágio 12 formulações contra 0). Uma rodada de conserto rodou com
+instrução de forma. Rodada 2: **8 de 14 estourados**, e cinco famílias pioraram.
+
+| família | r1 | r2 | teto |
+|---|---:|---:|---|
+| antítese (12 com negação + 24 contraste sem negação) | 41 | 36 | ≤6, ≤1/H2 |
+| clivada (migrou pra copular "The X is Y") | 8 | 7 | ≤2 |
+| sentença-veredito | 3 | 20 | ≤3 |
+| meta-comentário | 2 | 7 | ≤1 |
+| puffery | 0 | 3 | ≤2 |
+| par numérico | 1 | 4 | ≤2 |
+| with + noun + particípio | 0 | 4 | ≤3 |
+| auto-plágio (famílias) | 12 | 8 | 0 |
+| travessão · ponto e vírgula de oposição | 0 · 0 | 0 · 0 | 0 |
+
+**O que a medição ensina, e é o motivo de este item ser G:** proibir a fivela
+NOMEADA funciona (ponto e vírgula de oposição foi proibido por escrito e ficou em
+0), proibir a família não funciona, porque a figura migra pra construção que
+nenhuma lista antecipou. Aqui migrou pra contraste sem negação nenhuma (24 casos)
+e pra frase copular (19 aberturas "The X is"). O defeito restante é
+**arquitetural**: 21 parágrafos no mesmo molde (frase-tese em negrito, 2 a 4
+frases de explicação, oração de julgamento no fim), 55 spans em negrito em 348
+linhas, e o frame binário anunciado antes de ser executado ("The two lists do
+different jobs", "there are two ways"; 23 ocorrências do frame "N coisas"). Isso
+não se conserta com teto numérico: exige reescrever a arquitetura das seções, uma
+de cada vez, e medir de novo.
+
+Encerrado por decisão do Pedro em 29/08 depois da rodada 2, com o placar
+publicado como saiu: a medição do catálogo diz que da terceira rodada em diante o
+ganho é troca de tell por tell. Os dois defeitos de SUBSTÂNCIA que a mesma leitura
+achou (manchete de latência contradita pelo próprio dado; alegação de rede mais
+larga que a checagem descrita) foram consertados e estão no commit deste dia.
+
+*Evidência:* relatórios em `.cache/coldread-r1.md` e `.cache/coldread-r2.md`
+(fora do git) · catálogo de tells e tetos declarados no vault do autor ·
+`README.md` em `e8044dd` e no commit seguinte
+
+
 ### H1 · Comparar o WER com um baseline público — P
 O OpenQuack publica ~2,6% de erro em fala humana real num M4 base e ~6,3% com
 ruído de escritório, em `docs/BENCHMARKS.md`. Você já tem `scripts/bench.sh`
