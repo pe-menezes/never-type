@@ -59,8 +59,9 @@ leitura de disco:
 // Sources/NeverTypeCore/Transcriber.swift:44
 /// A regra em si, separada da leitura de disco.
 ///
-/// Assim dá para testar o piso de tamanho sem escrever 50 MB a cada execução
-/// da suíte.
+/// Assim dá para testar o piso de tamanho sem escrever 400 MB a cada execução
+/// da suíte. (O teste do caminho em disco usa um arquivo esparso pelo mesmo
+/// motivo.)
 public static func isValid(magic: Data, size: Int) -> Bool {
     guard size >= minimumBytes else { return false }
     guard magic.count == 4 else { return false }
@@ -118,8 +119,10 @@ Cada uma dessas separações nasceu de um defeito real, não de gosto:
   garantir (cancelar apaga o arquivo) só dava para testar falando no microfone.
 - `secureInput` virou parâmetro porque o teste do ramo dependia de ligar entrada
   segura para a sessão inteira.
-- `isValid(magic:size:)` foi extraído porque a alternativa era escrever 50 MB em
-  disco a cada execução da suíte.
+- `isValid(magic:size:)` foi extraído porque a alternativa era escrever o piso
+  inteiro em disco a cada execução da suíte — 50 MB na época, 400 MB desde
+  29/08/2026. O caminho em disco ganhou teste próprio com arquivo esparso
+  (`FileHandle.truncate`): tamanho lógico de 400 MB, custo de KB.
 
 ## Anti-patterns
 

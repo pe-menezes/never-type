@@ -58,6 +58,13 @@ aviso, sem ícone, sem menu. O app simplesmente não abria.
 **Regra:** magic **e** piso de tamanho proporcional ao artefato real. Um piso de
 50 MB para um modelo de 547 MB aprova download truncado.
 
+E regra escrita não é regra aplicada: até 29/08/2026 este parágrafo já existia e
+o piso era 50 MB em três dos cinco lugares que validam o modelo —
+`ModelStore.minimumBytes` no app, `fetch-model.sh` e `setup-bench.sh`; só
+`install.sh` e `verificar-instalacao.sh` usavam 400. Hoje são 400 MB nos cinco,
+e na bancada o piso é por modelo (130 MB para o `small` de 181 MB). Custo de
+conferir: um `grep` pelo número.
+
 ---
 
 ## Concorrência que o compilador não vê
@@ -274,6 +281,24 @@ escreveu no meio).
 
 E marque o item com `org.nspasteboard.ConcealedType`, ou cada inserção entra no
 histórico de gestores de clipboard e sobrevive à restauração.
+
+### Comentário de privacidade envelhece sem ninguém ver
+
+`main.swift` abria com: *"Um arquivo só, sobrescrito… o app não guarda histórico
+de nada que você falou."* Era verdade quando foi escrito. Em 29/08/2026 havia
+três cópias do que a pessoa falou em disco: `historico.json` (30 transcrições),
+`nevertype.log` (o texto de **cada** transcrição da sessão — que nenhum documento
+mencionava e "Limpar histórico" não apagava) e `last.wav` (a gravação inteira,
+que "Limpar histórico" também não apagava).
+
+Nenhuma delas era defeito de comportamento — o histórico é deliberado e
+documentado. O defeito era a frase: uma negativa categórica dentro da fonte, para
+quem perguntasse "ele guarda o que eu falei?". Hoje o log guarda tempo e tamanho,
+nunca o texto; "Limpar histórico" apaga o JSON e o WAV; e o comentário lista os
+arquivos.
+
+**Regra:** afirmação de privacidade se confere contra o disco — `ls` na pasta do
+app depois de ditar —, não contra a intenção de quem escreveu.
 
 ---
 

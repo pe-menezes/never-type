@@ -24,7 +24,7 @@ cópia envelhece em silêncio. Consultar é barato; mentir para o usuário não 
 **Permissão é propriedade computada, não flag:**
 
 ```swift
-// Sources/NeverType/main.swift:126
+// Sources/NeverType/main.swift — micAuthorized
 /// Consultado ao sistema toda vez, em vez de guardado numa variável.
 ///
 /// A versão anterior guardava o estado numa flag preenchida durante o
@@ -56,7 +56,7 @@ func menuNeedsUpdate(_ menu: NSMenu) {
 está como você deixou:**
 
 ```swift
-// Sources/NeverTypeCore/TextInjector.swift:129
+// Sources/NeverTypeCore/TextInjector.swift — insert(_:pasteboard:paste:secureInput:)
 let stamp = pasteboard.changeCount
 // ...
 // Alguém escreveu no pasteboard depois de nós. Devolver agora
@@ -80,7 +80,7 @@ snapshot.restore(to: pasteboard)
 
 ## Examples from this codebase
 
-File: `Sources/NeverTypeCore/HotkeyMonitor.swift:52`
+File: `Sources/NeverTypeCore/HotkeyMonitor.swift` — `hasAccessibilityPermission`
 ```swift
 /// A concessão de Acessibilidade. Sem ela os monitores globais não recebem
 /// evento nenhum — e não avisam. O app pareceria quebrado em silêncio.
@@ -89,7 +89,7 @@ public static var hasAccessibilityPermission: Bool {
 }
 ```
 
-File: `Sources/NeverTypeCore/TextInjector.swift:112` — geração por recurso:
+File: `Sources/NeverTypeCore/TextInjector.swift` — geração por recurso, em `insert`:
 ```swift
 let key = pasteboard.name
 let myGeneration = (pending[key]?.generation ?? 0) + 1

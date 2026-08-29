@@ -9,14 +9,15 @@ confidence: inferred
 <!-- vibeflow:auto:start -->
 ## What
 
-Os seis scripts em `scripts/` seguem o mesmo esqueleto: mesmo modo estrito,
+Os oito scripts em `scripts/` seguem o mesmo esqueleto: mesmo modo estrito,
 mesma resolução de raiz, mesmas quatro funções de saída, idempotência e
 verificação antes de destruir. Um script novo que não siga isso destoa na hora.
 
 ## Where
 
 `scripts/setup-bench.sh`, `bench.sh`, `record-fixture.sh`, `build-app.sh`,
-`fetch-model.sh`, `install.sh` — os seis, sem exceção.
+`fetch-model.sh`, `install.sh`, `verificar-instalacao.sh`, `atualizar.sh` — os
+oito, sem exceção.
 
 ## The Pattern
 
@@ -79,13 +80,14 @@ pgrep -x NeverType >/dev/null && fail "o NeverType não encerrou. ..."
 
 ## Examples from this codebase
 
-File: `scripts/setup-bench.sh` — validação com magic e tamanho, e remoção do que
+File: `scripts/setup-bench.sh` — validação com magic e tamanho, com o piso por
+modelo (vem da tabela `MODELS`, proporcional ao artefato real), e remoção do que
 não confere:
 ```bash
-is_valid_ggml() {
+is_valid_ggml() {  # <arquivo> <piso em MB>
   [ -f "$1" ] || return 1
   [ "$(head -c 4 "$1" | xxd -p)" = "$GGML_MAGIC_HEX" ] || return 1
-  [ "$(( $(stat -f%z "$1") / 1048576 ))" -ge "$GGML_MIN_MB" ]
+  [ "$(( $(stat -f%z "$1") / 1048576 ))" -ge "$2" ]
 }
 ```
 

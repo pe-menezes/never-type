@@ -64,37 +64,39 @@ concedida.
 ### D3 · `IsSecureEventInputEnabled` não significa o que o código assume — P
 É flag **global da sessão**, não "campo de senha em foco". Qualquer processo
 liga e esquece de desligar — e a partir daí o NeverType recusa inserir texto sem
-motivo, dizendo "campo de senha em foco" quando não há nenhum. Falso positivo
-que faz o app parecer quebrado.
-*Evidência:* `.vibeflow/index.md` (Known Issues) · `TextInjector.swift`
+motivo. Falso positivo que faz o app parecer quebrado.
 
-### D4 · O código afirma não guardar o que a pessoa falou, e guarda — P
-O doc comment de `lastRecordingURL()`, em `main.swift:5-6`, diz: *"Um arquivo só,
-sobrescrito: a Parte 3 lê daqui, e o app não guarda histórico de nada que você
-falou."* Era verdade quando foi escrito. Deixou de ser com o `TranscriptHistory`,
-que grava até 30 transcrições em `historico.json` — **no diretório que essa mesma
-função devolve** (`main.swift:161-162`).
+**Texto corrigido em 29/08/2026; comportamento em aberto.** O comentário e o log
+de `main.swift`, o doc de `TextInjector.Outcome.blockedBySecureInput` e a
+mensagem do teste deixaram de dizer "campo de senha em foco": dizem o que o
+código sabe — a flag global está ligada, algum processo a ligou, o texto ficou
+na área de transferência e no menu. O que continua sem medição é a premissa de
+que o macOS descartaria o ⌘V sintético; recusar colar enquanto a flag está
+ligada é a decisão que este item ainda precisa tomar.
+*Evidência:* `.vibeflow/index.md` (Known Issues) · `TextInjector.swift` ·
+auditoria de 29/08 (K29, K112)
 
-Está aqui, e não em Higiene, pelo que a frase promete. É a única alegação de
-privacidade errada do repositório, num projeto cuja tese inteira é que o
-conteúdo não sai da máquina. O modo de falha não é alguém se confundir lendo
-código: é a frase sair daqui e virar resposta. Quem for perguntado "ele guarda o
-que eu falei?" tem, dentro da fonte, uma negativa categórica para citar — e a
-pessoa dita conteúdo sensível acreditando que nada fica. Fica: 30 entradas, em
-texto claro, no disco.
+### ✅ D4 · O código afirmava não guardar o que a pessoa falou, e guardava — FEITO em 29/08
+O doc comment de `lastRecordingURL()` dizia *"o app não guarda histórico de nada
+que você falou"*. A auditoria de 29/08 achou **três** cópias em disco, não uma:
+`historico.json` (30 transcrições), `nevertype.log` (o texto de cada transcrição
+da sessão — sem doc nenhum e fora de "Limpar histórico") e `last.wav` (a gravação
+inteira, também fora de "Limpar histórico").
 
-**O comportamento não é o defeito.** Guardar é deliberado e está justificado em
-`TranscriptHistory.swift:20-28` (teto de 30, texto claro porque a chave moraria
-ao lado do arquivo, apagável pelo menu), e o README já descreve isso desde
-29/08. O defeito é só o comentário que contradiz tudo isso três linhas acima da
-função. Conserto de uma frase — a dificuldade é lembrar que ela existe, não
-escrevê-la.
+O que mudou: o log passou a guardar tempo e tamanho, nunca o texto (`transcrito
+em N ms: M caracteres`), e o doc de `log(_:)` carrega a regra; "Limpar histórico"
+apaga o JSON **e** o `last.wav`, recusando só com gravação em curso
+(`RecordingSink.removeDestination`, `AudioRecorder.discardLastRecording`, 4
+testes); o doc de `lastRecordingURL()` lista os arquivos; o README ganhou "O que
+fica em disco" e `docs/armadilhas.md` ganhou o caso. Guardar continua deliberado
+e justificado em `TranscriptHistory.swift`.
 
-É também o padrão que o `CLAUDE.md` nomeia como o pior deste projeto: fazer o
-programa relatar que está tudo bem enquanto não está.
-*Evidência:* `Sources/NeverType/main.swift:5-6` (o texto, conferido em
-29/08/2026) · `main.swift:161-162` (o `historico.json` no mesmo diretório) ·
-`TranscriptHistory.swift:23-31` (o teto de 30 e o texto claro)
+**Falta você conferir no disco:** dite, abra
+`~/Library/Application Support/NeverType/`, confira que o `nevertype.log` não tem
+o texto e que "Limpar histórico" some com `historico.json` e `last.wav`.
+*Evidência:* auditoria de 29/08 (§13.1, K1, B2, B3) · `main.swift` (doc de
+`lastRecordingURL()`, `clearHistory()`, `log(_:)`) · `AudioRecorder.swift` ·
+`AudioRecorderTests.swift` (suíte "Ciclo do arquivo de gravação")
 
 ---
 
@@ -103,7 +105,9 @@ programa relatar que está tudo bem enquanto não está.
 ### L1 · Transcrição em streaming durante a fala — G
 **Rebaixado em 28/08 por medição.** Era "o item mais valioso do backlog".
 
-Cinco ditados reais, do log do app:
+Cinco ditados reais, do log do app (lidos quando a linha ainda era `transcrito em
+N ms → texto`; desde 29/08 ela é `transcrito em N ms: M caracteres`, sem o texto —
+o número continua no mesmo lugar):
 
 | áudio | transcrição | fator |
 |---|---|---|
@@ -188,8 +192,9 @@ aprender qual som é qual. Ligados por padrão e desligáveis em Tecla › Sons
 
 **Falta você ouvir.** Ninguém confirmou em uso que o volume (0,18) é discreto o
 bastante em sala compartilhada, nem que o tom de começo não suja a transcrição —
-o comentário de `main.swift:104-106` diz que ele entra pelo microfone nos
-primeiros ~60 ms e que o Whisper o ignora, mas essa é a única afirmação da
+o comentário de `Feedback.started()` em `main.swift` diz que ele entra pelo
+microfone nos primeiros ~85 ms (a duração do tom; dizia ~60 até 29/08) e que a
+aposta é o Whisper ignorá-lo, marcada como não medida. É a única afirmação da
 feature sem número medido atrás.
 *Evidência:* pedido do autor em uso, 2026-08-29 · `Tone.swift` · commit `1479a4b`
 
@@ -242,7 +247,8 @@ cru, porque não depende do tamanho do ditado. Você já mede tudo que precisa.
 este item mandava decidir antes estão decididas e documentadas no doc comment —
 30 entradas, texto claro no disco, apagável pelo menu. Submenu com hora e prévia
 de 44 caracteres, clique copia, texto inteiro no tooltip, "Limpar histórico"
-apaga o arquivo em vez de esvaziá-lo (`main.swift:547-566`). O
+apaga o arquivo em vez de esvaziá-lo (`main.swift`, `rebuildMenu`) e, desde
+29/08, apaga também o `last.wav` (D4). O
 `ultima-transcricao.txt` da versão anterior é removido no lançamento, para não
 deixar cópia órfã do que a pessoa falou. 7 testes. Commit `1479a4b`.
 
@@ -320,14 +326,12 @@ depender de quem revisa notar.
 `Sources/`, `Tests/` e `scripts/` · `.vibeflow/conventions.md:118` (o Don't que
 já existe) · `README.md:15`
 
-### H4 · Link quebrado para as limitações, no README — P
-`README.md:119` aponta para `#limitações`, mas o heading é "## Limitações
-conhecidas" e a âncora dele é `#limitações-conhecidas`. Nunca resolveu: é
-anterior à revisão de 29/08. A forma certa entrou na `README.md:94` nessa
-revisão, então o arquivo hoje carrega as duas — um link que funciona e um que
-não, para a mesma seção. Uma linha.
-*Evidência:* `README.md:119` (âncora sem heading correspondente) · `README.md:94`
-(a forma certa, no mesmo arquivo) · lista de headings conferida em 29/08/2026
+### ✅ H4 · Link quebrado para as limitações, no README — FEITO em 29/08
+`README.md` apontava para `#limitações`, mas o heading é "## Limitações
+conhecidas" e a âncora dele é `#limitações-conhecidas`. Corrigido na passada de
+docs da auditoria de 29/08 (R45); o arquivo agora só tem a forma certa.
+*Evidência:* `grep -n 'limitações' README.md` em 29/08/2026 — todas as
+ocorrências com `#limitações-conhecidas`
 
 ### H5 · "Um arquivo por unidade" já não descreve os testes — P
 `conventions.md:44` diz "swift-testing, **um arquivo por unidade**". O
@@ -351,18 +355,13 @@ hoje não acha.
 `Tests/NeverTypeCoreTests/AudioRecorderTests.swift` (as cinco suítes, contadas em
 29/08/2026) · ausência de `HotkeyMonitorTests.swift`
 
-### H6 · A linha de abertura do `CLAUDE.md` descreve a tecla como fixa — P
-`CLAUDE.md:3`: *"Segurar ⌘ direito grava, soltar transcreve"*. Continua verdade
-como **padrão** — `HotkeyMonitor.init` recebe `.rightCommand`
-(`HotkeyMonitor.swift:192`) —, mas ficou incompleto depois do I4 e do I1: a tecla
-é escolhida no menu entre ⌘, ⌥ e ⌃ direito (`HotkeyMonitor.swift:150`), e o duplo
-toque que trava em mãos-livres não aparece na frase.
-
-Diferente dos outros três desta seção, **não é falso** — é a linha de abertura
-envelhecendo, e ela é o resumo do app que todo agente lê primeiro. O README já
-foi acertado em 29/08 e serve de texto-fonte.
-*Evidência:* `CLAUDE.md:3` · `HotkeyMonitor.swift:150` e `:192` ·
-`README.md:62-73` (a mesma descrição, já corrigida)
+### ✅ H6 · A linha de abertura do `CLAUDE.md` descrevia a tecla como fixa — FEITO em 29/08
+`CLAUDE.md:3` dizia só *"Segurar ⌘ direito grava, soltar transcreve"*. Agora diz
+que ⌘ direito é o padrão, que ⌥ e ⌃ direito saem do menu, que dois toques travam
+em mãos-livres — e que o app só transcreve português (B1 da auditoria), que é a
+omissão mais cara para quem chega pelo README.
+*Evidência:* `CLAUDE.md:3-5` · `HotkeyMonitor.swift:150` e `:192` ·
+`Transcriber.swift` (`params.language = "pt"`)
 
 ---
 

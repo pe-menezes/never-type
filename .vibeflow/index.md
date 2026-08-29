@@ -28,8 +28,9 @@ Os artefatos pesados (`models/`, `vendor/`, `fixtures/`,
   flutuante de gravação, janela do vocabulário, ator dono do modelo. Orquestra,
   não decide.
 - **`Sources/CWhisper/`** — module map apontando para `vendor/whisper`.
-- **`Tests/NeverTypeCoreTests/`** — 81 testes em swift-testing.
-- **`scripts/`** — bancada de latência, build e assinatura, instalação.
+- **`Tests/NeverTypeCoreTests/`** — 86 testes em swift-testing.
+- **`scripts/`** — bancada de latência, build e assinatura, instalação,
+  verificação e atualização.
 - **`docs/`** — armadilhas encontradas e a escolha do modelo, com os números.
 - **`.vibeflow/`** — convenções e padrões extraídos do código.
 
@@ -71,7 +72,7 @@ patterns:
 - [`isolamento-tipado.md`](patterns/isolamento-tipado.md) — contrato de thread declarado no tipo, com `assumeIsolated` só onde a ordem importa mais que a pureza
 - [`estado-consultado.md`](patterns/estado-consultado.md) — permissão e área de transferência consultadas na hora, nunca copiadas para variável
 - [`estado-do-usuario.md`](patterns/estado-do-usuario.md) — o que se toca, se devolve, inclusive no caminho de erro
-- [`scripts-shell.md`](patterns/scripts-shell.md) — o esqueleto comum aos seis scripts
+- [`scripts-shell.md`](patterns/scripts-shell.md) — o esqueleto comum aos oito scripts
 - [`terceiros-pinados.md`](patterns/terceiros-pinados.md) — commit fixo, checksum conferido, rigor proporcional ao impacto
 
 ## Key Files

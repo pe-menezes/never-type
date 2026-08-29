@@ -51,7 +51,7 @@ for i in 0..<ggml_backend_dev_count() {
     guard let dev = ggml_backend_dev_get(i) else { continue }
     devices.append(String(cString: ggml_backend_dev_name(dev)))
 }
-self.usesMetal = devices.contains { $0.uppercased().contains("MTL") }
+self.usesMetal = devices.contains { $0.uppercased().contains("MTL") || $0.uppercased().contains("METAL") }
 ```
 
 **Formato binário se confere pelos bytes, na ordem em que estão no arquivo:**
@@ -106,5 +106,9 @@ vendor_intact() {
   como Metal. Reproduzível: `whisper-cli -ng` casa 37 linhas.
 - **`head -c 4 "$f" = "ggml"`** — reprovava todo modelo válido, incluindo o de
   referência do Homebrew, porque o magic em disco é `lmgg`.
-- **Piso de 50 MB para um modelo de 547 MB** — aprovava download truncado. O piso
-  precisa ser proporcional ao artefato real, não a um mínimo teórico.
+- **Piso de 50 MB para um modelo de 547 MB** — aprovava download truncado, e foi
+  o piso do app (`ModelStore.minimumBytes`), do `fetch-model.sh` e do
+  `setup-bench.sh` até 29/08/2026, com a regra certa já escrita em
+  `docs/armadilhas.md`. Hoje são 400 MB nos cinco lugares; na bancada, por
+  modelo. O piso precisa ser proporcional ao artefato real, não a um mínimo
+  teórico — e a regra escrita se confere com `grep` pelo número.

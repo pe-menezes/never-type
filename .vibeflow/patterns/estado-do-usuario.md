@@ -84,10 +84,14 @@ File: `Sources/NeverType/main.swift` — a saída para uma contradição da spec
 ///
 /// Então: devolve o pasteboard sempre, e o texto continua alcançável por
 /// aqui. Nada se perde, e o clipboard de ninguém é sequestrado.
-private var lastTranscript: String? {
-    didSet { persistTranscript() }
-}
+/// Não é mais uma variável: a última é a primeira do histórico, e ter as
+/// duas coisas criaria duas fontes de verdade para o mesmo texto.
+private var lastTranscript: String? { history.last?.text }
 ```
+
+O que fica em disco está listado no doc de `lastRecordingURL()` (`main.swift`) e
+no README: `historico.json`, `last.wav`, `nevertype.log` (sem texto desde
+29/08/2026) e `vocabulario.json`. "Limpar histórico" apaga o JSON **e** o WAV.
 
 File: `Sources/NeverTypeCore/TextInjector.swift` — sem colar não há o que
 restaurar, então o texto fica:
@@ -109,5 +113,10 @@ if (secureInput ?? IsSecureEventInputEnabled)() {
   macOS aceso o tempo todo.
 - **Restauração incondicional e agendada.** Ver `estado-consultado.md`: destruía
   o que a pessoa copiava nos 600 ms seguintes.
-- **`clearContents()` sem restauração** em `copyLastTranscript` — aceito por ser
-  ação explícita do usuário, mas é a única escrita no pasteboard sem devolução.
+- **`clearContents()` sem restauração** em `copyLastTranscript` e nos itens do
+  histórico — aceito por ser ação explícita do usuário, mas é a única escrita no
+  pasteboard sem devolução, e vai sem `ConcealedType`: entra no histórico de
+  qualquer gestor de clipboard (declarado no README desde 29/08/2026).
+- **Log com o texto da transcrição.** `nevertype.log` guardou o texto de cada
+  ditado da sessão até 29/08/2026, fora de "Limpar histórico" e de qualquer doc.
+  Hoje a linha é `transcrito em N ms: M caracteres`.

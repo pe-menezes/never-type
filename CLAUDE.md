@@ -1,11 +1,13 @@
 # NeverType
 
-Ditado por voz com transcrição local no macOS. Segurar ⌘ direito grava, soltar
-transcreve, e o texto é inserido onde o cursor estiver. **Nenhuma chamada de rede
-em tempo de uso** — é a restrição que justifica o projeto existir, e há check de
-DoD verificando isso no código e no binário.
+Ditado por voz com transcrição local no macOS, só em português. Segurar a tecla
+(⌘ direito por padrão; ⌥ ou ⌃ direito pelo menu) grava, soltar transcreve, dois
+toques travam em mãos-livres, e o texto é inserido onde o cursor estiver.
+**Nenhuma chamada de rede em tempo de uso** — é a restrição que justifica o
+projeto existir, e há check de DoD verificando isso no código e no binário.
 
-App de menu bar acessório (sem Dock, sem janela). macOS 14+, Apple Silicon.
+App de menu bar acessório (sem Dock; as únicas janelas são a pílula flutuante e
+a do vocabulário). macOS 14+, Apple Silicon.
 Swift 6 com concorrência estrita, SwiftPM, **sem Xcode** — só Command Line Tools.
 
 ## Antes de escrever código, leia
@@ -54,13 +56,14 @@ resultado. Leva alguns minutos na primeira vez, ~1 s nas seguintes.
 Depois disso:
 
 ```bash
-swift build && swift test     # 81 testes
+swift build && swift test     # 86 testes
 bash scripts/install.sh       # instala em /Applications
 bash scripts/bench.sh         # mede latência e qualidade por modelo
 ```
 
-Fora do controle de versão e reconstruíveis: `models/` (1,2 GB), `vendor/`
-(whisper.cpp estático), `fixtures/` (gravações), `bench-out/`, `.cache/`, `build/`.
+Fora do controle de versão e reconstruíveis: `models/` (1,2 GB em disco: os três
+modelos da bancada; o app carrega um, de 547 MB), `vendor/` (whisper.cpp
+estático), `fixtures/` (gravações), `bench-out/`, `.cache/`, `build/`.
 
 **Nunca apague** `~/Library/Keychains/nevertype-signing.keychain-db` — apagá-lo
 revoga a permissão de Acessibilidade e o usuário precisa reconceder.
@@ -72,8 +75,8 @@ em **português**.
 
 ## Estado
 
-Funciona ponta a ponta: ~600 ms por ditado, 81 testes. Nunca foi instalado por
-ninguém além do autor.
+Funciona ponta a ponta: ~600 ms por ditado com o modelo quente, 86 testes. Nunca
+foi instalado por ninguém além do autor.
 
 Falta uma coisa: **pacote distribuível sem compilar** — cada instalação ainda
 compila na própria máquina. Abrir no login, histórico de transcrições e

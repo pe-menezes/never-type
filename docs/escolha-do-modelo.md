@@ -66,11 +66,17 @@ da OpenAI.
    dita e precisa corrigir nome de sistema toda vez volta a digitar.
 3. **Sobra `large-v3-turbo-q5_0`**, único a passar a regra 1.
 
-## Limite conhecido: o teto só vale abaixo de 30 s
+## Limite conhecido: o teto só foi medido até duas janelas
 
-O teto de 1500 ms **não** sobrevive a um ditado que ocupe mais de uma janela: a
-partir da segunda o custo dobra, e turbo (820 ms por janela) passa de 1500 ms. Só
-`small` aguenta duas janelas.
+Pela bancada, o teto de 1500 ms **não** sobreviveria a um ditado que ocupe mais
+de uma janela: a partir da segunda o custo dobra, e turbo (820 ms por janela)
+daria 1640 ms. Só `small` aguentaria duas janelas.
+
+No app a projeção não se confirmou: um ditado de 31 s, duas janelas, mediu
+**1299 ms** em 2026-08-28 (`.vibeflow/backlog.md`, L1 — cinco ditados lidos do
+log do app, ~614 ms fixos mais ~22 ms por segundo de fala). Dentro do teto. Por
+que a bancada projeta mais do que o app mede não foi investigado, e acima de duas
+janelas ninguém mediu.
 
 Não é defeito — ditado é fala curta, e abaixo de 30 s todo modelo passa com folga.
 Mas é limite real, e falar mais de meio minuto sem soltar a tecla tem espera
@@ -81,7 +87,10 @@ perceptível.
 Um verbo pouco frequente do domínio saiu errado de forma **consistente** em turbo
 e small, e certo em medium. Nenhum modelo base acerta vocabulário específico de
 forma confiável — é a evidência concreta a favor de vocabulário customizado
-(prompt inicial), que este projeto ainda não tem.
+(prompt inicial), que este projeto passou a ter (`Vocabulary.swift`, commit
+`43d968f`): os termos vão como `initial_prompt`, e substituições determinísticas
+rodam sobre o texto pronto. Se isso resolve este verbo não foi medido
+(`.vibeflow/backlog.md`, A3).
 
 ## Como reproduzir
 

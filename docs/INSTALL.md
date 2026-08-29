@@ -15,9 +15,10 @@ em quarentena, então o Gatekeeper não aparece.
 custo medido de cada um. Vários deles são coisas que passariam em revisão de
 código e só apareceram rodando.
 
-**Três coisas neste roteiro exigem a pessoa, e nenhum agente as resolve:**
-instalar as Command Line Tools, conceder Microfone e conceder Acessibilidade.
-Elas estão marcadas com **PARE E PEÇA** abaixo, com o texto a dizer.
+**Quatro coisas neste roteiro exigem a pessoa, e nenhum agente as resolve:**
+instalar as Command Line Tools, conceder Microfone, conceder Acessibilidade e
+ditar a frase que prova a instalação. Elas estão marcadas com **PARE E PEÇA**
+abaixo, com o texto a dizer.
 
 ## O que você pode consertar sozinho, e o que não pode
 
@@ -84,19 +85,30 @@ assina. **Leva alguns minutos na primeira vez** — é normal, não interrompa.
 
 `install.sh` recusa cedo o que não tem conserto depois (não-Darwin, não-arm64,
 `/Applications` sem escrita), instala, verifica a assinatura e confere o modelo.
+Ele só compila se `build/NeverType.app` ainda não existir: depois de mudar código
+— ou de um `git pull` feito à mão —, rode `build-app.sh` antes, senão ele instala
+o `build/` velho sem avisar. O `atualizar.sh` já faz isso na ordem certa.
 
 Se ele reclamar de `/Applications` sem permissão de escrita: **pare e pergunte**.
 Existe um caminho alternativo (`~/Applications/`), mas ele é uma decisão da
-pessoa, não sua.
+pessoa, não sua. E se ela escolher esse caminho, saiba que
+`verificar-instalacao.sh` e `atualizar.sh` só conhecem `/Applications` — vão
+dizer que o app não está instalado. A verificação passa a ser só o ditado.
 
 ## 3. O modelo
 
 São 547 MB e ele **não vem no app**. O `install.sh` avisa se estiver faltando.
 
 ```bash
-bash scripts/setup-bench.sh   # baixa do CDN da OpenAI e converte, ~10 min
-bash scripts/fetch-model.sh   # promove para o lugar definitivo
+bash scripts/setup-bench.sh   # baixa três checkpoints do CDN da OpenAI e converte
+bash scripts/fetch-model.sh   # valida e promove para o lugar definitivo
 ```
+
+`setup-bench.sh` é a bancada de modelos, não só o instalador: exige **Homebrew**
+(instala `whisper-cpp` por ele) e **python3** (cria um venv com torch em
+`.cache/`), e baixa, converte e quantiza **três** modelos — turbo, medium e
+small —, não um. Demora; o tempo não foi medido. Se `brew` não existir, o script
+para: instalar o Homebrew é decisão da pessoa — **pergunte**.
 
 ### Se a rede bloquear o download
 
@@ -112,9 +124,12 @@ cp /caminho/do/ggml-large-v3-turbo-q5_0.bin models/
 bash scripts/fetch-model.sh
 ```
 
-`fetch-model.sh` valida magic e tamanho antes de promover, e apaga a cópia se ela
-não ficar válida. Copiar direto para `~/Library/Application Support/` pula essa
-validação e a pessoa descobre o problema no primeiro ditado.
+`fetch-model.sh` valida magic e tamanho (pelo menos 400 MB, para um modelo de
+547 MB) antes de promover, e apaga a cópia se ela não ficar válida. Copiar direto
+para `~/Library/Application Support/` pula essa validação: o app confere de novo
+ao abrir, recusa o arquivo, abre com o ícone cortado e a linha "Modelo:" do menu
+traz a mensagem com o script a rodar — a pessoa descobre o problema no menu, não
+no primeiro ditado.
 
 ## 4. Permissões
 
@@ -127,9 +142,11 @@ Duas, e o app pede as duas ao abrir. **As duas exigem a pessoa.**
 
 ### Acessibilidade — PARE E PEÇA
 
-Esta é a que falha calada, e é o modo de falha mais provável de uma instalação
-nova. Sem ela o app abre, desenha o ícone na barra e **simplesmente não reage à
-tecla** — sem erro, sem alerta, sem nada no log que a pessoa veja.
+Esta é a mais fácil de não notar, e é o modo de falha mais provável de uma
+instalação nova. Sem ela o app abre e **não reage à tecla**. Ele avisa — ícone
+cortado (`mic.slash`), "Acessibilidade: faltando" e "Abrir Ajustes de
+Acessibilidade…" no menu, uma linha em `nevertype.log` e o pedido do próprio
+macOS —, mas nada disso chega a quem não abre o menu nem o log.
 
 > Abra **Ajustes do Sistema › Privacidade e Segurança › Acessibilidade** e
 > **ligue o NeverType** na lista. Se ele não estiver lá, clique no **+** e escolha
@@ -179,13 +196,17 @@ Ele confere se há versão nova comparando três coisas — o commit **instalado
 igual não faz nada. Havendo diferença: traz, compila, instala e roda a
 verificação.
 
-**Ele para em dois casos, e nos dois você também para:**
+**Ele para em seis casos. Em dois deles você também para:**
 
 - **Alterações locais não commitadas.** Ele lista e recusa. **Não rode
   `git reset --hard` nem `git stash` por conta própria** — commitar, guardar ou
   descartar é decisão da pessoa, e descartar apaga trabalho dela.
 - **Pull que não é fast-forward.** A branch local divergiu da remota. Resolver
   isso sozinho pode perder commits dela. Pergunte.
+
+Nos outros quatro a mensagem diz o que fazer: o diretório não é um clone git
+(clone e rode `build-app.sh` e `install.sh`); o clone não tem remoto; o `fetch`
+falhou (rede); a branch não acompanha nenhuma remota (ele dá o comando).
 
 As permissões sobrevivem à atualização, porque o certificado de assinatura é
 estável entre compilações da mesma máquina. É por isso que
@@ -200,5 +221,8 @@ A versão instalada também aparece no menu da bandeja, em "Versão".
 
 - Segure **⌘ direito**, fale, solte. O texto aparece onde o cursor está.
 - **Dois toques rápidos** travam em mãos-livres; um toque encerra; **Esc** descarta.
-- Qualquer tecla comum durante o hold cancela e descarta o áudio.
-- O menu da bandeja tem histórico, escolha da tecla e vocabulário.
+- Qualquer tecla comum — ou Esc — durante o hold cancela e descarta o áudio.
+- A pílula flutuante mostra o nível do microfone enquanto grava; se as barras não
+  mexem, não está entrando som.
+- O menu da bandeja tem histórico, escolha da tecla e vocabulário. "Limpar
+  histórico" apaga o texto guardado e o áudio do último ditado.
