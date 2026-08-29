@@ -1,130 +1,134 @@
 #!/bin/bash
-# Confere o que dá para conferir de fora sobre uma instalação do NeverType.
+# Checks what can be checked from the outside about a NeverType installation.
 #
-# Existe porque a instalação tem um modo de falha fácil de não notar: sem a
-# permissão de Acessibilidade o app abre e não reage à tecla. Ele avisa — ícone
-# cortado (mic.slash), "Acessibilidade: faltando" e "Abrir Ajustes de
-# Acessibilidade…" no menu, uma linha em nevertype.log e o pedido do próprio
-# macOS —, mas quem não abre o menu nem o log conclui que instalou.
+# Exists because the installation has a failure mode that is easy to miss:
+# without the Accessibility permission the app opens and does not react to the
+# key. It warns — slashed icon (mic.slash), "Accessibility: missing" and "Open
+# Accessibility Settings…" in the menu, a line in nevertype.log and macOS's own
+# prompt —, but whoever opens neither the menu nor the log concludes it is
+# installed.
 #
-# Este script NÃO verifica permissão, e diz isso em voz alta no fim. Não é
-# limitação de implementação: o que interessa não é o TCC dizer que concedeu, e
-# sim o ditado inserir texto. Só ditar prova isso.
+# This script does NOT verify permissions, and says so out loud at the end. It
+# is not an implementation limitation: what matters is not TCC saying it
+# granted, but dictation inserting text. Only dictating proves that.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP="/Applications/NeverType.app"
 MODEL="$HOME/Library/Application Support/NeverType/models/ggml-large-v3-turbo-q5_0.bin"
 
-# O magic do ggml é 0x67676d6c gravado como uint32 little-endian, então no
-# arquivo ele sai invertido: 6c6d6767, que lido como texto vira "lmgg". Comparar
-# em hexadecimal evita esse tropeço — e pega o caso que mais importa aqui, que é
-# proxy de filtragem devolvendo página HTML de erro com nome de modelo.
+# The ggml magic is 0x67676d6c written as a little-endian uint32, so in the file
+# it comes out reversed: 6c6d6767, which read as text becomes "lmgg". Comparing
+# in hexadecimal avoids that trip-up — and catches the case that matters most
+# here, which is a filtering proxy returning an HTML error page under a model's
+# name.
 GGML_MAGIC_HEX=6c6d6767
-# 400 MB para um modelo de 547 MB — o mesmo piso de ModelStore.minimumBytes no
-# app, de install.sh e de fetch-model.sh. Um piso baixo aprovaria download
-# interrompido: reproduzido com 100 KB do modelo real, o whisper.cpp aceita como
-# "modelo vazio" e o processo morre na primeira inferência (docs/pitfalls.md).
+# 400 MB for a 547 MB model — the same floor as ModelStore.minimumBytes in the
+# app, install.sh and fetch-model.sh. A low floor would approve an interrupted
+# download: reproduced with 100 KB of the real model, whisper.cpp accepts it as
+# an "empty model" and the process dies on the first inference
+# (docs/pitfalls.md).
 MODEL_MIN_MB=400
 
 info() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 ok()   { printf '\033[1;32m  ok\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m  !\033[0m  %s\n' "$*"; }
-fail() { printf '\033[1;31merro:\033[0m %s\n' "$*" >&2; exit 1; }
+fail() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
-# `problem` em vez de `fail` no corpo, de propósito: quem lê este script costuma
-# ser um agente, e sair no primeiro erro o faria consertar uma coisa, rodar de
-# novo, descobrir a segunda. Aqui ele vê a lista inteira de uma vez.
+# `problem` instead of `fail` in the body, on purpose: whoever reads this script
+# is usually an agent, and exiting on the first error would make it fix one
+# thing, run again, discover the second. Here it sees the whole list at once.
 problems=0
 problem() {
   printf '\033[1;31m  x\033[0m  %s\n' "$*" >&2
   problems=$((problems + 1))
 }
 
-[ "$(uname -s)" = "Darwin" ] || fail "só roda no macOS."
-[ "$(uname -m)" = "arm64" ]  || fail "precisa de Apple Silicon: sem Metal a transcrição é lenta demais."
+[ "$(uname -s)" = "Darwin" ] || fail "only runs on macOS."
+[ "$(uname -m)" = "arm64" ]  || fail "needs Apple Silicon: without Metal, transcription is far too slow."
 
-# Conferido no começo porque todas as mensagens de correção abaixo mandam rodar
-# `bash scripts/...`, e isso só funciona de dentro do repositório. Um agente que
-# copiasse este script para outro lugar receberia instruções que não funcionam.
-[ -x "$REPO_ROOT/scripts/install.sh" ] || fail "não achei $REPO_ROOT/scripts/install.sh.
-      Rode este script de dentro do repositório clonado, não de uma cópia solta."
+# Checked at the start because every fix message below says to run
+# `bash scripts/...`, and that only works from inside the repository. An agent
+# that copied this script somewhere else would get instructions that do not
+# work.
+[ -x "$REPO_ROOT/scripts/install.sh" ] || fail "could not find $REPO_ROOT/scripts/install.sh.
+      Run this script from inside the cloned repository, not from a loose copy."
 
-# --- o app --------------------------------------------------------------------
+# --- the app ------------------------------------------------------------------
 
-info "Aplicativo"
+info "Application"
 if [ -d "$APP" ]; then
-  ok "instalado em $APP"
-  # O diagnóstico vai para uma variável em vez de /dev/null: assinatura que não
-  # verifica precisa dizer por quê, senão o próximo passo é adivinhar.
+  ok "installed at $APP"
+  # The diagnostics go to a variable instead of /dev/null: a signature that does
+  # not verify needs to say why, or the next step is guessing.
   if signature="$(codesign --verify --strict "$APP" 2>&1)"; then
-    ok "assinatura verifica"
+    ok "signature verifies"
   else
-    problem "a assinatura de $APP não verifica:
-      ${signature:-sem saída do codesign}
-      Recompile e reinstale: bash scripts/build-app.sh && bash scripts/install.sh"
+    problem "the signature of $APP does not verify:
+      ${signature:-no output from codesign}
+      Rebuild and reinstall: bash scripts/build-app.sh && bash scripts/install.sh"
   fi
 else
-  problem "não existe $APP.
-      Rode: bash scripts/install.sh"
+  problem "$APP does not exist.
+      Run: bash scripts/install.sh"
 fi
 
-# --- o processo ---------------------------------------------------------------
+# --- the process --------------------------------------------------------------
 
-info "Processo"
+info "Process"
 if pid="$(pgrep -x NeverType)"; then
-  ok "rodando (pid $pid)"
+  ok "running (pid $pid)"
 else
-  problem "o NeverType não está rodando.
-      Abra: open $APP"
+  problem "NeverType is not running.
+      Open it: open $APP"
 fi
 
-# --- o modelo -----------------------------------------------------------------
+# --- the model ----------------------------------------------------------------
 
-info "Modelo"
+info "Model"
 if [ ! -f "$MODEL" ]; then
-  problem "modelo ausente em $MODEL.
-      Rode: bash scripts/setup-bench.sh && bash scripts/fetch-model.sh
-      Se a rede bloquear o download, veja docs/INSTALL.md — copiar de outra
-      máquina é um caminho válido, mas o arquivo precisa entrar por models/."
+  problem "model missing at $MODEL.
+      Run: bash scripts/setup-bench.sh && bash scripts/fetch-model.sh
+      If your network blocks the download, see docs/INSTALL.md — copying from
+      another machine is a valid path, but the file has to come in through models/."
 else
   model_magic="$(head -c 4 "$MODEL" | xxd -p)"
   model_mb=$(( $(stat -f%z "$MODEL") / 1048576 ))
   if [ "$model_magic" != "$GGML_MAGIC_HEX" ]; then
-    problem "o arquivo em $MODEL não é um ggml: magic $model_magic, esperado $GGML_MAGIC_HEX.
-      Um proxy de filtragem devolve HTML de erro com nome de modelo, e é
-      exatamente assim que isso aparece. Apague e refaça: rm '$MODEL'"
+    problem "the file at $MODEL is not a ggml: magic $model_magic, expected $GGML_MAGIC_HEX.
+      A filtering proxy returns an HTML error page under a model's name, and
+      this is exactly how that shows up. Delete it and redo: rm '$MODEL'"
   elif [ "$model_mb" -lt "$MODEL_MIN_MB" ]; then
-    problem "modelo truncado: $model_mb MB, mínimo $MODEL_MIN_MB MB.
-      Os primeiros bytes de um download interrompido estão certos, então o
-      magic sozinho não pega isto. Apague e refaça: rm '$MODEL'"
+    problem "truncated model: $model_mb MB, minimum $MODEL_MIN_MB MB.
+      The first bytes of an interrupted download are right, so the magic alone
+      does not catch this. Delete it and redo: rm '$MODEL'"
   else
-    ok "válido ($model_mb MB)"
+    ok "valid ($model_mb MB)"
   fi
 fi
 
-# --- o que este script não sabe -----------------------------------------------
+# --- what this script does not know -------------------------------------------
 
 echo
 if [ "$problems" -gt 0 ]; then
-  fail "$problems verificação(ões) falharam. Corrija acima e rode de novo."
+  fail "$problems check(s) failed. Fix the above and run again."
 fi
 
-info "A parte que só você pode verificar"
+info "The part only you can verify"
 cat <<'MSG'
-  Microfone e Acessibilidade NÃO foram verificados aqui, e não dá para verificar
-  de fora. Sem Acessibilidade o app abre e não reage à tecla; o que ele mostra é
-  o ícone cortado (mic.slash) e, no menu, "Acessibilidade: faltando" com o item
-  "Abrir Ajustes de Acessibilidade…". É o modo de falha mais provável de uma
-  instalação nova.
+  Microphone and Accessibility were NOT verified here, and cannot be verified
+  from the outside. Without Accessibility the app opens and does not react to
+  the key; what it shows is the slashed icon (mic.slash) and, in the menu,
+  "Accessibility: missing" with the item "Open Accessibility Settings…". It is
+  the most likely failure mode of a fresh installation.
 
-  Prove ditando:
+  Prove it by dictating:
 
-    1. Abra um campo de texto qualquer.
-    2. Segure ⌘ direito, fale uma frase, solte.
-    3. O texto tem que aparecer onde o cursor está.
+    1. Open any text field.
+    2. Hold Right ⌘, say a sentence, release.
+    3. The text has to appear where the cursor is.
 
-  Não apareceu? Ajustes do Sistema › Privacidade e Segurança › Acessibilidade,
-  e ligue o NeverType. Depois disso, encerre e reabra o app.
+  Did it not appear? System Settings › Privacy & Security › Accessibility, and
+  turn on NeverType. After that, quit and reopen the app.
 MSG
-ok "estrutura verificada"
+ok "structure verified"

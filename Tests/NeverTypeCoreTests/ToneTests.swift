@@ -48,15 +48,15 @@ struct ToneTests {
     @Test("the requested duration becomes the right number of samples")
     func durationMatchesSampleCount() {
         let wav = Tone.wav([440], seconds: 0.05)
-        let esperado = Int(Tone.sampleRate * 0.05) * 2  // 2 bytes per sample
-        #expect(Int(u32(wav, at: 40)) == esperado)
+        let expected = Int(Tone.sampleRate * 0.05) * 2  // 2 bytes per sample
+        #expect(Int(u32(wav, at: 40)) == expected)
     }
 
     @Test("two notes take up twice as much as one")
     func twoNotesAreTwiceAsLong() {
-        let uma = Tone.wav([440], seconds: 0.05)
-        let duas = Tone.wav([440, 660], seconds: 0.05)
-        #expect(duas.count == uma.count * 2 - 44, "the header is not counted twice")
+        let one = Tone.wav([440], seconds: 0.05)
+        let two = Tone.wav([440, 660], seconds: 0.05)
+        #expect(two.count == one.count * 2 - 44, "the header is not counted twice")
     }
 
     /// The envelope is what separates "tone" from "click": without a gentle
@@ -78,8 +78,8 @@ struct ToneTests {
             let s = Int16(littleEndian: wav[i..<(i + 2)].withUnsafeBytes { $0.loadUnaligned(as: Int16.self) })
             peak = max(peak, abs(s))
         }
-        let esperado = Double(Int16.max) * 0.2
-        #expect(Double(peak) > esperado * 0.9 && Double(peak) <= esperado * 1.01,
-                "peak \(peak), expected ~\(Int(esperado))")
+        let expected = Double(Int16.max) * 0.2
+        #expect(Double(peak) > expected * 0.9 && Double(peak) <= expected * 1.01,
+                "peak \(peak), expected ~\(Int(expected))")
     }
 }

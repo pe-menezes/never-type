@@ -67,11 +67,11 @@ struct TranscriptHistoryTests {
         let url = tempURL()
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
 
-        let primeira = TranscriptHistory(url: url)
-        primeira.add("what I said before quitting")
+        let first = TranscriptHistory(url: url)
+        first.add("what I said before quitting")
 
-        let depois = TranscriptHistory(url: url)
-        #expect(depois.last?.text == "what I said before quitting")
+        let reopened = TranscriptHistory(url: url)
+        #expect(reopened.last?.text == "what I said before quitting")
     }
 
     @Test("clearing deletes the file, not just the memory")

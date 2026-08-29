@@ -368,10 +368,10 @@ struct AudioLevelTests {
 
     @Test("the RMS follows the signal's energy")
     func rmsFollowsEnergy() {
-        let baixo = AudioLevel.rms([Float](repeating: 0.1, count: 512))
-        let alto = AudioLevel.rms([Float](repeating: 0.5, count: 512))
-        #expect(alto > baixo)
-        #expect(abs(baixo - 0.1) < 0.0001, "constant signal: the RMS is the value itself")
+        let low = AudioLevel.rms([Float](repeating: 0.1, count: 512))
+        let high = AudioLevel.rms([Float](repeating: 0.5, count: 512))
+        #expect(high > low)
+        #expect(abs(low - 0.1) < 0.0001, "constant signal: the RMS is the value itself")
     }
 
     @Test("empty array does not break")

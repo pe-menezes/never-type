@@ -1,74 +1,76 @@
 #!/bin/bash
-# Compila o NeverType e monta o bundle .app assinado.
+# Builds NeverType and assembles the signed .app bundle.
 #
-# Sem Xcode: esta máquina só tem Command Line Tools, então `xcodebuild` e
-# `.xcodeproj` estão fora. O executável sai do SwiftPM e o bundle é montado aqui.
+# No Xcode: the project builds with Command Line Tools only, so `xcodebuild` and
+# `.xcodeproj` are out. The executable comes out of SwiftPM and the bundle is
+# assembled here.
 #
-# A assinatura não é enfeite. O TCC (o subsistema de permissões do macOS) guarda
-# o *requisito designado* do app. Assinado ad-hoc, esse requisito aponta para o
-# hash do binário, que muda a cada build — e a permissão de Acessibilidade é
-# revogada toda vez. Assinado com um certificado estável, o requisito aponta para
-# o certificado, e a concessão sobrevive aos rebuilds. Verificado: dois binários
-# com cdhash diferente compartilham `certificate leaf = H"5a6bfe7c…"`.
+# The signature is not decoration. TCC (the macOS permission subsystem) stores
+# the app's *designated requirement*. Signed ad hoc, that requirement points at
+# the binary's hash, which changes with every build — and the Accessibility
+# permission is revoked every time. Signed with a stable certificate, the
+# requirement points at the certificate, and the grant survives rebuilds.
+# Verified: two binaries with different cdhashes share
+# `certificate leaf = H"5a6bfe7c…"`.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP="$REPO_ROOT/build/NeverType.app"
 BUNDLE_ID="com.nevertype.app"
 
-# O keychain fica em ~/Library/Keychains, e não em .cache/, de propósito: apagar
-# o .cache é seguro e documentado como tal, mas perder este certificado faria o
-# macOS pedir Acessibilidade de novo.
+# The keychain lives in ~/Library/Keychains, not in .cache/, on purpose: deleting
+# .cache is safe and documented as such, but losing this certificate would make
+# macOS ask for Accessibility again.
 KEYCHAIN="$HOME/Library/Keychains/nevertype-signing.keychain-db"
 IDENTITY="NeverType Local Signing"
 
-# A senha do keychain é derivada do UUID de hardware da máquina, não guardada.
+# The keychain password is derived from the machine's hardware UUID, not stored.
 #
-# A primeira versão disto sorteava a senha e a guardava no keychain de login. Era
-# mais bonito no papel e péssimo na prática: quando o macOS decidia pedir
-# autorização para ler o item, abria um diálogo pedindo uma senha que o usuário
-# **não tem como saber** — ela é aleatória. Um build que pode travar pedindo um
-# segredo impossível é pior que o problema que resolve.
+# The first version of this drew a random password and kept it in the login
+# keychain. Prettier on paper and terrible in practice: whenever macOS decided to
+# ask for authorization to read the item, it opened a dialog asking for a
+# password the user **has no way of knowing** — it is random. A build that can
+# hang asking for an impossible secret is worse than the problem it solves.
 #
-# Derivar não é esconder: qualquer um com acesso local à máquina reproduz este
-# valor. Mas o objetivo aqui nunca foi guardar segredo de um atacante local —
-# isso é impossível com certificado local, como o README explica. O objetivo é
-# não versionar credencial e nunca travar o build. Ambos cumpridos.
+# Deriving is not hiding: anyone with local access to the machine can reproduce
+# this value. But the goal here was never to keep a secret from a local attacker
+# — that is impossible with a local certificate, as the README explains. The
+# goal is to never version a credential and never hang the build. Both met.
 machine_password() {
   local uuid
   uuid="$(ioreg -rd1 -c IOPlatformExpertDevice \
     | awk -F\" '/IOPlatformUUID/{print $4}')"
-  [ -n "$uuid" ] || fail "não consegui ler o identificador da máquina."
+  [ -n "$uuid" ] || fail "could not read the machine identifier."
   printf 'nevertype-signing-%s' "$uuid" | shasum -a 256 | cut -d" " -f1
 }
 
 info() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 ok()   { printf '\033[1;32m  ok\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m  !\033[0m  %s\n' "$*"; }
-fail() { printf '\033[1;31merro:\033[0m %s\n' "$*" >&2; exit 1; }
+fail() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
-[ "$(uname -s)" = "Darwin" ] || fail "só faz sentido no macOS."
-command -v swift >/dev/null || fail "toolchain Swift não encontrado."
+[ "$(uname -s)" = "Darwin" ] || fail "only makes sense on macOS."
+command -v swift >/dev/null || fail "Swift toolchain not found."
 
-# --- identidade de assinatura ------------------------------------------------
+# --- signing identity ---------------------------------------------------------
 
-# Sem `-v` e sem `-p codesigning` de propósito. Esses filtros só listam
-# identidades *confiáveis*, e um certificado self-signed nunca é — mas o codesign
-# usa ele do mesmo jeito (verificado: Authority=NeverType Local Signing, requisito
-# designado com `certificate leaf`). Com o filtro, este teste falharia sempre, o
-# certificado seria recriado a cada build e a permissão de Acessibilidade seria
-# revogada toda vez: exatamente o problema que a assinatura estável existe para
-# resolver.
+# No `-v` and no `-p codesigning`, on purpose. Those filters only list *trusted*
+# identities, and a self-signed certificate never is — but codesign uses it all
+# the same (verified: Authority=NeverType Local Signing, designated requirement
+# with `certificate leaf`). With the filter, this check would always fail, the
+# certificate would be recreated on every build and the Accessibility permission
+# would be revoked every time: exactly the problem the stable signature exists
+# to solve.
 identity_present() {
   security find-identity "$KEYCHAIN" 2>/dev/null | grep -q "$IDENTITY"
 }
 
 create_identity() {
-  info "Criando identidade de assinatura local (uma vez só)"
+  info "Creating the local signing identity (one time only)"
   local tmp; tmp="$(mktemp -d)"
   chmod 700 "$tmp"
-  # RETURN sozinho não dispara quando o script sai por `fail`, e aí a chave RSA
-  # sem senha fica esquecida em $TMPDIR. EXIT cobre esse caminho.
+  # RETURN alone does not fire when the script exits through `fail`, and then
+  # the passwordless RSA key is left behind in $TMPDIR. EXIT covers that path.
   CREATE_TMP="$tmp"
   trap 'rm -rf "${CREATE_TMP:-}"' RETURN
   trap 'rm -rf "${CREATE_TMP:-}"; security lock-keychain "$KEYCHAIN" 2>/dev/null || true' EXIT
@@ -91,51 +93,51 @@ CNF
 
   openssl req -x509 -newkey rsa:2048 -sha256 -days 3650 -nodes \
     -keyout "$tmp/key.pem" -out "$tmp/cert.pem" -config "$tmp/req.cnf" 2>/dev/null \
-    || fail "não consegui gerar o certificado."
+    || fail "could not generate the certificate."
 
-  # O PKCS12 do OpenSSL 3 usa MAC SHA-256, que o Security framework do macOS
-  # rejeita com "MAC verification failed". O LibreSSL do sistema gera no formato
-  # que ele lê.
+  # OpenSSL 3's PKCS12 uses a SHA-256 MAC, which the macOS Security framework
+  # rejects with "MAC verification failed". The system LibreSSL produces the
+  # format it reads.
   /usr/bin/openssl pkcs12 -export -out "$tmp/id.p12" \
     -inkey "$tmp/key.pem" -in "$tmp/cert.pem" \
     -passout pass:"$KEYCHAIN_PASS" -name "$IDENTITY" -macalg sha1 2>/dev/null \
-    || fail "não consegui empacotar o certificado."
+    || fail "could not package the certificate."
 
   security delete-keychain "$KEYCHAIN" 2>/dev/null || true
   security create-keychain -p "$KEYCHAIN_PASS" "$KEYCHAIN"
   security set-keychain-settings -lut 21600 "$KEYCHAIN"
   security unlock-keychain -p "$KEYCHAIN_PASS" "$KEYCHAIN"
-  # `-T /usr/bin/codesign` e NÃO `-A`. Com `-A`, qualquer aplicativo usa a chave
-  # privada diretamente, sem sequer passar pelo codesign nem pela senha. Isto
-  # não impede que um atacante local invoque o próprio codesign — mas fecha o
-  # acesso programático direto, que era o caminho mais largo.
+  # `-T /usr/bin/codesign` and NOT `-A`. With `-A`, any application uses the
+  # private key directly, without even going through codesign or the password.
+  # This does not stop a local attacker from invoking codesign itself — but it
+  # closes direct programmatic access, which was the widest path.
   security import "$tmp/id.p12" -k "$KEYCHAIN" -P "$KEYCHAIN_PASS" -T /usr/bin/codesign >/dev/null
 
-  # Esta linha é a que evita o diálogo de keychain travando o build. Sem ela o
-  # codesign abre um prompt gráfico e o script fica pendurado para sempre — é
-  # também por isso que o certificado não mora no login keychain: lá não teríamos
-  # a senha para passar aqui.
+  # This line is what keeps the keychain dialog from hanging the build. Without
+  # it codesign opens a graphical prompt and the script hangs forever — it is
+  # also why the certificate does not live in the login keychain: there we would
+  # not have the password to pass here.
   security set-key-partition-list -S apple-tool:,apple:,codesign: \
     -s -k "$KEYCHAIN_PASS" "$KEYCHAIN" >/dev/null 2>&1
 
   chmod 600 "$KEYCHAIN"
-  ok "identidade criada em $(basename "$KEYCHAIN")"
+  ok "identity created in $(basename "$KEYCHAIN")"
 }
 
-# O keychain precisa estar na lista de busca do usuário: `codesign --keychain`
-# sozinho não basta (verificado — responde "no identity found" sem isto).
+# The keychain needs to be in the user's search list: `codesign --keychain`
+# alone is not enough (verified — it answers "no identity found" without this).
 #
-# `list-keychains -s` SUBSTITUI a lista inteira. Se a leitura vier vazia e a
-# gente escrever só o nosso, o keychain de login sai da lista e o usuário perde
-# resolução de senhas de Wi-Fi, Safari e apps. Daí o guarda-corpo.
+# `list-keychains -s` REPLACES the whole list. If the read comes back empty and
+# we write only ours, the login keychain drops out of the list and the user
+# loses password resolution for Wi-Fi, Safari and apps. Hence the guard rail.
 #
-# Para reverter à mão:
+# To revert by hand:
 #   security list-keychains -d user -s ~/Library/Keychains/login.keychain-db
 ensure_in_search_list() {
   local current=() line
   while IFS= read -r line; do
-    line="${line#"${line%%[![:space:]]*}"}"   # tira espaço à esquerda
-    line="${line#\"}"; line="${line%\"}"      # tira as aspas
+    line="${line#"${line%%[![:space:]]*}"}"   # strip leading whitespace
+    line="${line#\"}"; line="${line%\"}"      # strip the quotes
     [ -n "$line" ] && current+=("$line")
   done < <(security list-keychains -d user)
 
@@ -143,11 +145,11 @@ ensure_in_search_list() {
   for k in "${current[@]}"; do [ "$k" = "$KEYCHAIN" ] && return; done
 
   [ ${#current[@]} -gt 0 ] \
-    || fail "a lista de keychains do usuário voltou vazia; não vou reescrevê-la às cegas."
+    || fail "the user's keychain list came back empty; refusing to rewrite it blindly."
   security list-keychains -d user -s "${current[@]}" "$KEYCHAIN"
 }
 
-info "Verificando identidade de assinatura"
+info "Checking the signing identity"
 KEYCHAIN_PASS="$(machine_password)"
 if [ -f "$KEYCHAIN" ]; then
   security unlock-keychain -p "$KEYCHAIN_PASS" "$KEYCHAIN" 2>/dev/null || true
@@ -155,70 +157,72 @@ fi
 identity_present || create_identity
 ensure_in_search_list
 security unlock-keychain -p "$KEYCHAIN_PASS" "$KEYCHAIN"
-identity_present || fail "a identidade '$IDENTITY' não ficou disponível no keychain."
+identity_present || fail "the identity '$IDENTITY' did not become available in the keychain."
 
-# O keychain volta a ficar travado ao fim do build, com ou sem erro. Reduz a
-# janela em que a chave está utilizável sem a senha.
+# The keychain is locked again at the end of the build, with or without an
+# error. Shrinks the window in which the key is usable without the password.
 trap 'security lock-keychain "$KEYCHAIN" 2>/dev/null || true' EXIT
 
 perms="$(stat -f%Lp "$KEYCHAIN")"
-[ "$perms" = "600" ] || { chmod 600 "$KEYCHAIN"; warn "permissões do keychain eram $perms, corrigidas para 600"; }
+[ "$perms" = "600" ] || { chmod 600 "$KEYCHAIN"; warn "keychain permissions were $perms, corrected to 600"; }
 ok "$IDENTITY"
 
-# --- whisper.cpp estático ------------------------------------------------------
+# --- static whisper.cpp -------------------------------------------------------
 #
-# Estático, e não a dylib do Homebrew. O hardened runtime liga validação de
-# bibliotecas — que é o que fecha injeção de código num processo com
-# Acessibilidade — e ela recusa dylib assinada por outra equipe. Com linkagem
-# dinâmica o app morria no dyld com "different Team IDs".
+# Static, not the Homebrew dylib. The hardened runtime turns on library
+# validation — which is what closes code injection into a process that holds
+# Accessibility — and it refuses a dylib signed by another team. With dynamic
+# linking the app died in dyld with "different Team IDs".
 #
-# De quebra o .app fica autocontido: quem for usar não precisa de Homebrew, e
-# desinstalar o whisper-cpp não quebra nada.
+# As a bonus the .app is self-contained: whoever uses it does not need Homebrew,
+# and uninstalling whisper-cpp breaks nothing.
 
 VENDOR="$REPO_ROOT/vendor/whisper"
 WHISPER_TAG="v1.9.2"
-# O commit exato, não só a tag.
+# The exact commit, not just the tag.
 #
-# `v1.9.2` é uma tag leve — um ponteiro que o mantenedor, ou quem comprometer a
-# conta, move sem deixar rastro. Isto aqui vira ~300 mil linhas de C++ compiladas
-# e linkadas dentro do binário que detém Acessibilidade, então merece pelo menos
-# o mesmo rigor que já se aplica ao conversor de modelo em setup-bench.sh — que é
-# um script Python que roda offline uma vez. O critério estava invertido.
+# `v1.9.2` is a lightweight tag — a pointer that the maintainer, or whoever
+# compromises the account, can move without a trace. This becomes ~300 thousand
+# lines of C++ compiled and linked into the binary that holds Accessibility, so
+# it deserves at least the same rigor already applied to the model converter in
+# setup-bench.sh — which is a Python script that runs offline once. The
+# criterion was inverted.
 WHISPER_COMMIT="306c88f4d1286aec1bf96e544632897886af5501"
 
 build_whisper_static() {
-  command -v cmake >/dev/null || fail "cmake não encontrado. Rode: brew install cmake"
+  command -v cmake >/dev/null || fail "cmake not found. Run: brew install cmake"
   local src="$REPO_ROOT/.cache/whisper-src" build="$REPO_ROOT/.cache/whisper-static"
   local log="$REPO_ROOT/.cache/whisper-build.log"
 
   if [ ! -d "$src" ]; then
-    info "Clonando whisper.cpp $WHISPER_TAG"
+    info "Cloning whisper.cpp $WHISPER_TAG"
     git clone --depth 1 -b "$WHISPER_TAG" -q https://github.com/ggml-org/whisper.cpp.git "$src" \
-      || fail "não consegui clonar o whisper.cpp."
+      || fail "could not clone whisper.cpp."
   fi
 
-  # Confere sempre, inclusive num clone preexistente: reusar .cache/ só por
-  # existir significa compilar o que quer que esteja lá.
-  local got; got="$(git -C "$src" rev-parse HEAD 2>/dev/null || echo desconhecido)"
-  [ "$got" = "$WHISPER_COMMIT" ] || fail "o whisper.cpp em $src não é o commit esperado.
-      esperado: $WHISPER_COMMIT
-      obtido:   $got
-      Apague $src e rode de novo. Não vou compilar fonte não verificado."
+  # Always checked, including on a preexisting clone: reusing .cache/ just
+  # because it exists means compiling whatever happens to be there.
+  local got; got="$(git -C "$src" rev-parse HEAD 2>/dev/null || echo unknown)"
+  [ "$got" = "$WHISPER_COMMIT" ] || fail "the whisper.cpp in $src is not the expected commit.
+      expected: $WHISPER_COMMIT
+      got:      $got
+      Delete $src and run again. Refusing to compile unverified source."
   if ! git -C "$src" diff --quiet HEAD 2>/dev/null; then
-    fail "há modificações locais em $src. Apague o diretório e rode de novo."
+    fail "there are local modifications in $src. Delete the directory and run again."
   fi
-  ok "fonte conferida ($WHISPER_COMMIT)"
+  ok "source verified ($WHISPER_COMMIT)"
 
-  info "Compilando whisper.cpp estático (uma vez só)"
-  # Do zero: um diretório de build meio-configurado faz o cmake falhar de forma
-  # obscura, e reaproveitá-lo não economiza nada que importe.
+  info "Compiling static whisper.cpp (one time only)"
+  # From scratch: a half-configured build directory makes cmake fail in obscure
+  # ways, and reusing it saves nothing that matters.
   rm -rf "$build"
-  # GGML_METAL_EMBED_LIBRARY embute o fonte dos shaders e compila em runtime:
-  # é o que dispensa o toolchain Metal, que não existe sem Xcode completo.
-  # GGML_BACKEND_DL=OFF liga o backend Metal direto, em vez de carregá-lo de
-  # um dylib externo — que é justamente o que estamos eliminando.
-  # O deployment target acompanha o do pacote; sem isso o linker avisa que os
-  # objetos foram construídos para um macOS mais novo que o alvo.
+  # GGML_METAL_EMBED_LIBRARY embeds the shader source and compiles it at
+  # runtime: it is what removes the need for the Metal toolchain, which does not
+  # exist without full Xcode.
+  # GGML_BACKEND_DL=OFF links the Metal backend in directly, instead of loading
+  # it from an external dylib — which is precisely what we are eliminating.
+  # The deployment target follows the package's; without it the linker warns
+  # that the objects were built for a newer macOS than the target.
   cmake -S "$src" -B "$build" \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0 \
@@ -226,29 +230,29 @@ build_whisper_static() {
     -DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON -DGGML_BACKEND_DL=OFF \
     -DWHISPER_BUILD_EXAMPLES=OFF -DWHISPER_BUILD_TESTS=OFF \
     -DWHISPER_BUILD_SERVER=OFF -DWHISPER_USE_SYSTEM_GGML=OFF >"$log" 2>&1 \
-    || fail "configuração do cmake falhou. Diagnóstico em: $log
+    || fail "cmake configuration failed. Diagnostics in: $log
       $(tail -3 "$log" | sed 's/^/      /')"
   cmake --build "$build" --config Release -j "$(sysctl -n hw.ncpu)" >>"$log" 2>&1 \
-    || fail "compilação do whisper.cpp falhou. Diagnóstico em: $log
+    || fail "whisper.cpp compilation failed. Diagnostics in: $log
       $(tail -3 "$log" | sed 's/^/      /')"
 
   rm -rf "$VENDOR"
   mkdir -p "$VENDOR/lib" "$VENDOR/include"
-  # Lista explícita, não "tudo menos o parakeet": qualquer .a novo do upstream
-  # entraria no diretório de link em silêncio.
+  # Explicit list, not "everything but the parakeet": any new .a from upstream
+  # would enter the link directory silently.
   local lib
   for lib in libwhisper.a libggml.a libggml-base.a libggml-cpu.a libggml-metal.a libggml-blas.a; do
     local found; found="$(find "$build" -name "$lib" -print -quit)"
-    [ -n "$found" ] || fail "o build não produziu $lib."
+    [ -n "$found" ] || fail "the build did not produce $lib."
     cp "$found" "$VENDOR/lib/"
   done
   cp "$src/include/whisper.h" "$VENDOR/include/"
   cp "$src/ggml/include/"*.h "$VENDOR/include/"
-  # Manifesto do que foi produzido. Sem isto, reusar vendor/ numa execução
-  # seguinte confiaria nos .a só por existirem — e é código que vai para dentro
-  # do binário que detém Acessibilidade.
+  # Manifest of what was produced. Without it, reusing vendor/ on a later run
+  # would trust the .a files just because they exist — and this is code that
+  # goes inside the binary that holds Accessibility.
   ( cd "$VENDOR/lib" && shasum -a 256 ./*.a ) > "$VENDOR/MANIFEST"
-  ok "vendor/whisper pronto ($(du -sh "$VENDOR" | cut -f1), $(wc -l < "$VENDOR/MANIFEST" | tr -d ' ') libs conferidas)"
+  ok "vendor/whisper ready ($(du -sh "$VENDOR" | cut -f1), $(wc -l < "$VENDOR/MANIFEST" | tr -d ' ') libs verified)"
 }
 
 vendor_intact() {
@@ -256,45 +260,46 @@ vendor_intact() {
   ( cd "$VENDOR/lib" && shasum -a 256 --status -c "$VENDOR/MANIFEST" ) 2>/dev/null
 }
 
-info "Verificando whisper.cpp estático"
+info "Checking static whisper.cpp"
 if vendor_intact; then
-  ok "vendor/whisper íntegro (checksums conferem)"
+  ok "vendor/whisper intact (checksums match)"
 elif [ -d "$VENDOR" ]; then
-  warn "vendor/whisper não confere com o manifesto — reconstruindo do zero"
+  warn "vendor/whisper does not match the manifest — rebuilding from scratch"
   build_whisper_static
 else
   build_whisper_static
 fi
 
-# --- compilação ---------------------------------------------------------------
+# --- compilation --------------------------------------------------------------
 
-info "Compilando (release)"
+info "Compiling (release)"
 cd "$REPO_ROOT"
 swift build -c release --product NeverType
 BIN="$(swift build -c release --product NeverType --show-bin-path)/NeverType"
-[ -x "$BIN" ] || fail "binário não encontrado em $BIN"
+[ -x "$BIN" ] || fail "binary not found at $BIN"
 ok "$(basename "$BIN")"
 
 # --- bundle -------------------------------------------------------------------
 
-# O commit vai carimbado no bundle.
+# The commit is stamped into the bundle.
 #
-# Sem isto não há como responder "tem versão nova?" sem recompilar às cegas: o
-# app instalado não carrega nenhuma pista de onde veio. Com o carimbo, comparar
-# o que está em /Applications com o que está no repositório é uma linha.
+# Without it there is no way to answer "is there a new version?" without
+# recompiling blindly: the installed app carries no clue of where it came from.
+# With the stamp, comparing what is in /Applications with what is in the
+# repository is one line.
 #
-# `desconhecido` quando não há git — alguém que baixou um tarball em vez de
-# clonar. O app funciona igual; só o caminho de atualização automática não serve.
-COMMIT="$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || echo desconhecido)"
+# `unknown` when there is no git — someone who downloaded a tarball instead of
+# cloning. The app works the same; only the automatic update path is unusable.
+COMMIT="$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 
-info "Montando $APP"
+info "Assembling $APP"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/NeverType"
 
-# LSUIElement mantém o app fora do Dock: ele vive só na menu bar.
-# NSMicrophoneUsageDescription é obrigatório — sem ele o macOS mata o processo
-# quando o microfone é aberto, em vez de pedir permissão.
+# LSUIElement keeps the app out of the Dock: it lives only in the menu bar.
+# NSMicrophoneUsageDescription is mandatory — without it macOS kills the process
+# when the microphone is opened, instead of asking for permission.
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -311,19 +316,19 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>LSUIElement</key><true/>
   <key>NSMicrophoneUsageDescription</key>
-  <string>O NeverType grava sua voz para transcrever localmente. Nenhum áudio sai da sua máquina.</string>
+  <string>NeverType records your voice to transcribe it locally. No audio ever leaves your Mac.</string>
 </dict>
 </plist>
 PLIST
-ok "bundle montado"
+ok "bundle assembled"
 
-# --- assinatura ---------------------------------------------------------------
+# --- signing ------------------------------------------------------------------
 
-info "Assinando"
-# Hardened runtime liga a validação de bibliotecas. Sem ela, um processo que
-# detém Acessibilidade — ou seja, que pode ler e injetar teclas no sistema todo —
-# aceita injeção de código de terceiros. É o segundo caminho para o mesmo prêmio,
-# e este dá para fechar.
+info "Signing"
+# The hardened runtime turns on library validation. Without it, a process that
+# holds Accessibility — that is, one that can read and inject keystrokes across
+# the whole system — accepts third-party code injection. It is the second path
+# to the same prize, and this one can be closed.
 ENTITLEMENTS="$REPO_ROOT/build/NeverType.entitlements"
 cat > "$ENTITLEMENTS" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -338,19 +343,19 @@ PLIST
 codesign --force --sign "$IDENTITY" --identifier "$BUNDLE_ID" \
   --options runtime --entitlements "$ENTITLEMENTS" \
   --keychain "$KEYCHAIN" --timestamp=none "$APP" \
-  || fail "codesign falhou."
+  || fail "codesign failed."
 
-codesign --verify --deep --strict "$APP" || fail "a assinatura não verifica."
-ok "assinado e verificado"
+codesign --verify --deep --strict "$APP" || fail "the signature does not verify."
+ok "signed and verified"
 
 echo
-info "Requisito designado (é isto que o TCC guarda)"
+info "Designated requirement (this is what TCC stores)"
 codesign -dvvv "$APP" 2>&1 | grep -E '^Authority' | sed 's/^/  /'
 codesign -d -r- "$APP" 2>&1 | grep -i designated | sed 's/^/  /'
 echo
 echo "  App:  $APP"
-echo "  Abra: open '$APP'"
+echo "  Open: open '$APP'"
 echo
-echo "  Na primeira execução o macOS vai pedir Microfone e Acessibilidade."
-echo "  Depois de concedidas, elas sobrevivem aos próximos builds — é para isso"
-echo "  que serve a identidade estável acima."
+echo "  On first launch macOS will ask for Microphone and Accessibility."
+echo "  Once granted, they survive the next builds — that is what the stable"
+echo "  identity above is for."

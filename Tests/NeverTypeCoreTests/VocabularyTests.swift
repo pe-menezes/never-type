@@ -125,9 +125,9 @@ struct VocabularyTests {
         v.setTerms(["NeverType"])
         v.setReplacements([Replacement(from: "pix", to: "Pix")])
 
-        let depois = Vocabulary(url: url)
-        #expect(depois.terms == ["NeverType"])
-        #expect(depois.replacements == [Replacement(from: "pix", to: "Pix")])
+        let reopened = Vocabulary(url: url)
+        #expect(reopened.terms == ["NeverType"])
+        #expect(reopened.replacements == [Replacement(from: "pix", to: "Pix")])
     }
 
     @Test("a corrupt file starts empty instead of breaking")

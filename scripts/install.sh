@@ -1,9 +1,9 @@
 #!/bin/bash
-# Instala o NeverType em /Applications.
+# Installs NeverType into /Applications.
 #
-# Caminho fixo de propósito: junto com a identidade de assinatura estável, é o
-# que faz a permissão de Acessibilidade sobreviver. Mover o app depois quebra a
-# concessão e o macOS pede de novo.
+# Fixed path on purpose: together with the stable signing identity, it is what
+# makes the Accessibility permission survive. Moving the app afterwards breaks
+# the grant and macOS asks again.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -15,122 +15,123 @@ MODEL="ggml-large-v3-turbo-q5_0.bin"
 info() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 ok()   { printf '\033[1;32m  ok\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m  !\033[0m  %s\n' "$*"; }
-fail() { printf '\033[1;31merro:\033[0m %s\n' "$*" >&2; exit 1; }
+fail() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
-[ "$(uname -s)" = "Darwin" ] || fail "só roda no macOS."
-[ "$(uname -m)" = "arm64" ]  || fail "precisa de Apple Silicon: sem Metal a transcrição é lenta demais."
+[ "$(uname -s)" = "Darwin" ] || fail "only runs on macOS."
+[ "$(uname -m)" = "arm64" ]  || fail "needs Apple Silicon: without Metal, transcription is far too slow."
 
-# Conferido agora, e não depois de compilar por minutos: num Mac gerido ou com
-# usuário não-admin, /Applications não é gravável, e descobrir isso no fim é o
-# jeito mais certo de a pessoa desistir.
-[ -w /Applications ] || fail "sem permissão de escrita em /Applications.
-      Peça a alguém com direitos de administrador, ou instale em outro lugar:
+# Checked now, not after minutes of compiling: on a managed Mac or with a
+# non-admin user, /Applications is not writable, and finding that out at the end
+# is the surest way to make the person give up.
+[ -w /Applications ] || fail "no write permission in /Applications.
+      Ask someone with administrator rights, or install elsewhere:
         cp -R build/NeverType.app ~/Applications/"
 
-# --- o app -------------------------------------------------------------------
+# --- the app ------------------------------------------------------------------
 
 if [ ! -d "$SOURCE" ]; then
-  info "Compilando (primeira vez leva alguns minutos)"
-  bash "$REPO_ROOT/scripts/build-app.sh" || fail "a compilação falhou."
+  info "Compiling (the first time takes a few minutes)"
+  bash "$REPO_ROOT/scripts/build-app.sh" || fail "the build failed."
 fi
-[ -d "$SOURCE" ] || fail "não encontrei $SOURCE."
+[ -d "$SOURCE" ] || fail "could not find $SOURCE."
 
-info "Instalando em $DEST"
-# `pkill`, e não `osascript quit`.
+info "Installing into $DEST"
+# `pkill`, not `osascript quit`.
 #
-# Mandar Apple event para um app novo exige autorização de Automação do TCC, e o
-# macOS abre um diálogo modal pedindo isso — travando o instalador logo depois de
-# "Instalando em /Applications", sem nenhuma pista do motivo. E espera o processo
-# morrer de fato: com `sleep` fixo, um app que demora a sair sobrevive, a guarda
-# de instância única barra o novo, e a pessoa segue rodando o binário velho
-# achando que atualizou.
+# Sending an Apple event to a new app requires TCC Automation authorization, and
+# macOS opens a modal dialog asking for it — hanging the installer right after
+# "Installing into /Applications", with no hint of why. And it waits for the
+# process to actually die: with a fixed `sleep`, an app that takes a while to
+# quit survives, the single-instance guard blocks the new one, and the person
+# keeps running the old binary thinking they updated.
 if pgrep -x NeverType >/dev/null; then
-  info "Encerrando a instância em execução"
+  info "Quitting the running instance"
   pkill -x NeverType || true
   for _ in $(seq 1 30); do
     pgrep -x NeverType >/dev/null || break
     sleep 0.2
   done
-  pgrep -x NeverType >/dev/null && fail "o NeverType não encerrou. Encerre pelo menu da bandeja e rode de novo."
+  pgrep -x NeverType >/dev/null && fail "NeverType did not quit. Quit it from the menu bar menu and run again."
 fi
 rm -rf "$DEST"
 cp -R "$SOURCE" "$DEST"
-codesign --verify --deep --strict "$DEST" || fail "a assinatura não verifica em $DEST."
-ok "instalado e verificado"
+codesign --verify --deep --strict "$DEST" || fail "the signature does not verify at $DEST."
+ok "installed and verified"
 
-# A cópia de build/ é artefato de compilação e continua lá. Abrir ela por engano
-# não duplica o app — a segunda instância cede à primeira —, mas confunde.
-[ -d "$SOURCE" ] && warn "a cópia de build/ continua no repositório; use sempre $DEST"
+# The build/ copy is a build artifact and stays there. Opening it by mistake
+# does not duplicate the app — the second instance yields to the first —, but
+# it confuses.
+[ -d "$SOURCE" ] && warn "the build/ copy is still in the repository; always use $DEST"
 
-# --- o modelo ----------------------------------------------------------------
+# --- the model ----------------------------------------------------------------
 #
-# Ele não vem no app: são 547 MB. O jeito de obtê-lo depende de onde você está —
-# na rede corporativa a HuggingFace está bloqueada, então o setup baixa o
-# checkpoint do CDN da OpenAI e converte.
+# It does not ship in the app: it is 547 MB. How to get it depends on the
+# network — some corporate networks block Hugging Face, so the setup downloads
+# the checkpoint from OpenAI's CDN and converts it.
 
-info "Verificando o modelo"
-# 400 MB para um modelo de 547 MB — o mesmo piso de ModelStore.minimumBytes no
-# app, de fetch-model.sh e de verify-install.sh. Um piso baixo aprovaria
-# um download interrompido: reproduzido com 100 KB do modelo real, o whisper.cpp
-# aceita como "modelo vazio" e o processo morre na primeira inferência (exit 134,
-# ver docs/pitfalls.md).
+info "Checking the model"
+# 400 MB for a 547 MB model — the same floor as ModelStore.minimumBytes in the
+# app, fetch-model.sh and verify-install.sh. A low floor would approve an
+# interrupted download: reproduced with 100 KB of the real model, whisper.cpp
+# accepts it as an "empty model" and the process dies on the first inference
+# (exit 134, see docs/pitfalls.md).
 MODEL_MIN_MB=400
 if [ -f "$MODEL_DIR/$MODEL" ] && [ "$(( $(stat -f%z "$MODEL_DIR/$MODEL") / 1048576 ))" -ge "$MODEL_MIN_MB" ]; then
-  ok "modelo presente ($(( $(stat -f%z "$MODEL_DIR/$MODEL") / 1048576 )) MB)"
+  ok "model present ($(( $(stat -f%z "$MODEL_DIR/$MODEL") / 1048576 )) MB)"
 elif [ -f "$REPO_ROOT/models/$MODEL" ]; then
   bash "$REPO_ROOT/scripts/fetch-model.sh"
 else
-  warn "o modelo ainda não existe nesta máquina."
-  echo "     Ele tem 547 MB e é construído a partir do checkpoint da OpenAI:"
+  warn "the model does not exist on this machine yet."
+  echo "     It is 547 MB and is built from OpenAI's checkpoint:"
   echo
-  echo "       bash scripts/setup-bench.sh   # baixa e converte três modelos (~10 min);"
-  echo "                                     # exige Homebrew e python3"
-  echo "       bash scripts/fetch-model.sh   # valida e instala no lugar certo"
+  echo "       bash scripts/setup-bench.sh   # downloads and converts three models;"
+  echo "                                     # requires Homebrew and python3"
+  echo "       bash scripts/fetch-model.sh   # validates and installs it in the right place"
   echo
-  echo "     Alternativa mais rápida se alguém do time já tem: copie o arquivo"
-  echo "     para models/ (dentro do repositório) e rode só a segunda etapa:"
+  echo "     Faster alternative if someone else already has it: copy the file"
+  echo "     into models/ (inside the repository) and run only the second step:"
   echo
-  echo "       cp /de/onde/veio/$MODEL models/"
+  echo "       cp /wherever/it/came/from/$MODEL models/"
   echo "       bash scripts/fetch-model.sh"
   echo
-  echo "     Não copie direto para $MODEL_DIR/: isso pula a validação de magic e"
-  echo "     tamanho do fetch-model.sh, e um arquivo ruim só é recusado quando o"
-  echo "     app abre — a mensagem aparece no menu, em \"Modelo:\", não aqui."
+  echo "     Do not copy straight into $MODEL_DIR/: that skips fetch-model.sh's"
+  echo "     magic and size validation, and a bad file is only refused when the"
+  echo "     app opens — the message shows up in the menu, under \"Model:\", not here."
   echo
 fi
 
-# --- permissões ---------------------------------------------------------------
+# --- permissions --------------------------------------------------------------
 
 cat <<'MSG'
 
-==> Falta você conceder duas permissões
+==> Two permissions are left for you to grant
 
-  Abra o app e o macOS vai pedir as duas. As duas são necessárias:
+  Open the app and macOS will ask for both. Both are required:
 
-    Microfone       sem ele não há áudio
-    Acessibilidade  sem ela o app não recebe a tecla global. Ele avisa — ícone
-                    cortado (mic.slash), "Acessibilidade: faltando" e "Abrir
-                    Ajustes de Acessibilidade…" no menu, linha no log e o pedido
-                    do próprio macOS —, mas a tecla não faz nada
+    Microphone      without it there is no audio
+    Accessibility   without it the app does not receive the global key. It warns
+                    — slashed icon (mic.slash), "Accessibility: missing" and
+                    "Open Accessibility Settings…" in the menu, a line in the
+                    log and macOS's own prompt —, but the key does nothing
 
-  Se a janela de Acessibilidade não aparecer, vá em
-  Ajustes do Sistema › Privacidade e Segurança › Acessibilidade e ligue o NeverType.
+  If the Accessibility window does not show up, go to
+  System Settings › Privacy & Security › Accessibility and turn on NeverType.
 
-==> Como usar
+==> How to use
 
-  Segure ⌘ direito, fale, solte. O texto aparece onde o cursor estiver.
-  Apertar qualquer tecla comum (ou Esc) durante o hold cancela e descarta o áudio.
+  Hold Right ⌘, speak, release. The text appears wherever the cursor is.
+  Pressing any regular key (or Esc) during the hold cancels and discards the audio.
 
-  Mãos-livres: dois toques rápidos na tecla travam a gravação; um toque encerra
-  e transcreve; Esc descarta. Travado, teclar não cancela.
+  Hands-free: two quick taps on the key lock the recording; one tap finishes
+  and transcribes; Esc discards. While locked, typing does not cancel.
 
-  No menu da bandeja: a tecla (⌘, ⌥ ou ⌃ direito) e os sons ficam em "Tecla";
-  as últimas transcrições em "Copiar última transcrição" e "Histórico", onde
-  clicar copia e "Limpar histórico" apaga o arquivo; termos e substituições em
-  "Vocabulário…".
+  In the menu bar menu: the key (Right ⌘, ⌥ or ⌃) and the sounds are under
+  "Hotkey"; the latest transcriptions under "Copy Last Transcription" and
+  "History", where clicking copies and "Clear History" deletes the file; terms
+  and replacements under "Vocabulary…".
 
 MSG
 
-info "Abrindo"
+info "Opening"
 open "$DEST"
-ok "pronto"
+ok "done"

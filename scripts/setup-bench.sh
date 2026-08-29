@@ -1,14 +1,14 @@
 #!/bin/bash
-# Prepara a bancada de latência: instala whisper-cpp, prova que o backend Metal
-# carrega, e constrói os modelos ggml quantizados em models/.
+# Prepares the latency bench: installs whisper-cpp, proves the Metal backend
+# loads, and builds the quantized ggml models in models/.
 #
-# Idempotente: rodar de novo não refaz nada que já está pronto.
+# Idempotent: running again redoes nothing that is already done.
 #
-# Por que não baixa o .bin pronto da HuggingFace: em redes que filtram por
-# domínio, ela costuma estar na lista de bloqueio — e é lá que moram os arquivos
-# ggml. O CDN da OpenAI, que serve os checkpoints .pt originais, raramente está.
-# Então o caminho é pegar o .pt de lá e converter: um passo a mais, e o setup
-# funciona em rede restrita.
+# Why it does not download the ready-made .bin from Hugging Face: on networks
+# that filter by domain, it is often on the blocklist — and that is where the
+# ggml files live. OpenAI's CDN, which serves the original .pt checkpoints,
+# rarely is. So the path is to get the .pt from there and convert it: one extra
+# step, and the setup works on a restricted network.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -17,16 +17,17 @@ BUILD_DIR="$REPO_ROOT/.cache"
 PT_CACHE="$HOME/.cache/whisper"
 CDN="https://openaipublic.azureedge.net/main/whisper/models"
 
-# Candidatos da spec. Turbo é o favorito; small é o piso de latência.
-# Formato: nome-ggml : nome-openai : sha256 (que também é o path no CDN) : quant : piso em MB
+# Candidates from the spec. Turbo is the favorite; small is the latency floor.
+# Format: ggml-name : openai-name : sha256 (also the path on the CDN) : quant : floor in MB
 #
-# O piso é por modelo e proporcional ao artefato real (docs/pitfalls.md): o
-# magic está certo num arquivo truncado, então só o tamanho pega conversão ou
-# quantização interrompida. Tamanhos registrados neste repositório: turbo-q5_0
-# tem 547 MB (piso 400 — o mesmo que o app exige em ModelStore.minimumBytes) e
-# small-q5_1 tem 181 MB (piso 130). O de medium-q5_0 não foi registrado; pelo
-# CLAUDE.md os três somam 1,2 GB, o que o põe entre ~420 e ~520 MB, e 400 fica
-# abaixo de qualquer leitura disso. Confira: stat -f%z models/ggml-medium-q5_0.bin
+# The floor is per model and proportional to the real artifact
+# (docs/pitfalls.md): the magic is right in a truncated file, so only the size
+# catches an interrupted conversion or quantization. Sizes recorded in this
+# repository: turbo-q5_0 is 547 MB (floor 400 — the same the app requires in
+# ModelStore.minimumBytes) and small-q5_1 is 181 MB (floor 130). medium-q5_0's
+# was not recorded; per CLAUDE.md the three add up to 1.2 GB, which puts it
+# between ~420 and ~520 MB, and 400 is below any reading of that. Check:
+# stat -f%z models/ggml-medium-q5_0.bin
 MODELS=(
   "large-v3-turbo-q5_0:large-v3-turbo:aff26ae408abcba5fbf8813c21e62b0941638c5f6eebfb145be0c9839262a19a:q5_0:400"
   "medium-q5_0:medium:345ae4da62f9b3d59415adc60127b97c714f32e89e936602e85993674d08dcb1:q5_0:400"
@@ -36,45 +37,45 @@ MODELS=(
 info() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 ok()   { printf '\033[1;32m  ok\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m  !\033[0m  %s\n' "$*"; }
-fail() { printf '\033[1;31merro:\033[0m %s\n' "$*" >&2; exit 1; }
+fail() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
 size_mb() { echo "$(( $(stat -f%z "$1") / 1048576 ))"; }
 
-# --- pré-requisitos ---------------------------------------------------------
+# --- prerequisites ------------------------------------------------------------
 
-[ "$(uname -s)" = "Darwin" ] || fail "esta bancada só faz sentido no macOS."
-[ "$(uname -m)" = "arm64" ]  || fail "é preciso Apple Silicon: sem Metal a medição não diz nada."
-command -v brew >/dev/null   || fail "Homebrew não encontrado. Instale em https://brew.sh"
+[ "$(uname -s)" = "Darwin" ] || fail "this bench only makes sense on macOS."
+[ "$(uname -m)" = "arm64" ]  || fail "Apple Silicon is required: without Metal the measurement says nothing."
+command -v brew >/dev/null   || fail "Homebrew not found. Install it from https://brew.sh"
 
-info "Verificando whisper-cpp"
+info "Checking whisper-cpp"
 if command -v whisper-cli >/dev/null 2>&1 && command -v whisper-quantize >/dev/null 2>&1; then
-  ok "whisper-cli e whisper-quantize já instalados"
+  ok "whisper-cli and whisper-quantize already installed"
 else
-  info "Instalando whisper-cpp via Homebrew (traz ggml com Metal no bottle)"
+  info "Installing whisper-cpp via Homebrew (brings ggml with Metal in the bottle)"
   brew install whisper-cpp
 fi
-command -v whisper-cli      >/dev/null || fail "whisper-cli não ficou no PATH."
-command -v whisper-quantize >/dev/null || fail "whisper-quantize não ficou no PATH."
+command -v whisper-cli      >/dev/null || fail "whisper-cli did not end up on the PATH."
+command -v whisper-quantize >/dev/null || fail "whisper-quantize did not end up on the PATH."
 
-# --- smoke test: o backend Metal carrega? -----------------------------------
+# --- smoke test: does the Metal backend load? ---------------------------------
 #
-# O ggml carrega backends dinamicamente. Se o Metal não entrar, a inferência cai
-# pra CPU SEM ERRO — só fica ~11x mais lenta (encode 1635 ms contra 143 ms,
-# medido; ver abaixo). Descobrir isso agora, com o modelo tiny que o próprio
-# Homebrew instala, custa segundos. Descobrir depois custa a credibilidade de
-# todos os números da bancada.
+# ggml loads backends dynamically. If Metal does not come in, inference falls
+# back to the CPU WITH NO ERROR — it just gets ~11x slower (encode 1635 ms
+# against 143 ms, measured; see below). Finding that out now, with the tiny
+# model Homebrew itself installs, costs seconds. Finding out later costs the
+# credibility of every number in the bench.
 
-info "Smoke test do backend Metal"
+info "Metal backend smoke test"
 SHARE_DIR="$(brew --prefix)/share/whisper-cpp"
 [ -f "$SHARE_DIR/for-tests-ggml-tiny.bin" ] && [ -f "$SHARE_DIR/jfk.wav" ] \
-  || fail "arquivos de teste do Homebrew ausentes em $SHARE_DIR. Tente: brew reinstall whisper-cpp"
+  || fail "Homebrew's test files are missing from $SHARE_DIR. Try: brew reinstall whisper-cpp"
 
-# O ggml inicializa o device Metal só para enumerá-lo, mesmo quando a inferência
-# roda em CPU: um log de `whisper-cli -ng` contém 37 linhas com a palavra "metal".
-# Procurar por "metal" prova que o dylib carregou, não que a GPU foi usada — foi
-# esse falso negativo que a auditoria da Parte 1 pegou. O discriminador real é o
-# backend que o whisper escolheu. Custo do erro, medido: encode 1635 ms em CPU
-# contra 143 ms em Metal, no mesmo modelo e áudio.
+# ggml initializes the Metal device just to enumerate it, even when inference
+# runs on the CPU: a `whisper-cli -ng` log contains 37 lines with the word
+# "metal". Searching for "metal" proves the dylib loaded, not that the GPU was
+# used — that false negative is what the Part 1 audit caught. The real
+# discriminator is the backend whisper chose. Cost of the mistake, measured:
+# encode 1635 ms on CPU against 143 ms on Metal, same model and audio.
 metal_is_active() {
   local log="$1"
   grep -q 'whisper_backend_init_gpu: no GPU found' "$log" && return 1
@@ -84,33 +85,35 @@ metal_is_active() {
 SMOKE_LOG="$(mktemp -t nevertype-smoke)"
 trap 'rm -f "$SMOKE_LOG"' EXIT
 whisper-cli -m "$SHARE_DIR/for-tests-ggml-tiny.bin" -f "$SHARE_DIR/jfk.wav" -nt \
-  >/dev/null 2>"$SMOKE_LOG" || { cat "$SMOKE_LOG" >&2; fail "whisper-cli falhou no smoke test."; }
+  >/dev/null 2>"$SMOKE_LOG" || { cat "$SMOKE_LOG" >&2; fail "whisper-cli failed in the smoke test."; }
 
 if metal_is_active "$SMOKE_LOG"; then
-  ok "Metal ativo:"
+  ok "Metal active:"
   grep -E 'whisper_backend_init_gpu:' "$SMOKE_LOG" | head -3 | sed 's/^/      /'
 else
   echo "--- log ---" >&2; cat "$SMOKE_LOG" >&2; echo "-----------" >&2
-  fail "backend Metal NÃO carregou — a inferência rodaria em CPU.
-      Qualquer número medido assim é enganoso, então a bancada para aqui.
-      Verifique: brew reinstall ggml whisper-cpp"
+  fail "the Metal backend did NOT load — inference would run on the CPU.
+      Any number measured this way is misleading, so the bench stops here.
+      Check: brew reinstall ggml whisper-cpp"
 fi
 
-# --- o que ainda falta ------------------------------------------------------
+# --- what is still missing ----------------------------------------------------
 
 mkdir -p "$MODELS_DIR" "$PT_CACHE"
 
-# Um .bin ggml válido começa com o magic 0x67676d6c. Ele é gravado como uint32
-# little-endian, então os bytes no arquivo saem invertidos: 6c6d6767, que lido
-# como texto vira "lmgg", não "ggml". Comparar o hex evita esse tropeço.
-# Checar o magic pega download truncado e, principalmente, página de erro HTML
-# salva como se fosse modelo — que é o que um proxy de filtragem devolve.
+# A valid ggml .bin starts with the magic 0x67676d6c. It is written as a
+# little-endian uint32, so the bytes in the file come out reversed: 6c6d6767,
+# which read as text becomes "lmgg", not "ggml". Comparing the hex avoids that
+# trip-up. Checking the magic catches a truncated download and, above all, an
+# HTML error page saved as if it were a model — which is what a filtering proxy
+# returns.
 GGML_MAGIC_HEX=6c6d6767
-# O piso de tamanho vem da tabela MODELS, por modelo. Até 29/08/2026 era um
-# único GGML_MIN_MB=50 para os três — que aprovava um turbo de 547 MB parado em
-# qualquer ponto acima disso. O magic sozinho não pega download nem conversão
-# interrompidos no meio, porque os quatro primeiros bytes já teriam chegado.
-is_valid_ggml() {  # <arquivo> <piso em MB>
+# The size floor comes from the MODELS table, per model. Until 2026-08-29 it was
+# a single GGML_MIN_MB=50 for all three — which approved a 547 MB turbo stopped
+# at any point above that. The magic alone does not catch a download or a
+# conversion interrupted midway, because the first four bytes would already
+# have arrived.
+is_valid_ggml() {  # <file> <floor in MB>
   [ -f "$1" ] || return 1
   [ "$(head -c 4 "$1" | xxd -p)" = "$GGML_MAGIC_HEX" ] || return 1
   [ "$(( $(stat -f%z "$1") / 1048576 ))" -ge "$2" ]
@@ -123,21 +126,21 @@ for entry in "${MODELS[@]}"; do
 done
 
 if [ ${#pending[@]} -eq 0 ]; then
-  info "Modelos em $MODELS_DIR"
+  info "Models in $MODELS_DIR"
   for entry in "${MODELS[@]}"; do
     IFS=':' read -r ggml_name _ _ _ _ <<< "$entry"
     printf '  %-26s %5s MB\n' "$ggml_name" "$(size_mb "$MODELS_DIR/ggml-${ggml_name}.bin")"
   done
   echo
-  ok "Bancada pronta."
-  echo "  Próximo: grave 3 fixtures com scripts/record-fixture.sh (veja fixtures/README.md),"
-  echo "           depois rode scripts/bench.sh"
+  ok "Bench ready."
+  echo "  Next: record 3 fixtures with scripts/record-fixture.sh (see fixtures/README.md),"
+  echo "        then run scripts/bench.sh"
   exit 0
 fi
 
-# --- ferramental de conversão ------------------------------------------------
+# --- conversion tooling -------------------------------------------------------
 #
-# Só montado quando há modelo a construir: são ~300 MB de torch.
+# Only set up when there is a model to build: it is ~300 MB of torch.
 
 mkdir -p "$BUILD_DIR"
 CA_BUNDLE="$BUILD_DIR/corp-ca.pem"
@@ -145,117 +148,121 @@ VENV="$BUILD_DIR/venv"
 WHISPER_REPO="$BUILD_DIR/whisper-repo"
 CONVERTER="$BUILD_DIR/convert-pt-to-ggml.py"
 
-# Proxy que inspeciona TLS injeta certificado próprio, e isso quebra o Python
-# (CERTIFICATE_VERIFY_FAILED) enquanto o curl passa, porque o curl usa o keychain
-# do macOS. Exportar o CA do sistema é a correção certa: passa a confiar na
-# âncora que a máquina já tem, em vez de desligar a verificação.
+# A TLS-inspecting proxy injects its own certificate, and that breaks Python
+# (CERTIFICATE_VERIFY_FAILED) while curl passes, because curl uses the macOS
+# keychain. Exporting the system CA is the right fix: Python starts trusting the
+# anchor the machine already has, instead of turning verification off.
 if [ ! -s "$CA_BUNDLE" ]; then
-  info "Exportando CA do sistema (proxy que inspeciona TLS quebra o Python sem isso)"
+  info "Exporting the system CA (a TLS-inspecting proxy breaks Python without it)"
   security find-certificate -a -p /Library/Keychains/System.keychain  >"$CA_BUNDLE" 2>/dev/null || true
   security find-certificate -a -p /System/Library/Keychains/SystemRootCertificates.keychain >>"$CA_BUNDLE" 2>/dev/null || true
-  [ -s "$CA_BUNDLE" ] || fail "não consegui exportar o CA do sistema."
-  ok "$(grep -c 'BEGIN CERTIFICATE' "$CA_BUNDLE") certificados"
+  [ -s "$CA_BUNDLE" ] || fail "could not export the system CA."
+  ok "$(grep -c 'BEGIN CERTIFICATE' "$CA_BUNDLE") certificates"
 fi
 export SSL_CERT_FILE="$CA_BUNDLE" REQUESTS_CA_BUNDLE="$CA_BUNDLE"
 
 if [ ! -x "$VENV/bin/python" ]; then
-  info "Criando venv com torch (necessário só pra converter)"
+  info "Creating a venv with torch (needed only to convert)"
   python3 -m venv "$VENV"
   "$VENV/bin/pip" -q install --upgrade pip
   "$VENV/bin/pip" -q install torch numpy
 fi
 ok "torch $("$VENV/bin/python" -c 'import torch;print(torch.__version__)')"
 
-# O conversor precisa dos assets do repo da OpenAI (mel filters e tokenizers).
-# Mesmo rigor do conversor logo abaixo: o commit é fixado e conferido. Este
-# repositório fornece os assets (mel filters e tokenizers) que alimentam a
-# conversão do modelo — se mudarem sem aviso, o modelo sai diferente em silêncio.
+# The converter needs the assets from OpenAI's repo (mel filters and tokenizers).
+# Same rigor as the converter right below: the commit is pinned and checked.
+# This repository supplies the assets (mel filters and tokenizers) that feed the
+# model conversion — if they change without notice, the model comes out
+# different in silence.
 OPENAI_WHISPER_COMMIT="5f86d1d86363843179951550570367b37c5d6f78"
 if [ ! -d "$WHISPER_REPO/whisper/assets" ]; then
-  info "Clonando assets de openai/whisper (GitHub passa na rede)"
+  info "Cloning openai/whisper assets"
   git clone --depth 1 -q https://github.com/openai/whisper.git "$WHISPER_REPO"
 fi
-got_commit="$(git -C "$WHISPER_REPO" rev-parse HEAD 2>/dev/null || echo desconhecido)"
-[ "$got_commit" = "$OPENAI_WHISPER_COMMIT" ] || fail "openai/whisper em $WHISPER_REPO não é o commit esperado.
-      esperado: $OPENAI_WHISPER_COMMIT
-      obtido:   $got_commit
-      Apague $WHISPER_REPO e rode de novo."
+got_commit="$(git -C "$WHISPER_REPO" rev-parse HEAD 2>/dev/null || echo unknown)"
+[ "$got_commit" = "$OPENAI_WHISPER_COMMIT" ] || fail "openai/whisper in $WHISPER_REPO is not the expected commit.
+      expected: $OPENAI_WHISPER_COMMIT
+      got:      $got_commit
+      Delete $WHISPER_REPO and run again."
 
-# Pinado na tag v1.9.2, a mesma versão do whisper-cpp que o Homebrew instala, e
-# conferido por checksum. Baixar de `master` e executar seria confiar num alvo
-# móvel: qualquer commit no upstream passaria a rodar nesta máquina sem revisão.
+# Pinned to tag v1.9.2, the same whisper-cpp version Homebrew installs, and
+# checked by checksum. Downloading from `master` and executing it would be
+# trusting a moving target: any upstream commit would start running on this
+# machine without review.
 CONVERTER_URL="https://raw.githubusercontent.com/ggml-org/whisper.cpp/v1.9.2/models/convert-pt-to-ggml.py"
 CONVERTER_SHA256="e874333f95c52725c23541b39e71594e01442a2a687c96e2e882493c45b887a2"
 
 if [ ! -s "$CONVERTER" ] || [ "$(shasum -a 256 "$CONVERTER" | cut -d' ' -f1)" != "$CONVERTER_SHA256" ]; then
-  info "Baixando conversor do whisper.cpp (v1.9.2)"
+  info "Downloading the whisper.cpp converter (v1.9.2)"
   curl -sSL --fail --max-time 60 -o "$CONVERTER" "$CONVERTER_URL" \
-    || fail "não consegui baixar o conversor de $CONVERTER_URL"
+    || fail "could not download the converter from $CONVERTER_URL"
   got="$(shasum -a 256 "$CONVERTER" | cut -d' ' -f1)"
   if [ "$got" != "$CONVERTER_SHA256" ]; then
     rm -f "$CONVERTER"
-    fail "checksum do conversor não confere.
-      esperado: $CONVERTER_SHA256
-      obtido:   $got
-      O arquivo foi removido. Não execute script baixado que não confere."
+    fail "the converter's checksum does not match.
+      expected: $CONVERTER_SHA256
+      got:      $got
+      The file was removed. Do not execute a downloaded script that does not match."
   fi
-  ok "conversor conferido"
+  ok "converter verified"
 fi
 
-# --- construção dos modelos --------------------------------------------------
+# --- building the models ------------------------------------------------------
 
 for entry in "${pending[@]}"; do
   IFS=':' read -r ggml_name pt_name sha quant min_mb <<< "$entry"
   pt_file="$PT_CACHE/${pt_name}.pt"
   out_ggml="$MODELS_DIR/ggml-${ggml_name}.bin"
 
-  info "Modelo $ggml_name"
+  info "Model $ggml_name"
 
-  # 1. checkpoint .pt no CDN da OpenAI (o sha256 é também o path)
+  # 1. .pt checkpoint on OpenAI's CDN (the sha256 is also the path)
   if [ -f "$pt_file" ] && [ "$(shasum -a 256 "$pt_file" | cut -d' ' -f1)" = "$sha" ]; then
-    ok "checkpoint já em cache ($(size_mb "$pt_file") MB)"
+    ok "checkpoint already cached ($(size_mb "$pt_file") MB)"
   else
-    [ -f "$pt_file" ] && warn "checkpoint com checksum errado, rebaixando"
+    [ -f "$pt_file" ] && warn "checkpoint with the wrong checksum, downloading again"
     curl -L --fail --retry 5 --retry-delay 3 --progress-bar \
          -o "$pt_file" "$CDN/$sha/${pt_name}.pt" \
-      || fail "download de ${pt_name}.pt falhou.
-      Se voltou 403, confira se o CDN da OpenAI também caiu na blocklist:
+      || fail "download of ${pt_name}.pt failed.
+      If it returned 403, check whether OpenAI's CDN is also on your network's blocklist:
         curl -sIL $CDN/$sha/${pt_name}.pt"
     [ "$(shasum -a 256 "$pt_file" | cut -d' ' -f1)" = "$sha" ] \
-      || { rm -f "$pt_file"; fail "${pt_name}.pt baixou corrompido (checksum) e foi removido."; }
-    ok "baixado e conferido ($(size_mb "$pt_file") MB)"
+      || { rm -f "$pt_file"; fail "${pt_name}.pt downloaded corrupt (checksum) and was removed."; }
+    ok "downloaded and verified ($(size_mb "$pt_file") MB)"
   fi
 
   # 2. .pt -> ggml f16
   #
-  # O f16 é maior que o quantizado (ocupa gigabytes, ver abaixo), então o piso
-  # do quantizado vale para ele também: folgado, mas pega conversão interrompida.
+  # The f16 is larger than the quantized one (it takes gigabytes, see below), so
+  # the quantized floor holds for it too: loose, but it catches an interrupted
+  # conversion.
   f16_dir="$BUILD_DIR/f16-$ggml_name"
   mkdir -p "$f16_dir"
   if ! is_valid_ggml "$f16_dir/ggml-model.bin" "$min_mb"; then
-    info "  convertendo para ggml f16"
+    info "  converting to ggml f16"
     "$VENV/bin/python" "$CONVERTER" "$pt_file" "$WHISPER_REPO" "$f16_dir" >/dev/null \
-      || fail "conversão de $pt_name falhou."
+      || fail "conversion of $pt_name failed."
   fi
   is_valid_ggml "$f16_dir/ggml-model.bin" "$min_mb" \
-    || fail "conversão não produziu ggml válido (magic ggml e pelo menos $min_mb MB)."
+    || fail "conversion did not produce a valid ggml (ggml magic and at least $min_mb MB)."
 
-  # 3. f16 -> quantizado
-  info "  quantizando para $quant"
+  # 3. f16 -> quantized
+  info "  quantizing to $quant"
   whisper-quantize "$f16_dir/ggml-model.bin" "$out_ggml" "$quant" >/dev/null \
-    || fail "quantização de $ggml_name falhou."
+    || fail "quantization of $ggml_name failed."
   is_valid_ggml "$out_ggml" "$min_mb" \
-    || { rm -f "$out_ggml"; fail "quantização produziu arquivo inválido (magic ggml e pelo menos $min_mb MB)."; }
+    || { rm -f "$out_ggml"; fail "quantization produced an invalid file (ggml magic and at least $min_mb MB)."; }
 
-  # O f16 é intermediário e ocupa gigabytes. O .pt fica em cache: é a origem.
+  # The f16 is intermediate and takes gigabytes. The .pt stays cached: it is the
+  # origin.
   rm -rf "$f16_dir"
-  ok "$ggml_name pronto ($(size_mb "$out_ggml") MB)"
+  ok "$ggml_name ready ($(size_mb "$out_ggml") MB)"
 done
 
-# --- resumo -----------------------------------------------------------------
+# --- summary ------------------------------------------------------------------
 
 echo
-info "Modelos em $MODELS_DIR"
+info "Models in $MODELS_DIR"
 missing=0
 for entry in "${MODELS[@]}"; do
   IFS=':' read -r ggml_name _ _ _ min_mb <<< "$entry"
@@ -263,13 +270,13 @@ for entry in "${MODELS[@]}"; do
   if is_valid_ggml "$f" "$min_mb"; then
     printf '  %-26s %5s MB\n' "$ggml_name" "$(size_mb "$f")"
   else
-    printf '  %-26s %s\n' "$ggml_name" "AUSENTE"
+    printf '  %-26s %s\n' "$ggml_name" "MISSING"
     missing=$((missing + 1))
   fi
 done
 echo
-[ "$missing" -eq 0 ] || fail "$missing modelo(s) faltando. Rode o script de novo."
+[ "$missing" -eq 0 ] || fail "$missing model(s) missing. Run the script again."
 
-ok "Bancada pronta."
-echo "  Próximo: grave 3 fixtures com scripts/record-fixture.sh (veja fixtures/README.md),"
-echo "           depois rode scripts/bench.sh"
+ok "Bench ready."
+echo "  Next: record 3 fixtures with scripts/record-fixture.sh (see fixtures/README.md),"
+echo "        then run scripts/bench.sh"

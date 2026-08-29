@@ -1,9 +1,9 @@
 // swift-tools-version: 6.0
 import PackageDescription
 
-// A lógica vive em NeverTypeCore para poder ser testada: um alvo executável não
-// é importável por um alvo de teste. O executável fica sendo só a casca que
-// monta a menu bar e liga os pedaços.
+// The logic lives in NeverTypeCore so it can be tested: an executable target
+// cannot be imported by a test target. The executable is left as just the
+// shell that assembles the menu bar and wires the pieces together.
 let package = Package(
     name: "NeverType",
     platforms: [.macOS(.v14)],
@@ -13,18 +13,20 @@ let package = Package(
             name: "NeverTypeCore",
             dependencies: ["CWhisper"],
             linkerSettings: [
-                // Estático, e não as dylibs do Homebrew.
+                // Static, not the Homebrew dylibs.
                 //
-                // O hardened runtime liga validação de bibliotecas, que recusa
-                // carregar dylib assinada por outra equipe — e é justamente
-                // essa recusa que fecha a injeção de código num processo que
-                // detém Acessibilidade. Com linkagem dinâmica contra o Homebrew
-                // as duas coisas são incompatíveis, e o app morria no dyld.
+                // The hardened runtime turns on library validation, which
+                // refuses to load a dylib signed by another team — and that
+                // refusal is precisely what closes code injection into a
+                // process that holds Accessibility. With dynamic linking
+                // against Homebrew the two are incompatible, and the app died
+                // in dyld.
                 //
-                // De quebra: o .app deixa de exigir Homebrew na máquina de quem
-                // for usar, e não quebra se o whisper-cpp for desinstalado.
+                // As a bonus: the .app stops requiring Homebrew on the machine
+                // of whoever uses it, and does not break if whisper-cpp is
+                // uninstalled.
                 //
-                // Produzido por scripts/build-app.sh. Ver vendor/whisper.
+                // Produced by scripts/build-app.sh. See vendor/whisper.
                 .unsafeFlags([
                     "-Lvendor/whisper/lib",
                     "-lwhisper", "-lggml", "-lggml-base", "-lggml-cpu",

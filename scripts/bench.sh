@@ -1,74 +1,74 @@
 #!/bin/bash
-# Bancada de latência: roda cada modelo contra cada fixture, mede tempo de
-# parede, separa o tempo de carga do modelo e imprime a tabela que sustenta a
-# decisão em docs/model-choice.md.
+# Latency bench: runs every model against every fixture, measures wall-clock
+# time, separates the model load time, and prints the table that backs the
+# decision in docs/model-choice.md.
 #
-# Uso: scripts/bench.sh
+# Usage: scripts/bench.sh
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MODELS_DIR="$REPO_ROOT/models"
 FIXTURES_DIR="$REPO_ROOT/fixtures"
-# Cada execução ganha seu diretório: a evidência que sustenta a decisão de
-# modelo não pode ser sobrescrita silenciosamente pela execução seguinte.
+# Every run gets its own directory: the evidence that backs the model decision
+# cannot be silently overwritten by the next run.
 RUN_ID="$(date +%Y%m%d-%H%M%S)"
 OUT_DIR="$REPO_ROOT/bench-out/$RUN_ID"
 
-# Teto declarado no PRD: acima disso o fluxo de ditado quebra e a pessoa
-# volta a digitar.
+# Ceiling declared in the PRD: above it the dictation flow breaks and the person
+# goes back to typing.
 CEILING_MS=1500
 
 info() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m  !\033[0m  %s\n' "$*"; }
-fail() { printf '\033[1;31merro:\033[0m %s\n' "$*" >&2; exit 1; }
+fail() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
 now_ms() { perl -MTime::HiRes=time -e 'printf "%.0f", time()*1000'; }
 
-# O ggml inicializa o device Metal só para enumerá-lo, mesmo quando a inferência
-# roda em CPU: um log de `whisper-cli -ng` contém 37 linhas com a palavra "metal".
-# Procurar por "metal" prova que o dylib carregou, não que a GPU foi usada — foi
-# esse falso negativo que a auditoria da Parte 1 pegou. O discriminador real é o
-# backend que o whisper escolheu. Custo do erro, medido: encode 1635 ms em CPU
-# contra 143 ms em Metal, no mesmo modelo e áudio.
+# ggml initializes the Metal device just to enumerate it, even when inference
+# runs on the CPU: a `whisper-cli -ng` log contains 37 lines with the word
+# "metal". Searching for "metal" proves the dylib loaded, not that the GPU was
+# used — that false negative is what the Part 1 audit caught. The real
+# discriminator is the backend whisper chose. Cost of the mistake, measured:
+# encode 1635 ms on CPU against 143 ms on Metal, same model and audio.
 metal_is_active() {
   local log="$1"
   grep -q 'whisper_backend_init_gpu: no GPU found' "$log" && return 1
   grep -Eq 'whisper_backend_init_gpu:.*MTL' "$log"
 }
 
-command -v whisper-cli >/dev/null || fail "whisper-cli não encontrado. Rode scripts/setup-bench.sh"
-command -v afinfo      >/dev/null || fail "afinfo não encontrado (deveria vir com o macOS)."
+command -v whisper-cli >/dev/null || fail "whisper-cli not found. Run scripts/setup-bench.sh"
+command -v afinfo      >/dev/null || fail "afinfo not found (it should ship with macOS)."
 
-# --- coleta -----------------------------------------------------------------
+# --- collection ---------------------------------------------------------------
 
 shopt -s nullglob
 MODELS=( "$MODELS_DIR"/ggml-*.bin )
 FIXTURES=( "$FIXTURES_DIR"/*.wav )
 shopt -u nullglob
 
-[ ${#MODELS[@]} -gt 0 ]   || fail "nenhum modelo em $MODELS_DIR. Rode scripts/setup-bench.sh"
-[ ${#FIXTURES[@]} -gt 0 ] || fail "nenhum fixture em $FIXTURES_DIR.
-      Grave com: scripts/record-fixture.sh <nome>
-      Roteiro em: fixtures/README.md"
+[ ${#MODELS[@]} -gt 0 ]   || fail "no model in $MODELS_DIR. Run scripts/setup-bench.sh"
+[ ${#FIXTURES[@]} -gt 0 ] || fail "no fixture in $FIXTURES_DIR.
+      Record with: scripts/record-fixture.sh <name>
+      Script in: fixtures/README.md"
 
 if [ ${#FIXTURES[@]} -lt 3 ]; then
-  warn "só ${#FIXTURES[@]} fixture(s). A spec pede ao menos 3, com pelo menos um"
-  warn "misturando português e termos técnicos em inglês. A bancada roda, mas a"
-  warn "decisão fica fraca."
+  warn "only ${#FIXTURES[@]} fixture(s). The spec asks for at least 3, with at least one"
+  warn "mixing Portuguese and English technical terms. The bench runs, but the"
+  warn "decision comes out weak."
 fi
 
-# whisper-cli exige 16 kHz. Validar aqui dá mensagem útil em vez de erro cru
-# lá dentro, um modelo depois.
+# whisper-cli requires 16 kHz. Validating here gives a useful message instead of
+# a raw error deep inside, one model later.
 for wav in "${FIXTURES[@]}"; do
   if ! afinfo "$wav" | grep -q '16000 Hz'; then
-    fail "$(basename "$wav") não está em 16 kHz.
-      Regrave com scripts/record-fixture.sh — o QuickTime grava em 44,1 kHz."
+    fail "$(basename "$wav") is not 16 kHz.
+      Re-record with scripts/record-fixture.sh — QuickTime records at 44.1 kHz."
   fi
 done
 
-# Duração de cada fixture, em ms. Sem isso não dá para comparar um clipe de 5 s
-# com um de 61 s: o tempo bruto de parede diria mais sobre o tamanho do arquivo
-# do que sobre o modelo.
+# Duration of each fixture, in ms. Without it a 5 s clip cannot be compared with
+# a 61 s one: raw wall-clock time would say more about the file size than about
+# the model.
 declare -a DURS
 for wav in "${FIXTURES[@]}"; do
   d=$(afinfo "$wav" | sed -n 's/.*estimated duration: \([0-9.]*\) sec.*/\1/p')
@@ -78,24 +78,24 @@ done
 mkdir -p "$OUT_DIR"
 ln -sfn "$RUN_ID" "$REPO_ROOT/bench-out/latest"
 
-# Aquece o cache de página antes de medir.
+# Warm the page cache before measuring.
 #
-# Sem isto, o primeiro acesso a cada modelo paga o fault-in de centenas de MB do
-# disco — medido: 5087 ms de parede contra 976 ms de processamento real. A
-# métrica antiga (parede menos `load time`) não descontava isso, porque o
-# contador do whisper cobre só a desserialização, não a leitura do arquivo. O
-# resultado era um veredito que dependia de o modelo estar em cache ou não.
-info "Aquecendo o cache de página dos modelos"
+# Without this, the first access to each model pays the fault-in of hundreds of
+# MB from disk — measured: 5087 ms of wall-clock against 976 ms of actual
+# processing. The old metric (wall-clock minus `load time`) did not discount
+# that, because whisper's counter covers only deserialization, not reading the
+# file. The result was a verdict that depended on whether the model was cached.
+info "Warming the models' page cache"
 for model_path in "${MODELS[@]}"; do
   cat "$model_path" > /dev/null
 done
 
-info "${#MODELS[@]} modelo(s) × ${#FIXTURES[@]} fixture(s) = $(( ${#MODELS[@]} * ${#FIXTURES[@]} )) execuções"
+info "${#MODELS[@]} model(s) × ${#FIXTURES[@]} fixture(s) = $(( ${#MODELS[@]} * ${#FIXTURES[@]} )) runs"
 echo
 
-# --- execução ---------------------------------------------------------------
+# --- execution ----------------------------------------------------------------
 
-RESULTS=()   # "modelo|fixture|wall_ms|load_ms|hot_ms"
+RESULTS=()   # "model|fixture|wall_ms|load_ms|hot_ms"
 
 for model_path in "${MODELS[@]}"; do
   model_name="$(basename "$model_path" .bin)"; model_name="${model_name#ggml-}"
@@ -113,65 +113,67 @@ for model_path in "${MODELS[@]}"; do
 
     t0=$(now_ms)
     if ! whisper-cli -m "$model_path" -f "$wav" -l pt -nt >"$txt" 2>"$log"; then
-      echo "FALHOU"
+      echo "FAILED"
       cat "$log" >&2
-      fail "whisper-cli falhou em $tag"
+      fail "whisper-cli failed on $tag"
     fi
     t1=$(now_ms)
     wall=$(( t1 - t0 ))
 
-    # DoD 4: sem Metal, o número medido é de CPU e engana. A bancada para.
+    # DoD 4: without Metal, the measured number is CPU and misleads. The bench stops.
     if ! metal_is_active "$log"; then
-      echo "SEM METAL"
+      echo "NO METAL"
       grep -E 'whisper_backend_init_gpu:' "$log" >&2 || true
-      fail "a inferência não rodou em Metal nesta execução.
-      Qualquer tempo medido assim é de CPU e não representa o app.
-      Verifique: brew reinstall ggml whisper-cpp"
+      fail "inference did not run on Metal in this run.
+      Any time measured this way is CPU and does not represent the app.
+      Check: brew reinstall ggml whisper-cpp"
     fi
 
-    # O `|| true` não é decoração: com `set -e` e `pipefail`, um grep que não casa
-    # derruba o script inteiro na atribuição, e o fallback abaixo nunca rodava.
+    # The `|| true` is not decoration: under `set -e` and `pipefail`, a grep that
+    # does not match takes the whole script down at the assignment, and the
+    # fallback below never ran.
     field_ms() { { grep -i "$1" "$log" || true; } \
       | tail -1 | sed -E 's/.*=[[:space:]]*([0-9.]+).*/\1/' | cut -d. -f1; }
 
     load_ms=$(field_ms 'load time'); [ -n "${load_ms:-}" ] || load_ms=0
     total_ms=$(field_ms 'total time'); [ -n "${total_ms:-}" ] || total_ms=0
 
-    # O cronômetro do próprio whisper, e não o tempo de parede.
+    # Whisper's own stopwatch, not wall-clock time.
     #
-    # Parede inclui spawn do processo, dyld, e fault-in do modelo — ruído que não
-    # existe no app, onde o modelo já está carregado. `total time` é medido dentro
-    # do processo e é o que mais se aproxima do custo real de um ditado.
+    # Wall-clock includes process spawn, dyld, and the model fault-in — noise
+    # that does not exist in the app, where the model is already loaded. `total
+    # time` is measured inside the process and is what comes closest to the real
+    # cost of a dictation.
     hot_ms=$(( total_ms > 0 ? total_ms - load_ms : wall - load_ms ))
     [ "$hot_ms" -gt 0 ] || hot_ms=1
 
-    # O Whisper processa em janelas de 30s: um ditado de 5s custa o mesmo que um
-    # de 25s. Medir "por segundo de áudio" descreveria mal o custo real — o que
-    # importa é quantas janelas o áudio ocupa e quanto custa cada uma.
+    # Whisper processes in 30s windows: a 5s dictation costs the same as a 25s
+    # one. Measuring "per second of audio" would describe the real cost badly —
+    # what matters is how many windows the audio occupies and what each one costs.
     windows=$(( (dur_ms + 29999) / 30000 ))
     per_w=$(( hot_ms / windows ))
-    printf '%6s ms parede · %5s ms interno · %s janela(s) · custo ~%5s ms\n' \
+    printf '%6s ms wall · %5s ms internal · %s window(s) · cost ~%5s ms\n' \
       "$wall" "$total_ms" "$windows" "$hot_ms"
     RESULTS+=("${model_name}|${fixture_name}|${wall}|${load_ms}|${hot_ms}|${dur_ms}|${windows}|${per_w}")
   done
 done
 
-# --- tabela -----------------------------------------------------------------
+# --- table --------------------------------------------------------------------
 
 echo
-info "Resultados"
+info "Results"
 echo
-printf '  %-24s %-14s %7s %8s %10s %10s %11s\n' "MODELO" "FIXTURE" "ÁUDIO" "JANELAS" "PAREDE" "QUENTE" "POR JANELA"
+printf '  %-24s %-14s %7s %8s %10s %10s %11s\n' "MODEL" "FIXTURE" "AUDIO" "WINDOWS" "WALL" "HOT" "PER WINDOW"
 printf '  %-24s %-14s %7s %8s %10s %10s %11s\n' "------------------------" "--------------" "-------" "--------" "----------" "----------" "-----------"
 for r in "${RESULTS[@]}"; do
   IFS='|' read -r m f wall load hot dur win per <<< "$r"
   printf '  %-24s %-14s %5ss %8s %8s ms %8s ms %8s ms\n' "$m" "$f" "$(( dur / 1000 ))" "$win" "$wall" "$hot" "$per"
 done
 
-# --- transcrições -----------------------------------------------------------
+# --- transcriptions -----------------------------------------------------------
 
 echo
-info "Transcrições (é aqui que se julga o vocabulário técnico)"
+info "Transcriptions (this is where technical vocabulary is judged)"
 for model_path in "${MODELS[@]}"; do
   model_name="$(basename "$model_path" .bin)"; model_name="${model_name#ggml-}"
   echo
@@ -180,26 +182,27 @@ for model_path in "${MODELS[@]}"; do
     fixture_name="$(basename "$wav" .wav)"
     printf '    %s:\n' "$fixture_name"
     txt="$OUT_DIR/${model_name}__${fixture_name}.txt"
-    # Transcrição vazia é resultado legítimo da bancada (áudio mudo, modelo que
-    # não reconheceu) e precisa aparecer como tal — não derrubar o relatório.
+    # An empty transcription is a legitimate bench result (silent audio, a model
+    # that recognized nothing) and needs to show up as such — not take the
+    # report down.
     if grep -q '[^[:space:]]' "$txt" 2>/dev/null; then
       sed 's/^[[:space:]]*//' "$txt" | grep -v '^$' | sed 's/^/      /'
     else
-      printf '      \033[1;31m(vazio — o modelo não transcreveu nada)\033[0m\n'
+      printf '      \033[1;31m(empty — the model transcribed nothing)\033[0m\n'
     fi
   done
 done
 
-# --- leitura pro documento de decisão ---------------------------------------
+# --- reading for the decision document ----------------------------------------
 
 echo
-info "Custo de um ditado real (teto do PRD: ${CEILING_MS} ms)"
+info "Cost of a real dictation (PRD ceiling: ${CEILING_MS} ms)"
 echo
-echo "  Um ditado de até 30s ocupa uma janela e custa o mesmo, seja de 5s ou de 25s."
-echo "  Esse é o número medido abaixo — não projetado."
+echo "  A dictation of up to 30s occupies one window and costs the same, whether 5s or 25s."
+echo "  That is the number measured below — not projected."
 echo
 
-printf '  %-24s %16s %14s   %s\n' "MODELO" "DITADO ATÉ 30s" "POR JANELA" "VEREDITO"
+printf '  %-24s %16s %14s   %s\n' "MODEL" "DICTATION <=30s" "PER WINDOW" "VERDICT"
 for model_path in "${MODELS[@]}"; do
   model_name="$(basename "$model_path" .bin)"; model_name="${model_name#ggml-}"
   sum_short=0; n_short=0; sum_w=0; n_w=0
@@ -213,18 +216,18 @@ for model_path in "${MODELS[@]}"; do
   avg_w=$(( sum_w / n_w ))
   if [ "$n_short" -gt 0 ]; then avg_short=$(( sum_short / n_short )); else avg_short="$avg_w"; fi
   if [ "$avg_short" -le "$CEILING_MS" ]; then
-    verdict=$'\033[1;32mdentro do teto\033[0m'
+    verdict=$'\033[1;32mwithin the ceiling\033[0m'
   else
-    verdict=$'\033[1;31mestoura o teto\033[0m'
+    verdict=$'\033[1;31mover the ceiling\033[0m'
   fi
   printf '  %-24s %13s ms %11s ms   %b\n' "$model_name" "$avg_short" "$avg_w" "$verdict"
 done
 
 echo
-echo "  QUENTE vem do cronômetro interno do whisper (total menos carga), não do tempo"
-echo "  de parede: parede inclui spawn de processo e leitura do modelo do disco, que"
-echo "  não existem no app com o modelo já carregado."
-echo "  POR JANELA divide pelo número de janelas de 30s, para comparar clipes longos."
+echo "  HOT comes from whisper's internal stopwatch (total minus load), not from"
+echo "  wall-clock time: wall-clock includes process spawn and reading the model"
+echo "  from disk, which do not exist in the app with the model already loaded."
+echo "  PER WINDOW divides by the number of 30s windows, to compare long clips."
 echo
-echo "  Saída bruta em: bench-out/$RUN_ID/  (atalho: bench-out/latest/)"
-echo "  Agora preencha: docs/model-choice.md"
+echo "  Raw output in: bench-out/$RUN_ID/  (shortcut: bench-out/latest/)"
+echo "  Now fill in: docs/model-choice.md"
