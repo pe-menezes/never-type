@@ -42,7 +42,9 @@ public enum Tone {
     /// Cabeçalho WAV canônico + as amostras.
     ///
     /// Escrito à mão porque a alternativa seria carregar o AVFoundation e um
-    /// arquivo em disco para produzir 3 KB de áudio.
+    /// arquivo em disco para produzir uns poucos KB de áudio: 44 bytes de
+    /// cabeçalho mais 2 bytes por amostra — ~6 KB no padrão de 0,07 s, ~7,5 KB
+    /// e ~11,5 KB nos tons do app (ver `Feedback`, em main.swift).
     static func riff(_ samples: [Int16]) -> Data {
         let bytesPerSample = 2
         let dataSize = samples.count * bytesPerSample

@@ -141,9 +141,9 @@ struct TextInjectorTests {
                 "a restauração não pode atropelar uma cópia mais nova")
     }
 
-    /// Com entrada segura ativa não há colagem — então o texto tem que ficar no
-    /// pasteboard, que é o que a spec pede. A versão anterior retornava antes de
-    /// tocar no pasteboard e não deixava nada.
+    /// Com a entrada segura ligada o app não cola — então o texto tem que ficar
+    /// no pasteboard, que é o que a spec pede. A versão anterior retornava antes
+    /// de tocar no pasteboard e não deixava nada.
     @Test("entrada segura deixa o texto no pasteboard em vez de colar")
     func secureInputLeavesTextBehind() async throws {
         let pb = scratchPasteboard()
@@ -157,7 +157,7 @@ struct TextInjectorTests {
                                           secureInput: { true })
 
         #expect(outcome == .blockedBySecureInput)
-        #expect(!pasted, "com entrada segura não se tenta colar — o macOS descartaria o evento")
+        #expect(!pasted, "com a entrada segura ligada o app não posta o ⌘V")
         #expect(pb.string(forType: .string) == "texto ditado",
                 "o texto tem que ficar disponível para a pessoa colar")
 

@@ -16,7 +16,7 @@ struct ModelStoreTests {
         // Procurar o texto "ggml" reprova todo modelo válido — erro já cometido
         // neste projeto, e este teste existe para ele não voltar.
         //
-        // A regra é exercitada sem tocar o disco para não escrever 50 MB por
+        // A regra é exercitada sem tocar o disco para não escrever 400 MB por
         // execução da suíte.
         let ok = Data([0x6c, 0x6d, 0x67, 0x67])
         #expect(ModelStore.isValid(magic: ok, size: ModelStore.minimumBytes))
@@ -55,6 +55,38 @@ struct ModelStoreTests {
 
         #expect(!ModelStore.isValid(url), "magic válido não pode bastar")
         #expect(throws: TranscriberError.self) { _ = try Transcriber(modelURL: url) }
+    }
+
+    /// O positivo do validador de disco. Até aqui `isValid(_:)` só tinha os
+    /// negativos exercitados (HTML, vazio, truncado, ausente): um validador que
+    /// recusasse tudo passaria na suíte. Arquivo esparso: `truncate` estende o
+    /// tamanho lógico sem escrever os bytes, então o teste custa KB, não os
+    /// 400 MB do piso — e é o tamanho lógico que `isValid` lê.
+    @Test("no disco, o piso de tamanho separa modelo inteiro de download truncado")
+    func diskFloorSeparatesWholeFromTruncated() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("nevertype-piso-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        func sparseModel(named name: String, bytes: Int) throws -> URL {
+            let url = dir.appendingPathComponent(name)
+            try Data([0x6c, 0x6d, 0x67, 0x67]).write(to: url)
+            let handle = try FileHandle(forWritingTo: url)
+            defer { try? handle.close() }
+            try handle.truncate(atOffset: UInt64(bytes))
+            return url
+        }
+
+        let whole = try sparseModel(named: "inteiro.bin", bytes: ModelStore.minimumBytes)
+        let truncated = try sparseModel(named: "truncado.bin", bytes: ModelStore.minimumBytes - 1)
+
+        let wholeAttributes = try FileManager.default.attributesOfItem(atPath: whole.path)
+        let wholeSize = try #require(wholeAttributes[.size] as? Int)
+        #expect(wholeSize == ModelStore.minimumBytes,
+                "o arquivo esparso precisa reportar o tamanho lógico, veio \(wholeSize)")
+        #expect(ModelStore.isValid(whole), "magic certo e tamanho no piso é modelo inteiro")
+        #expect(!ModelStore.isValid(truncated), "um byte abaixo do piso é download truncado")
     }
 
     @Test("o modelo é procurado em Application Support, fora do repositório")

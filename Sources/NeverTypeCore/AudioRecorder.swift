@@ -216,6 +216,23 @@ public final class RecordingSink {
 
     public func discard() { discarded = true }
 
+    /// Apaga o WAV do último ditado, e as amostras dele em memória.
+    ///
+    /// É o que "Limpar histórico" chama. Até 29/08/2026 o menu apagava só o
+    /// `historico.json` e deixava o `last.wav` para trás — a gravação inteira,
+    /// não o texto. Recusa enquanto há arquivo aberto: em mãos-livres o menu
+    /// abre com gravação em curso, e aí o arquivo é o do ditado que a pessoa
+    /// está fazendo; apagá-lo por baixo do `AVAudioFile` perderia esse ditado.
+    ///
+    /// Devolve `true` quando não sobra arquivo — apagado agora ou já ausente.
+    @discardableResult
+    public func removeDestination() -> Bool {
+        guard !isOpen else { return false }
+        samples.removeAll(keepingCapacity: false)
+        try? FileManager.default.removeItem(at: destination)
+        return !FileManager.default.fileExists(atPath: destination.path)
+    }
+
     /// Fecha e devolve o arquivo, ou nil se foi descartado. Idempotente.
     @discardableResult
     public func finish() throws -> URL? {
@@ -429,5 +446,22 @@ public final class AudioRecorder {
         guard isRecording else { return }
         io.sync { self.sink.discard() }
         stop()
+    }
+
+    /// Apaga o WAV do último ditado e esquece as amostras dele.
+    ///
+    /// Chamado por "Limpar histórico". Não faz nada durante uma gravação: o
+    /// arquivo aberto é o do ditado em curso. A guarda que vale é a do
+    /// `RecordingSink` (arquivo aberto), exercitada em teste; esta lê o mesmo
+    /// fato pelo lado do gravador, para nem entrar na fila de E/S — e é a
+    /// única parte deste caminho que o teste não alcança sem microfone.
+    /// Devolve `true` quando não sobra arquivo.
+    @discardableResult
+    public func discardLastRecording() -> Bool {
+        guard !isRecording else { return false }
+        var removed = false
+        io.sync { removed = self.sink.removeDestination() }
+        lastSamples = []
+        return removed
     }
 }

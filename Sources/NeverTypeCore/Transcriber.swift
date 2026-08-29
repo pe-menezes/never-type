@@ -12,7 +12,7 @@ public enum ModelStore {
 
     public static var modelURL: URL { directory.appendingPathComponent(fileName) }
 
-    /// Piso de tamanho, em bytes. O menor candidato quantizado tem 181 MB.
+    /// Piso de tamanho, em bytes: 400 MB para um modelo de 547 MB.
     ///
     /// O magic sozinho não basta, e a lacuna é grave: um arquivo truncado começa
     /// com os 4 bytes certos, o whisper.cpp aceita como "modelo vazio para
@@ -20,9 +20,13 @@ public enum ModelStore {
     /// processo com `std::out_of_range`, exceção de C++ que nenhum `try` do
     /// Swift intercepta. O app não avisa nada: simplesmente não abre.
     ///
-    /// O equivalente em shell (`is_valid_ggml`, em setup-bench.sh) já exigia
-    /// magic **e** tamanho. Esta regra estava em um lado e não no outro.
-    public static let minimumBytes = 50 * 1024 * 1024
+    /// Proporcional ao artefato real, e não a um mínimo teórico: até 29/08/2026
+    /// o piso era 50 MB, justificado pelo menor candidato da bancada (181 MB) —
+    /// mas o app só carrega `fileName`, que tem 547 MB, e 50 MB aprovava um
+    /// download interrompido em qualquer ponto acima disso. O mesmo 400 vale em
+    /// `install.sh`, `verificar-instalacao.sh`, `fetch-model.sh` e, para este
+    /// modelo, em `setup-bench.sh`; mudar aqui exige mudar lá.
+    public static let minimumBytes = 400 * 1024 * 1024
 
     /// O magic do ggml é gravado como uint32 little-endian, então os bytes no
     /// arquivo saem invertidos: `6c6d6767`, que lido como texto vira "lmgg", não
@@ -39,8 +43,9 @@ public enum ModelStore {
 
     /// A regra em si, separada da leitura de disco.
     ///
-    /// Assim dá para testar o piso de tamanho sem escrever 50 MB a cada execução
-    /// da suíte.
+    /// Assim dá para testar o piso de tamanho sem escrever 400 MB a cada execução
+    /// da suíte. (O teste do caminho em disco usa um arquivo esparso pelo mesmo
+    /// motivo.)
     public static func isValid(magic: Data, size: Int) -> Bool {
         guard size >= minimumBytes else { return false }
         guard magic.count == 4 else { return false }
@@ -71,7 +76,8 @@ public enum TranscriberError: Error, CustomStringConvertible {
 /// Transcreve áudio localmente, com o modelo carregado uma vez e mantido quente.
 ///
 /// Não é seguro para uso concorrente: o contexto do whisper.cpp é de uso serial.
-/// Quem usa serializa — no app, uma fila dedicada.
+/// Quem usa serializa — no app, o ator `TranscriptionService` (main.swift), que
+/// faz o compilador garantir isso em vez de depender de despachar por uma fila.
 public final class Transcriber {
     private let context: OpaquePointer
     public private(set) var backend: String = ""

@@ -64,15 +64,18 @@ ok "instalado e verificado"
 
 # --- o modelo ----------------------------------------------------------------
 #
-# Ele não vem no app: são 547 MB, e o app tem 2 MB. O jeito de obtê-lo depende de
-# onde você está — na rede corporativa a HuggingFace está bloqueada, então o
-# setup baixa o checkpoint do CDN da OpenAI e converte.
+# Ele não vem no app: são 547 MB. O jeito de obtê-lo depende de onde você está —
+# na rede corporativa a HuggingFace está bloqueada, então o setup baixa o
+# checkpoint do CDN da OpenAI e converte.
 
 info "Verificando o modelo"
-# 400 MB, não 50: o modelo tem 547 MB, e um piso de 50 MB aprovaria um download
-# interrompido — que o app aceita como "modelo vazio" e derruba na primeira
-# transcrição.
-if [ -f "$MODEL_DIR/$MODEL" ] && [ "$(( $(stat -f%z "$MODEL_DIR/$MODEL") / 1048576 ))" -ge 400 ]; then
+# 400 MB para um modelo de 547 MB — o mesmo piso de ModelStore.minimumBytes no
+# app, de fetch-model.sh e de verificar-instalacao.sh. Um piso baixo aprovaria
+# um download interrompido: reproduzido com 100 KB do modelo real, o whisper.cpp
+# aceita como "modelo vazio" e o processo morre na primeira inferência (exit 134,
+# ver docs/armadilhas.md).
+MODEL_MIN_MB=400
+if [ -f "$MODEL_DIR/$MODEL" ] && [ "$(( $(stat -f%z "$MODEL_DIR/$MODEL") / 1048576 ))" -ge "$MODEL_MIN_MB" ]; then
   ok "modelo presente ($(( $(stat -f%z "$MODEL_DIR/$MODEL") / 1048576 )) MB)"
 elif [ -f "$REPO_ROOT/models/$MODEL" ]; then
   bash "$REPO_ROOT/scripts/fetch-model.sh"
@@ -80,11 +83,19 @@ else
   warn "o modelo ainda não existe nesta máquina."
   echo "     Ele tem 547 MB e é construído a partir do checkpoint da OpenAI:"
   echo
-  echo "       bash scripts/setup-bench.sh   # baixa e converte (~10 min)"
-  echo "       bash scripts/fetch-model.sh   # instala no lugar certo"
+  echo "       bash scripts/setup-bench.sh   # baixa e converte três modelos (~10 min);"
+  echo "                                     # exige Homebrew e python3"
+  echo "       bash scripts/fetch-model.sh   # valida e instala no lugar certo"
   echo
   echo "     Alternativa mais rápida se alguém do time já tem: copie o arquivo"
-  echo "     para $MODEL_DIR/ e pule as duas etapas acima."
+  echo "     para models/ (dentro do repositório) e rode só a segunda etapa:"
+  echo
+  echo "       cp /de/onde/veio/$MODEL models/"
+  echo "       bash scripts/fetch-model.sh"
+  echo
+  echo "     Não copie direto para $MODEL_DIR/: isso pula a validação de magic e"
+  echo "     tamanho do fetch-model.sh, e um arquivo ruim só é recusado quando o"
+  echo "     app abre — a mensagem aparece no menu, em \"Modelo:\", não aqui."
   echo
 fi
 
@@ -97,8 +108,10 @@ cat <<'MSG'
   Abra o app e o macOS vai pedir as duas. As duas são necessárias:
 
     Microfone       sem ele não há áudio
-    Acessibilidade  sem ela o app não recebe a tecla global — e fica mudo,
-                    sem erro nenhum, parecendo quebrado
+    Acessibilidade  sem ela o app não recebe a tecla global. Ele avisa — ícone
+                    cortado (mic.slash), "Acessibilidade: faltando" e "Abrir
+                    Ajustes de Acessibilidade…" no menu, linha no log e o pedido
+                    do próprio macOS —, mas a tecla não faz nada
 
   Se a janela de Acessibilidade não aparecer, vá em
   Ajustes do Sistema › Privacidade e Segurança › Acessibilidade e ligue o NeverType.
@@ -106,7 +119,15 @@ cat <<'MSG'
 ==> Como usar
 
   Segure ⌘ direito, fale, solte. O texto aparece onde o cursor estiver.
-  Apertar qualquer tecla comum durante o hold cancela e descarta o áudio.
+  Apertar qualquer tecla comum (ou Esc) durante o hold cancela e descarta o áudio.
+
+  Mãos-livres: dois toques rápidos na tecla travam a gravação; um toque encerra
+  e transcreve; Esc descarta. Travado, teclar não cancela.
+
+  No menu da bandeja: a tecla (⌘, ⌥ ou ⌃ direito) e os sons ficam em "Tecla";
+  as últimas transcrições em "Copiar última transcrição" e "Histórico", onde
+  clicar copia e "Limpar histórico" apaga o arquivo; termos e substituições em
+  "Vocabulário…".
 
 MSG
 

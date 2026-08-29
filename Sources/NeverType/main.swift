@@ -2,8 +2,26 @@ import AppKit
 import AVFoundation
 import NeverTypeCore
 
-/// Onde o áudio da última gravação fica. Um arquivo só, sobrescrito: a Parte 3
-/// lê daqui, e o app não guarda histórico de nada que você falou.
+/// Onde o áudio da última gravação fica: um arquivo só, sobrescrito a cada
+/// ditado. A transcrição não lê daqui — usa as amostras que ficam em memória
+/// (`recorder.lastSamples`); o WAV é artefato de depuração.
+///
+/// Não é a única cópia do que você falou que fica em disco, e este comentário
+/// já afirmou o contrário (backlog D4). No mesmo diretório,
+/// `~/Library/Application Support/NeverType/`, ficam:
+///
+/// - `last.wav` — o áudio do último ditado, sobrescrito a cada gravação.
+///   "Limpar histórico" apaga (desde 29/08/2026; antes ficava para trás).
+/// - `historico.json` — as últimas 30 transcrições, em texto claro
+///   (`TranscriptHistory`). "Limpar histórico" apaga.
+/// - `nevertype.log` — diagnóstico da sessão, truncado a cada lançamento. Guarda
+///   tempo e tamanho de cada transcrição, nunca o texto (ver `log(_:)`).
+/// - `vocabulario.json` — os termos e substituições que a pessoa cadastrou.
+/// - `ultima-transcricao.txt`, da versão anterior, é apagado no lançamento.
+///
+/// Fora do disco: o texto passa pela área de transferência para ser colado
+/// (devolvida depois, marcada como oculta para gestores de clipboard); o que a
+/// pessoa copia pelo menu vai sem a marca (`copy(_:)`).
 private func lastRecordingURL() -> URL {
     let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
     return base.appendingPathComponent("NeverType/last.wav")
@@ -92,8 +110,9 @@ enum Feedback {
         set { UserDefaults.standard.set(newValue, forKey: key) }
     }
 
-    /// Gerados uma vez. Recriar o WAV a cada ditado seria refazer 3 KB de
-    /// aritmética para nada.
+    /// Gerados uma vez. Recriar o WAV a cada ditado seria refazer ~7,5 KB
+    /// (começo e fim: 0,085 s × 44 100 Hz × 2 bytes) ou ~11,5 KB (trava e
+    /// descarte: duas notas de 0,065 s) de aritmética para nada.
     private static let start   = sound(Tone.wav([330], seconds: 0.085))
     private static let stop    = sound(Tone.wav([262], seconds: 0.085))
     private static let latch   = sound(Tone.wav([294, 392], seconds: 0.065))
@@ -102,8 +121,9 @@ enum Feedback {
     /// Começou a gravar.
     ///
     /// O tom entra no áudio pelo alto-falante e volta pelo microfone, nos
-    /// primeiros ~60 ms da gravação. É um seno curto, não fala, e o Whisper o
-    /// ignora — mas é por isso que ele é curto e baixo.
+    /// primeiros ~85 ms da gravação (a duração de `start`). É um seno curto,
+    /// não fala, e a aposta é que o Whisper o ignora — não medido (backlog I3);
+    /// é por isso que ele é curto e baixo.
     static func started()   { play(start) }
     static func stopped()   { play(stop) }
     static func latched()   { play(latch) }
@@ -293,7 +313,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         button.contentTintColor = (state == .recording) ? .systemRed : nil
         // Fallback de largura: um item de largura variável só com imagem nula
         // fica com zero pixels e desaparece sem erro nenhum.
-        button.title = (image == nil) ? "FF" : ""
+        button.title = (image == nil) ? "NT" : ""
         let tint = (state == .recording) ? "vermelho" : "padrão"
         log("ícone → \(symbol) (\(tint)), template=\(image?.isTemplate ?? false), largura=\(button.frame.width)")
     }
@@ -337,12 +357,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     // As substituições rodam aqui, sobre o texto pronto: elas são
                     // determinísticas e não passam pelo modelo.
                     let corrected = self.vocabulary.apply(to: result.text)
+                    // Tempo e tamanho, nunca o texto. Até 29/08/2026 estas linhas
+                    // gravavam a transcrição inteira em `nevertype.log` — uma
+                    // cópia em disco que nenhum doc mencionava e que "Limpar
+                    // histórico" não apaga. O prefixo "transcrito em N ms" fica:
+                    // é o que a medição de latência do backlog lê.
+                    var line = "transcrito em \(result.ms) ms: \(result.text.count) caracteres"
                     if corrected != result.text {
-                        self.log("transcrito em \(result.ms) ms → \(result.text)")
-                        self.log("substituições aplicadas → \(corrected)")
-                    } else {
-                        self.log("transcrito em \(result.ms) ms → \(corrected)")
+                        line += ", \(corrected.count) depois das substituições"
                     }
+                    self.log(line)
                     self.overlay.hide()
                     self.deliver(corrected)
                 case .failure(let failure):
@@ -380,9 +404,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .inserted:
             break
         case .blockedBySecureInput:
-            // Campo de senha em foco: o macOS descarta eventos sintéticos.
-            // Tentar seria fingir que funcionou.
-            log("campo de senha em foco — não inseri. O texto está no menu, em \"Copiar última transcrição\".")
+            // `IsSecureEventInputEnabled()` é flag global da sessão, não "campo de
+            // senha em foco": algum processo ligou a entrada segura — um campo de
+            // senha é o caso comum, mas qualquer app liga, inclusive em segundo
+            // plano, e há quem esqueça ligada. Enquanto ela está ligada o app não
+            // posta o ⌘V (se recusar é o certo está em discussão no backlog D3);
+            // o texto fica na área de transferência e no menu.
+            log("entrada segura ligada nesta sessão — não colei. Algum processo a ligou (campo de senha em foco é o caso comum, mas há apps que a deixam ligada). O texto está na área de transferência e no menu, em \"Copiar última transcrição\".")
             render(.blocked)
             flashIdle()
         case .failed(let reason):
@@ -449,7 +477,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func clearHistory() {
         history.clear()
-        log("histórico apagado")
+        // O áudio é a outra cópia do que a pessoa falou, e é a gravação inteira.
+        // Até 29/08/2026 este item apagava só o texto e deixava o `last.wav`
+        // para trás. Em mãos-livres o menu abre com gravação em curso: aí o
+        // arquivo aberto é o do ditado atual, e o gravador recusa apagá-lo.
+        if recorder.discardLastRecording() {
+            log("histórico apagado, e o last.wav junto")
+        } else {
+            log("histórico apagado; o last.wav ficou — há gravação em curso")
+        }
     }
 
     private func copy(_ text: String) {
@@ -629,6 +665,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// descartado, o crash na permissão e o ícone preto sobre fundo preto)
     /// tiveram que ser diagnosticados olhando a tela em vez de lendo log.
     /// Truncado a cada lançamento: é diagnóstico da sessão atual, não histórico.
+    ///
+    /// Nunca recebe texto de transcrição, de histórico nem de vocabulário: o
+    /// arquivo fica em disco e "Limpar histórico" não o toca, então qualquer
+    /// texto aqui seria uma cópia do que a pessoa falou fora do alcance dela.
+    /// Só tempo, tamanho e estado.
     private func log(_ message: String) {
         let line = "nevertype: \(message)\n"
         FileHandle.standardError.write(Data(line.utf8))
@@ -677,6 +718,7 @@ extension AppDelegate: NSMenuDelegate {
 let app = NSApplication.shared
 let delegate = AppDelegate()
 app.delegate = delegate
-// Acessório: sem ícone no Dock, sem janela. Vive só na menu bar.
+// Acessório: sem ícone no Dock. Vive na menu bar; as únicas janelas são a pílula
+// (um `NSPanel`, em RecordingOverlay) e a do vocabulário (VocabularyWindow).
 app.setActivationPolicy(.accessory)
 app.run()

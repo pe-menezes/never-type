@@ -18,11 +18,19 @@ PT_CACHE="$HOME/.cache/whisper"
 CDN="https://openaipublic.azureedge.net/main/whisper/models"
 
 # Candidatos da spec. Turbo é o favorito; small é o piso de latência.
-# Formato: nome-ggml : nome-openai : sha256 (que também é o path no CDN) : quant
+# Formato: nome-ggml : nome-openai : sha256 (que também é o path no CDN) : quant : piso em MB
+#
+# O piso é por modelo e proporcional ao artefato real (docs/armadilhas.md): o
+# magic está certo num arquivo truncado, então só o tamanho pega conversão ou
+# quantização interrompida. Tamanhos registrados neste repositório: turbo-q5_0
+# tem 547 MB (piso 400 — o mesmo que o app exige em ModelStore.minimumBytes) e
+# small-q5_1 tem 181 MB (piso 130). O de medium-q5_0 não foi registrado; pelo
+# CLAUDE.md os três somam 1,2 GB, o que o põe entre ~420 e ~520 MB, e 400 fica
+# abaixo de qualquer leitura disso. Confira: stat -f%z models/ggml-medium-q5_0.bin
 MODELS=(
-  "large-v3-turbo-q5_0:large-v3-turbo:aff26ae408abcba5fbf8813c21e62b0941638c5f6eebfb145be0c9839262a19a:q5_0"
-  "medium-q5_0:medium:345ae4da62f9b3d59415adc60127b97c714f32e89e936602e85993674d08dcb1:q5_0"
-  "small-q5_1:small:9ecf779972d90ba49c06d968637d720dd632c55bbf19d441fb42bf17a411e794:q5_1"
+  "large-v3-turbo-q5_0:large-v3-turbo:aff26ae408abcba5fbf8813c21e62b0941638c5f6eebfb145be0c9839262a19a:q5_0:400"
+  "medium-q5_0:medium:345ae4da62f9b3d59415adc60127b97c714f32e89e936602e85993674d08dcb1:q5_0:400"
+  "small-q5_1:small:9ecf779972d90ba49c06d968637d720dd632c55bbf19d441fb42bf17a411e794:q5_1:130"
 )
 
 info() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
@@ -51,9 +59,10 @@ command -v whisper-quantize >/dev/null || fail "whisper-quantize não ficou no P
 # --- smoke test: o backend Metal carrega? -----------------------------------
 #
 # O ggml carrega backends dinamicamente. Se o Metal não entrar, a inferência cai
-# pra CPU SEM ERRO — só fica ~10x mais lenta. Descobrir isso agora, com o modelo
-# tiny que o próprio Homebrew instala, custa segundos. Descobrir depois custa a
-# credibilidade de todos os números da bancada.
+# pra CPU SEM ERRO — só fica ~11x mais lenta (encode 1635 ms contra 143 ms,
+# medido; ver abaixo). Descobrir isso agora, com o modelo tiny que o próprio
+# Homebrew instala, custa segundos. Descobrir depois custa a credibilidade de
+# todos os números da bancada.
 
 info "Smoke test do backend Metal"
 SHARE_DIR="$(brew --prefix)/share/whisper-cpp"
@@ -97,26 +106,26 @@ mkdir -p "$MODELS_DIR" "$PT_CACHE"
 # Checar o magic pega download truncado e, principalmente, página de erro HTML
 # salva como se fosse modelo — que é o que um proxy de filtragem devolve.
 GGML_MAGIC_HEX=6c6d6767
-# Piso de tamanho, em MB. O menor candidato quantizado tem 181 MB; um arquivo
-# abaixo disso está truncado. O magic sozinho não pega download interrompido no
-# meio, porque os quatro primeiros bytes já teriam chegado.
-GGML_MIN_MB=50
-is_valid_ggml() {
+# O piso de tamanho vem da tabela MODELS, por modelo. Até 29/08/2026 era um
+# único GGML_MIN_MB=50 para os três — que aprovava um turbo de 547 MB parado em
+# qualquer ponto acima disso. O magic sozinho não pega download nem conversão
+# interrompidos no meio, porque os quatro primeiros bytes já teriam chegado.
+is_valid_ggml() {  # <arquivo> <piso em MB>
   [ -f "$1" ] || return 1
   [ "$(head -c 4 "$1" | xxd -p)" = "$GGML_MAGIC_HEX" ] || return 1
-  [ "$(( $(stat -f%z "$1") / 1048576 ))" -ge "$GGML_MIN_MB" ]
+  [ "$(( $(stat -f%z "$1") / 1048576 ))" -ge "$2" ]
 }
 
 pending=()
 for entry in "${MODELS[@]}"; do
-  IFS=':' read -r ggml_name _ _ _ <<< "$entry"
-  is_valid_ggml "$MODELS_DIR/ggml-${ggml_name}.bin" || pending+=("$entry")
+  IFS=':' read -r ggml_name _ _ _ min_mb <<< "$entry"
+  is_valid_ggml "$MODELS_DIR/ggml-${ggml_name}.bin" "$min_mb" || pending+=("$entry")
 done
 
 if [ ${#pending[@]} -eq 0 ]; then
   info "Modelos em $MODELS_DIR"
   for entry in "${MODELS[@]}"; do
-    IFS=':' read -r ggml_name _ _ _ <<< "$entry"
+    IFS=':' read -r ggml_name _ _ _ _ <<< "$entry"
     printf '  %-26s %5s MB\n' "$ggml_name" "$(size_mb "$MODELS_DIR/ggml-${ggml_name}.bin")"
   done
   echo
@@ -196,7 +205,7 @@ fi
 # --- construção dos modelos --------------------------------------------------
 
 for entry in "${pending[@]}"; do
-  IFS=':' read -r ggml_name pt_name sha quant <<< "$entry"
+  IFS=':' read -r ggml_name pt_name sha quant min_mb <<< "$entry"
   pt_file="$PT_CACHE/${pt_name}.pt"
   out_ggml="$MODELS_DIR/ggml-${ggml_name}.bin"
 
@@ -218,20 +227,25 @@ for entry in "${pending[@]}"; do
   fi
 
   # 2. .pt -> ggml f16
+  #
+  # O f16 é maior que o quantizado (ocupa gigabytes, ver abaixo), então o piso
+  # do quantizado vale para ele também: folgado, mas pega conversão interrompida.
   f16_dir="$BUILD_DIR/f16-$ggml_name"
   mkdir -p "$f16_dir"
-  if ! is_valid_ggml "$f16_dir/ggml-model.bin"; then
+  if ! is_valid_ggml "$f16_dir/ggml-model.bin" "$min_mb"; then
     info "  convertendo para ggml f16"
     "$VENV/bin/python" "$CONVERTER" "$pt_file" "$WHISPER_REPO" "$f16_dir" >/dev/null \
       || fail "conversão de $pt_name falhou."
   fi
-  is_valid_ggml "$f16_dir/ggml-model.bin" || fail "conversão não produziu ggml válido."
+  is_valid_ggml "$f16_dir/ggml-model.bin" "$min_mb" \
+    || fail "conversão não produziu ggml válido (magic ggml e pelo menos $min_mb MB)."
 
   # 3. f16 -> quantizado
   info "  quantizando para $quant"
   whisper-quantize "$f16_dir/ggml-model.bin" "$out_ggml" "$quant" >/dev/null \
     || fail "quantização de $ggml_name falhou."
-  is_valid_ggml "$out_ggml" || { rm -f "$out_ggml"; fail "quantização produziu arquivo inválido."; }
+  is_valid_ggml "$out_ggml" "$min_mb" \
+    || { rm -f "$out_ggml"; fail "quantização produziu arquivo inválido (magic ggml e pelo menos $min_mb MB)."; }
 
   # O f16 é intermediário e ocupa gigabytes. O .pt fica em cache: é a origem.
   rm -rf "$f16_dir"
@@ -244,9 +258,9 @@ echo
 info "Modelos em $MODELS_DIR"
 missing=0
 for entry in "${MODELS[@]}"; do
-  IFS=':' read -r ggml_name _ _ _ <<< "$entry"
+  IFS=':' read -r ggml_name _ _ _ min_mb <<< "$entry"
   f="$MODELS_DIR/ggml-${ggml_name}.bin"
-  if is_valid_ggml "$f"; then
+  if is_valid_ggml "$f" "$min_mb"; then
     printf '  %-26s %5s MB\n' "$ggml_name" "$(size_mb "$f")"
   else
     printf '  %-26s %s\n' "$ggml_name" "AUSENTE"

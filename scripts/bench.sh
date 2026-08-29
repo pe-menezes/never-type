@@ -1,7 +1,7 @@
 #!/bin/bash
 # Bancada de latência: roda cada modelo contra cada fixture, mede tempo de
 # parede, separa o tempo de carga do modelo e imprime a tabela que sustenta a
-# decisão em docs/decisao-modelo.md.
+# decisão em docs/escolha-do-modelo.md.
 #
 # Uso: scripts/bench.sh
 set -euo pipefail
@@ -227,4 +227,4 @@ echo "  não existem no app com o modelo já carregado."
 echo "  POR JANELA divide pelo número de janelas de 30s, para comparar clipes longos."
 echo
 echo "  Saída bruta em: bench-out/$RUN_ID/  (atalho: bench-out/latest/)"
-echo "  Agora preencha: docs/decisao-modelo.md"
+echo "  Agora preencha: docs/escolha-do-modelo.md"

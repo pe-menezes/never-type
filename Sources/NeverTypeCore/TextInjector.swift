@@ -14,8 +14,11 @@ public enum TextInjector {
 
     public enum Outcome: Equatable {
         case inserted
-        /// Campo de senha em foco: o macOS bloqueia eventos sintéticos e o ⌘V
-        /// simplesmente não aconteceria. Avisar é melhor que fingir.
+        /// A entrada segura da sessão está ligada (`IsSecureEventInputEnabled()`).
+        /// É flag global: algum processo a ligou — um campo de senha em foco é o
+        /// caso comum, mas qualquer app liga, e há quem esqueça ligada. O ⌘V não
+        /// foi postado; o texto ficou na área de transferência para a pessoa
+        /// colar. Avisar é melhor que fingir que colou.
         case blockedBySecureInput
         case failed(String)
     }
@@ -91,11 +94,13 @@ public enum TextInjector {
                               secureInput: (() -> Bool)? = nil) -> Outcome {
         guard !text.isEmpty else { return .failed("texto vazio") }
 
-        // Entrada segura ativa: o macOS descarta eventos sintéticos, o ⌘V não
-        // aconteceria e o app pareceria quebrado. Aqui a spec manda deixar o
-        // texto no pasteboard — e a versão anterior retornava **antes** de
-        // tocá-lo, então não deixava nada. Sem colar não há o que restaurar,
-        // então o texto fica lá para a pessoa colar quando quiser.
+        // Entrada segura ligada: o app não posta o ⌘V. A premissa original — de
+        // que o macOS descartaria o evento sintético — nunca foi medida aqui; o
+        // que o código sabe é o valor da flag (se recusar é o certo está no
+        // backlog D3). Aqui a spec manda deixar o texto no pasteboard — e a
+        // versão anterior retornava **antes** de tocá-lo, então não deixava
+        // nada. Sem colar não há o que restaurar, então o texto fica lá para a
+        // pessoa colar quando quiser.
         //
         // Atenção ao nome: `IsSecureEventInputEnabled` é flag global da sessão,
         // não "campo de senha em foco". Qualquer processo pode ligá-la, inclusive

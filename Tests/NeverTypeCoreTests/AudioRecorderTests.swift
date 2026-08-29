@@ -269,6 +269,67 @@ struct RecordingSinkTests {
         #expect(!sink.isOpen)
         #expect(!FileManager.default.fileExists(atPath: url.path))
     }
+
+    /// "Limpar histórico" apaga o texto e também este arquivo: o áudio é a
+    /// gravação inteira, e ficar com ele depois de a pessoa mandar limpar seria
+    /// guardar justamente o que ela pediu para apagar.
+    @Test("limpar apaga o WAV do ditado anterior e as amostras")
+    func removeDestinationDeletesFinishedRecording() throws {
+        let url = tempURL()
+        let sink = RecordingSink(destination: url)
+        let fmt = try hardware()
+        try sink.begin(inputFormat: fmt)
+        try sink.append(try buffer(fmt, seconds: 0.2))
+        _ = try sink.finish()
+        #expect(FileManager.default.fileExists(atPath: url.path))
+        #expect(!sink.samples.isEmpty)
+
+        #expect(sink.removeDestination())
+        #expect(!FileManager.default.fileExists(atPath: url.path), "o WAV tem que sumir")
+        #expect(sink.samples.isEmpty, "as amostras em memória também")
+        try? FileManager.default.removeItem(at: url.deletingLastPathComponent())
+    }
+
+    /// Em mãos-livres o menu abre com gravação em curso, então dá para clicar em
+    /// "Limpar histórico" no meio de um ditado. O arquivo aberto é o desse ditado.
+    @Test("limpar durante a gravação não toca no arquivo aberto")
+    func removeDestinationRefusesWhileRecording() throws {
+        let url = tempURL()
+        let sink = RecordingSink(destination: url)
+        let fmt = try hardware()
+        try sink.begin(inputFormat: fmt)
+        try sink.append(try buffer(fmt, seconds: 0.2))
+
+        #expect(!sink.removeDestination(), "com arquivo aberto a remoção é recusada")
+        #expect(FileManager.default.fileExists(atPath: url.path), "a gravação em curso continua no disco")
+        #expect(!sink.samples.isEmpty, "e as amostras dela ficam")
+        #expect(try sink.finish() == url, "a gravação termina normalmente depois da recusa")
+        try? FileManager.default.removeItem(at: url.deletingLastPathComponent())
+    }
+
+    @Test("limpar sem arquivo não quebra e responde que não sobrou nada")
+    func removeDestinationWithoutFileIsSafe() {
+        let sink = RecordingSink(destination: tempURL())
+        #expect(sink.removeDestination())
+    }
+
+    /// O gravador repassa a limpeza ao sink pela fila de E/S e esquece as
+    /// amostras do último ditado. A recusa durante a gravação não é alcançável
+    /// por aqui sem microfone — está coberta no `RecordingSink`, onde a guarda
+    /// de verdade (arquivo aberto) mora.
+    @Test("o gravador apaga o WAV anterior e esquece as amostras")
+    func recorderDiscardsLastRecording() throws {
+        let url = tempURL()
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("RIFF".utf8).write(to: url)
+        let recorder = AudioRecorder(destination: url)
+
+        #expect(recorder.discardLastRecording())
+        #expect(!FileManager.default.fileExists(atPath: url.path), "o WAV tem que sumir")
+        #expect(recorder.lastSamples.isEmpty)
+        try? FileManager.default.removeItem(at: url.deletingLastPathComponent())
+    }
 }
 
 /// O medidor existe para responder uma pergunta: está entrando som? Então o que

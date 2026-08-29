@@ -3,8 +3,11 @@
 // Caminhos relativos a este arquivo: SwiftPM resolve headers de um alvo
 // `systemLibrary` na hora do import, antes de qualquer flag do consumidor.
 //
-// `ggml-backend.h` entra junto porque `ggml_backend_load_all()` mora lá e não é
-// exposto por `whisper.h`.
+// `ggml-backend.h` entra junto porque `ggml_backend_dev_count`, `_dev_get` e
+// `_dev_name` moram lá e não são expostas por `whisper.h` (que inclui só ggml.h
+// e ggml-cpu.h). É com elas que Transcriber.swift enumera os dispositivos para
+// provar que o Metal está ativo. `ggml_backend_load_all()`, o motivo original
+// deste header, foi removida do app — ver o comentário em `Transcriber.init`.
 module CWhisper [system] {
     header "../../vendor/whisper/include/whisper.h"
     header "../../vendor/whisper/include/ggml-backend.h"

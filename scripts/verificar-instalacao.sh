@@ -1,9 +1,11 @@
 #!/bin/bash
 # Confere o que dá para conferir de fora sobre uma instalação do NeverType.
 #
-# Existe porque a instalação tem um modo de falha silencioso: sem a permissão de
-# Acessibilidade o app abre, desenha o ícone na barra e simplesmente não reage à
-# tecla — sem erro, sem log, sem nada. Quem instalou conclui que instalou.
+# Existe porque a instalação tem um modo de falha fácil de não notar: sem a
+# permissão de Acessibilidade o app abre e não reage à tecla. Ele avisa — ícone
+# cortado (mic.slash), "Acessibilidade: faltando" e "Abrir Ajustes de
+# Acessibilidade…" no menu, uma linha em nevertype.log e o pedido do próprio
+# macOS —, mas quem não abre o menu nem o log conclui que instalou.
 #
 # Este script NÃO verifica permissão, e diz isso em voz alta no fim. Não é
 # limitação de implementação: o que interessa não é o TCC dizer que concedeu, e
@@ -19,8 +21,10 @@ MODEL="$HOME/Library/Application Support/NeverType/models/ggml-large-v3-turbo-q5
 # em hexadecimal evita esse tropeço — e pega o caso que mais importa aqui, que é
 # proxy de filtragem devolvendo página HTML de erro com nome de modelo.
 GGML_MAGIC_HEX=6c6d6767
-# 400 MB, não 50: o modelo tem 547 MB, e um piso baixo aprovaria download
-# interrompido — que o app aceita como "modelo vazio" e derruba no primeiro uso.
+# 400 MB para um modelo de 547 MB — o mesmo piso de ModelStore.minimumBytes no
+# app, de install.sh e de fetch-model.sh. Um piso baixo aprovaria download
+# interrompido: reproduzido com 100 KB do modelo real, o whisper.cpp aceita como
+# "modelo vazio" e o processo morre na primeira inferência (docs/armadilhas.md).
 MODEL_MIN_MB=400
 
 info() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
@@ -109,8 +113,10 @@ fi
 info "A parte que só você pode verificar"
 cat <<'MSG'
   Microfone e Acessibilidade NÃO foram verificados aqui, e não dá para verificar
-  de fora. Sem Acessibilidade o app abre, mostra o ícone e não reage à tecla —
-  sem erro nenhum. É o modo de falha mais provável de uma instalação nova.
+  de fora. Sem Acessibilidade o app abre e não reage à tecla; o que ele mostra é
+  o ícone cortado (mic.slash) e, no menu, "Acessibilidade: faltando" com o item
+  "Abrir Ajustes de Acessibilidade…". É o modo de falha mais provável de uma
+  instalação nova.
 
   Prove ditando:
 
