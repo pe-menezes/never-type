@@ -20,12 +20,15 @@ Os artefatos pesados (`models/`, `vendor/`, `fixtures/`,
 
 ## Structural Units
 
-- **`Sources/NeverTypeCore/`** — captura e conversão de áudio, tecla global,
-  transcrição e inserção de texto. É o que tem teste.
+- **`Sources/NeverTypeCore/`** — captura e conversão de áudio, tecla global (com
+  a trava de mãos-livres e as três teclas oferecidas), transcrição, inserção de
+  texto, vocabulário, histórico de transcrições, tons do retorno auditivo e login
+  item. É o que tem teste.
 - **`Sources/NeverType/`** — `NSApplication` acessória, ícone de bandeja, painel
-  flutuante de gravação, ator dono do modelo. Orquestra, não decide.
+  flutuante de gravação, janela do vocabulário, ator dono do modelo. Orquestra,
+  não decide.
 - **`Sources/CWhisper/`** — module map apontando para `vendor/whisper`.
-- **`Tests/NeverTypeCoreTests/`** — 29 testes em swift-testing.
+- **`Tests/NeverTypeCoreTests/`** — 81 testes em swift-testing.
 - **`scripts/`** — bancada de latência, build e assinatura, instalação.
 - **`docs/`** — armadilhas encontradas e a escolha do modelo, com os números.
 - **`.vibeflow/`** — convenções e padrões extraídos do código.
@@ -80,8 +83,13 @@ patterns:
 | `Sources/NeverTypeCore/AudioRecorder.swift` | `Resampler`, `RecordingSink` e o gravador; fila serial dona do estado |
 | `Sources/NeverTypeCore/Transcriber.swift` | `ModelStore` e a ponte com o whisper.cpp; enumeração de backends |
 | `Sources/NeverTypeCore/TextInjector.swift` | Inserção via área de transferência, com retrato e devolução |
-| `Sources/NeverTypeCore/HotkeyMonitor.swift` | ⌘ direito como push-to-talk, cancelamento por tecla comum |
+| `Sources/NeverTypeCore/HotkeyMonitor.swift` | O gatilho: push-to-talk, trava de mãos-livres por duplo toque, as três teclas oferecidas |
+| `Sources/NeverTypeCore/Vocabulary.swift` | Termos (viram `initial_prompt`) e substituições determinísticas |
+| `Sources/NeverTypeCore/TranscriptHistory.swift` | As últimas 30 transcrições, com teto e escrita atômica |
+| `Sources/NeverTypeCore/Tone.swift` | Gera os WAV do retorno auditivo, com envelope contra o estalo |
+| `Sources/NeverTypeCore/LoginItem.swift` | Abrir com o sistema, com a guarda de caminho antes de registrar |
 | `Sources/NeverType/RecordingOverlay.swift` | Indicador que sobrevive a apps em tela cheia |
+| `Sources/NeverType/VocabularyWindow.swift` | As duas listas do vocabulário, em abas editáveis |
 | `scripts/build-app.sh` | Compila o whisper estático, monta o bundle, assina com identidade estável |
 | `scripts/setup-bench.sh` | Constrói os modelos ggml a partir do CDN da OpenAI |
 | `scripts/bench.sh` | Mede latência e qualidade por modelo |

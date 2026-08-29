@@ -12,8 +12,12 @@ que as torna rápidas, e também o que as torna inviáveis onde o conteúdo não
 sair da máquina.
 
 O NeverType roda o modelo localmente. O áudio nasce e morre no seu Mac; o modelo
-fica em disco; o app não abre conexão nenhuma em tempo de uso — há teste de CI
-verificando isso no código e no binário.
+fica em disco; o app não abre conexão nenhuma em tempo de uso — não há API de
+rede no código nem framework de rede no binário.
+
+**Essa conferência é manual.** Não existe CI neste repositório: o que sustenta a
+afirmação é um item de Definition of Done, verificado no código e no binário a
+cada tarefa. Ver [Segurança](#segurança).
 
 ## Requisitos
 
@@ -56,16 +60,46 @@ que exigem você clicando.
 ## Uso
 
 Segure **⌘ direito**, fale, solte. O texto aparece onde o cursor estiver.
-Apertar qualquer tecla comum durante o hold cancela e descarta o áudio.
+Apertar qualquer tecla comum durante o hold cancela e descarta o áudio. A tecla
+sai do menu: ⌘, ⌥ ou ⌃ **do lado direito**, e só esses — um modificador sozinho
+não digita caractere nem dispara ação do sistema, que é o que dispensa
+interceptar o evento.
+
+**Dois toques travam em mãos-livres**, e a gravação segue sem a tecla segurada:
+um toque encerra e transcreve, **Esc** descarta. Toque é um hold abaixo de
+250 ms, e o segundo tem 300 ms para chegar. Travado, teclar não cancela — com a
+tecla segurada uma tecla comum quer dizer "isto era um atalho", mas em mãos-livres
+não há modificador segurado, e um ditado longo não pode morrer porque você
+digitou.
 
 Enquanto grava, o ícone da menu bar fica vermelho e aparece um indicador
 flutuante na base da tela — que sobrevive a aplicativos em tela cheia, onde a
-menu bar fica oculta.
+menu bar fica oculta. Um tom curto marca começo, fim, trava e descarte — o que
+encerra soa mais grave que o que começa, e o que trava sobe, então a direção
+diz o que aconteceu sem você ter que aprender qual som é qual.
 
 **A área de transferência é devolvida.** O texto entra por colagem, então o que
 você tinha copiado volta logo depois — inclusive imagem, arquivo e HTML, não só
 texto. Se a inserção não puder acontecer, o texto não se perde: fica em **Copiar
 última transcrição**, no menu da bandeja, e é gravado em disco.
+
+### No menu da bandeja
+
+- **Tecla** — ⌘, ⌥ ou ⌃ direito, com marca na atual. A escolha fica guardada e
+  volta no lançamento seguinte.
+- **Sons** — no mesmo submenu, ligados por padrão. Som que não se pode desligar é
+  defeito para quem trabalha em sala compartilhada.
+- **Vocabulário…** — as duas listas que corrigem o que o modelo escreve, com as
+  contagens no próprio item. O que elas garantem, e o que não, está em
+  [Limitações](#limitações-conhecidas).
+- **Histórico** — as últimas 30, mais recente primeiro, com a hora; o submenu
+  aparece a partir da segunda. Clicar copia, o texto inteiro fica no tooltip, e
+  dá para limpar por ali. Fica em texto claro em
+  `~/Library/Application Support/NeverType/`: é registro do que você falou, e
+  criptografar guardaria a chave ao lado do arquivo, na mesma máquina.
+- **Abrir com o sistema** — só da cópia instalada (`/Applications` ou
+  `~/Applications`); de outro lugar o app recusa e manda rodar o `install.sh`.
+  Desligado nos Ajustes do Sistema, o menu diz isso e oferece o atalho para lá.
 
 ## Como funciona
 
@@ -95,8 +129,12 @@ nem limite.
 Bluetooth em modo HFP a 8 kHz, e de quebra corta a música. A conversão funciona
 (há teste), mas o reconhecimento piora. Para ditar, prefira o microfone do Mac.
 
-**Não há vocabulário customizado.** Termos técnicos recorrentes podem sair
-errados de forma consistente, e nenhum modelo base acerta sozinho.
+**O vocabulário customizado não garante o termo, só aumenta a chance.** O menu
+tem duas listas, e são duas de propósito. Os **termos** viram o `initial_prompt`
+do whisper: dica de reconhecimento, probabilística, sem garantia. Só as
+**substituições** são determinísticas — e elas exigem que você já saiba com o que
+o termo é confundido, porque consertam "saiu X, eu queria Y", não a palavra que
+sai errada de um jeito diferente a cada vez.
 
 **O app pode se recusar a colar por causa de outro programa.** Ele consulta a
 flag *secure input* do macOS, que existe para proteger digitação de senha. Só que
@@ -157,7 +195,7 @@ swift build && swift test
 `vendor/` não é versionado. Sem ele o `swift build` falha com
 `could not build Objective-C module 'CWhisper'` — mensagem que não diz a causa.
 
-29 testes em **swift-testing**, não XCTest — o XCTest só existe com o Xcode
+81 testes em **swift-testing**, não XCTest — o XCTest só existe com o Xcode
 completo instalado, e este projeto compila com Command Line Tools.
 
 Se você vai mexer no código, leia [`docs/armadilhas.md`](docs/armadilhas.md)

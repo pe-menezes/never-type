@@ -149,25 +149,39 @@ sistema inteiro.
 
 Cabe inteiro dentro do `HotkeyMonitor`.
 
-### I3 · Retorno auditivo ao armar e desarmar — P
-Um som curto e discreto ao travar em mãos-livres e ao encerrar. Hoje o único
-sinal é visual, e a pílula pode estar fora do canto que você está olhando —
-principalmente porque ela é arrastável.
+### ✅ I3 · Retorno auditivo ao armar e desarmar — IMPLEMENTADO
+`Tone.swift` gera os quatro tons em vez de usar os do sistema, que são alertas
+desenhados para *serem notados*. Começo 330 Hz, fim 262 Hz, trava 294→392,
+descarte 262→196 (`main.swift:97-100`): o que encerra é mais grave que o que
+começa, a trava sobe e o descarte desce, então a direção diz o que aconteceu sem
+aprender qual som é qual. Ligados por padrão e desligáveis em Tecla › Sons
+(`main.swift:518`). 6 testes, na suíte
+"Tons do retorno auditivo". Commit `1479a4b`.
 
-Referência: o Wispr Flow faz isso ao acionar. Vale olhar como soa antes de
-escolher o som.
-*Evidência:* pedido do autor em uso, 2026-08-29
+**Falta você ouvir.** Ninguém confirmou em uso que o volume (0,18) é discreto o
+bastante em sala compartilhada, nem que o tom de começo não suja a transcrição —
+o comentário de `main.swift:104-106` diz que ele entra pelo microfone nos
+primeiros ~60 ms e que o Whisper o ignora, mas essa é a única afirmação da
+feature sem número medido atrás.
+*Evidência:* pedido do autor em uso, 2026-08-29 · `Tone.swift` · commit `1479a4b`
 
-### I4 · Escolher a tecla do gatilho — P
-Hoje é ⌘ direito, fixo. O `HotkeyMonitor.Trigger` **já tem** `rightCommand`,
-`rightOption` e `rightControl` prontos — falta só expor no menu e guardar a
-escolha.
+### ✅ I4 · Escolher a tecla do gatilho — IMPLEMENTADO
+Submenu **Tecla** com as três opções de `HotkeyMonitor.Trigger.all`
+(`main.swift:509`), marca na atual, escolha guardada em `UserDefaults` sob a
+chave `trigger` e restaurada no lançamento (`main.swift:223`). O identificador
+guardado é o keyCode, não o rótulo, porque rótulo é texto de interface e muda.
+Trocar a tecla zera a máquina de estados (`HotkeyMonitor.swift:174-181`): sem
+isso, trocar no meio de um hold deixaria uma gravação órfã, sem tecla que a
+encerre. 4 testes, na suíte "Trigger da hotkey". Commit `1479a4b`.
 
-Atenção: isto **não** contradiz a decisão fechada de não adotar o
-`KeyboardShortcuts`. Aquela decisão é sobre gravar atalho arbitrário, que exige
-dependência externa; escolher entre três triggers que já existem no código não
-exige nada.
-*Evidência:* pedido do autor em uso, 2026-08-29
+Confirmado que **não** contradiz a decisão fechada sobre o `KeyboardShortcuts`:
+nenhuma dependência SPM nova entrou.
+
+**Falta você usar ⌥ e ⌃ direito de verdade.** O teste cobre a regra (máscaras
+distintas, ida e volta pelo identificador), mas o caminho do teclado ao evento
+só tem tempo de uso no ⌘ direito, que é o padrão.
+*Evidência:* pedido do autor em uso, 2026-08-29 · `HotkeyMonitor.swift:140-150` ·
+commit `1479a4b`
 
 ---
 
@@ -194,11 +208,23 @@ O OpenQuack mostra `2.4s · 0.30x` depois de cada transcrição. O **fator de te
 real** (0,30× = transcreveu em 30% da duração do áudio) é métrica melhor que ms
 cru, porque não depende do tamanho do ditado. Você já mede tudo que precisa.
 
-### U4 · Histórico de transcrições — P
-Hoje só a última, em `ultima-transcricao.txt`. Já está na lista de dor do
-`CLAUDE.md`. Decidir antes: quantas, por quanto tempo, e se fica em texto puro
-no disco — é o registro do que a pessoa falou.
-*Evidência:* `CLAUDE.md` (O que falta)
+### ✅ U4 · Histórico de transcrições — IMPLEMENTADO
+`TranscriptHistory.swift`: teto de 30, mais recente primeiro, JSON atômico em
+`~/Library/Application Support/NeverType/historico.json`. As três perguntas que
+este item mandava decidir antes estão decididas e documentadas no doc comment —
+30 entradas, texto claro no disco, apagável pelo menu. Submenu com hora e prévia
+de 44 caracteres, clique copia, texto inteiro no tooltip, "Limpar histórico"
+apaga o arquivo em vez de esvaziá-lo (`main.swift:547-566`). O
+`ultima-transcricao.txt` da versão anterior é removido no lançamento, para não
+deixar cópia órfã do que a pessoa falou. 7 testes. Commit `1479a4b`.
+
+**Falta você abrir esse menu com histórico real.** Uma decisão de interface não
+foi conferida por ninguém: com **uma** transcrição só não existe item
+*Histórico* — o submenu só aparece a partir da segunda (`main.swift:547`), e
+antes disso há apenas "Copiar última transcrição". Pode ser o certo, ou pode
+parecer que o histórico sumiu.
+*Evidência:* `CLAUDE.md` (O que falta) · `TranscriptHistory.swift` ·
+commit `1479a4b`
 
 ---
 
@@ -221,10 +247,21 @@ abandono na primeira tentativa. A forma barata: alguém do teu time num Mac
 limpo, com você olhando por cima do ombro e anotando onde trava.
 *Evidência:* `.vibeflow/index.md` (Known Issues) · `CLAUDE.md`
 
-### A3 · Vocabulário customizado — P
-Nomes próprios, termos de domínio, nomes de projeto. Está na lista do
-`CLAUDE.md` e o OpenQuack tem como "custom dictionary".
-*Evidência:* `CLAUDE.md` (O que falta)
+### ✅ A3 · Vocabulário customizado — IMPLEMENTADO
+`Vocabulary.swift` com duas listas, e são duas de propósito: **termos** viram o
+`initial_prompt` do whisper (dica de reconhecimento, probabilística) e
+**substituições** rodam sobre o texto pronto (determinísticas, palavra inteira,
+ignorando maiúsculas na busca — sem a fronteira de palavra, trocar "ia" por "IA"
+estragaria "família"). Misturar as duas numa lista só seria prometer garantia
+onde não existe. `VocabularyWindow.swift` edita as duas em abas; o menu mostra as
+contagens (`main.swift:526-532`). 12 testes. Commit `43d968f`.
+
+**Falta você usar com termos reais.** O ganho da lista de termos é
+probabilístico e ninguém mediu se o `initial_prompt` melhora o reconhecimento
+nesta máquina. `docs/escolha-do-modelo.md:82` é evidência de que o problema
+existe, não de que esta solução o resolve — e essa distinção virou a limitação
+honesta no README, no lugar do "não há vocabulário customizado" que estava lá.
+*Evidência:* `CLAUDE.md` (O que falta) · `Vocabulary.swift` · commit `43d968f`
 
 ---
 
@@ -238,6 +275,22 @@ medindo qualidade. Comparar os números vale mais que a impressão de que está 
 ### H2 · Doc comment de `TextInjector.pending` mistura dois assuntos — P
 Geração e indexação por pasteboard num bloco só.
 *Evidência:* `.vibeflow/index.md` (Known Issues)
+
+### H3 · Não há CI; a alegação de isolamento de rede é verificada à mão — P
+Não existe `.github/` no repositório e nenhum teste toca rede: `grep -rn
+"URLSession\|CFNetwork\|otool" Sources/ Tests/ scripts/` volta vazio. O que
+sustenta "nada sai da máquina" hoje é o item de Definition of Done conferido a
+cada tarefa, mais a ausência de import de rede nas fontes — verificação humana,
+que vale enquanto alguém lembrar de fazer.
+
+O README afirmava "há teste de CI verificando isso no código e no binário".
+**Corrigido em 29/08/2026 por não ter lastro** — a frase de hoje (`README.md:15`)
+descreve a conferência manual, que é o que de fato existe. O item aqui é fechar a
+distância: um check que falhe sozinho quando alguém adicionar rede, em vez de
+depender de quem revisa notar.
+*Evidência:* `.github/` inexistente em 29/08/2026 · grep sem resultado em
+`Sources/`, `Tests/` e `scripts/` · `.vibeflow/conventions.md:118` (o Don't que
+já existe) · `README.md:15`
 
 ---
 

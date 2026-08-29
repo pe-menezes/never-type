@@ -54,7 +54,7 @@ resultado. Leva alguns minutos na primeira vez, ~1 s nas seguintes.
 Depois disso:
 
 ```bash
-swift build && swift test     # 29 testes
+swift build && swift test     # 81 testes
 bash scripts/install.sh       # instala em /Applications
 bash scripts/bench.sh         # mede latência e qualidade por modelo
 ```
@@ -72,11 +72,14 @@ em **português**.
 
 ## Estado
 
-Funciona ponta a ponta: ~600 ms por ditado, 29 testes. Nunca foi instalado por
+Funciona ponta a ponta: ~600 ms por ditado, 81 testes. Nunca foi instalado por
 ninguém além do autor.
 
-O que falta, em ordem de dor: abrir no login (não abre hoje), histórico de
-transcrições, pacote distribuível sem compilar, vocabulário customizado.
+Falta uma coisa: **pacote distribuível sem compilar** — cada instalação ainda
+compila na própria máquina. Abrir no login, histórico de transcrições e
+vocabulário customizado saíram da lista: estão implementados (`LoginItem.swift`,
+`TranscriptHistory.swift`, `Vocabulary.swift`), com teste, e o que falta neles é
+conferência em uso real — está anotado item a item em `.vibeflow/backlog.md`.
 
 ## Risco conhecido e aceito
 
