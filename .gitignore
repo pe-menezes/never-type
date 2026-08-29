@@ -22,3 +22,7 @@ build/
 
 # whisper.cpp compilado estático (produzido por scripts/build-app.sh)
 vendor/
+
+# Memória operacional do agente que pilota o repo (ponteiros de thread, custo,
+# baseline). Nota de trabalho, não parte do produto.
+.claude/

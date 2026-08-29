@@ -96,6 +96,63 @@ A correção: o tap só copia o buffer e despacha para uma fila serial dona do
 estado; `stop()` usa `queue.sync` como barreira — `removeTap` não garante
 ausência de callback em voo.
 
+### O SDK anota `@Sendable` por baixo do código, e o build quebra sem ninguém mexer nele
+
+O oposto do item anterior: aqui o compilador passou a ver **mais** — numa outra
+máquina, num código que não mudou.
+
+`Resampler.convert(_:)` entregava ao conversor um bloco que capturava uma `var`
+(`supplied`) e o `AVAudioPCMBuffer` de entrada. Compilava na máquina onde o
+projeto nasceu, só com Command Line Tools — e a versão do compilador de lá **não
+foi registrada**, o que é metade desta armadilha. Num clone limpo do mesmo
+commit (`0d7efbe`), com Apple Swift 6.2.3 (swiftlang-6.2.3.3.21), Xcode completo
+e SDK MacOSX26.2, `swift build --build-tests` e `swift test` saem com 1 e três
+erros, medidos em 29/08/2026:
+
+```
+AudioRecorder.swift:90:20: error: capture of 'input' with non-Sendable type 'AVAudioPCMBuffer' in a '@Sendable' closure
+AudioRecorder.swift:84:16: error: reference to captured var 'supplied' in concurrently-executing code
+AudioRecorder.swift:88:13: error: mutation of captured var 'supplied' in concurrently-executing code
+```
+
+A última linha da saída é `error: fatalError`, que não diz nada — a causa está
+acima. E ela é o tipo do bloco. Lido no header,
+`AVFAudio.framework/Headers/AVAudioConverter.h`, linha 154 — a mesma linha no
+`MacOSX26.2.sdk` do Command Line Tools e no `MacOSX.sdk` do Xcode 26.2:
+
+```objc
+typedef AVAudioBuffer * __nullable (^ NS_SWIFT_SENDABLE AVAudioConverterInputBlock)(AVAudioPacketCount inNumberOfPackets, AVAudioConverterInputStatus* outStatus);
+```
+
+O `NS_SWIFT_SENDABLE` está no `MacOSX26.sdk` (26.0) e no 26.2, e **não está no
+`MacOSX15.4.sdk`** — `grep -c "NS_SWIFT_SENDABLE AVAudioConverterInputBlock"`
+dá 0 lá. A anotação entrou com o SDK 26.0, e a documentação pública da Apple
+ainda mostra a `typealias` sem ela: a doc não é o SDK. Em Swift 6 com
+concorrência estrita, cada tipo que a Apple passa a marcar vira erro em código
+que ninguém tocou.
+
+A máquina de origem media macOS 26.2 em 28/08 e compilava. A única explicação
+consistente com os fatos é o Command Line Tools de lá estar com um SDK 15.x, não
+atualizado — e isso é inferência, não medição: ninguém conferiu lá, e a versão
+do compilador de lá continua desconhecida.
+
+O conserto: o buffer fica num `OSAllocatedUnfairLock<AVAudioPCMBuffer?>`
+(`Sendable`, macOS 13+), que o bloco esvazia na primeira chamada e responde
+`.noDataNow` depois. Nada de `@preconcurrency import`, `-strict-concurrency`
+mais frouxo ou `@unchecked Sendable` — cada um desses apaga o diagnóstico em vez
+de tratar o caso, e vermelho honesto vale mais que verde por afrouxar a régua.
+Em qual thread o conversor chama o bloco a Apple não documenta (só que o
+parâmetro é non-escaping); o lock custa nanossegundos e dispensa a resposta.
+
+Depois, medido em 29/08/2026 sobre a mesma máquina e a mesma árvore:
+`swift build --build-tests` sai 0, **0 erros, 6 warnings — os mesmos 6 da
+rodada quebrada, nenhum novo**; `swift test --disable-xctest
+--enable-swift-testing` sai 0, **81 de 81 testes em 12 suítes**, 1,507 s.
+
+**Regra:** "compila aqui" sem `swift --version` e `xcrun --show-sdk-version`
+anotados não é reproduzível. Registre os dois junto com a medição — a Apple move
+a régua de `Sendable` a cada SDK.
+
 ### Consultar-e-decidir não é exclusão mútua
 
 `NSRunningApplication.runningApplications(withBundleIdentifier:)` para garantir

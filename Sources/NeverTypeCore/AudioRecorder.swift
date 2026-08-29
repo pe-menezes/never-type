@@ -1,4 +1,5 @@
 import AVFoundation
+import os
 
 /// Formato que o Whisper consome: 16 kHz, mono.
 public enum AudioSpec {
@@ -79,15 +80,37 @@ public final class Resampler {
     /// resto. Ao subir de 8 kHz para 16 kHz isso transbordava e o excedente era
     /// perdido em silêncio.
     public func convert(_ input: AVAudioPCMBuffer) throws -> [AVAudioPCMBuffer] {
-        var supplied = false
+        // O buffer fica num lock, e não numa `var` capturada pelo bloco.
+        //
+        // Desde o SDK do macOS 26.0, `AVAudioConverterInputBlock` chega ao Swift
+        // como `@Sendable`, e um bloco `@Sendable` não pode capturar `var` nem
+        // `AVAudioPCMBuffer`, que não é `Sendable`. A versão anterior — com
+        // `var supplied` e `input` capturados direto — compilava no toolchain em
+        // que o projeto nasceu (versão não registrada) e dá três erros no SDK
+        // 26.2 com Swift 6.2.3, sem uma linha ter mudado. Ver docs/armadilhas.md.
+        //
+        // `OSAllocatedUnfairLock` é `Sendable` e guarda estado não-Sendable via
+        // `uncheckedState`: o salto fica verificado pelo compilador, sem
+        // `@unchecked Sendable` afirmado por mim. O contrato do bloco não muda —
+        // entrega o buffer uma vez e responde `.noDataNow` nas chamadas seguintes.
+        //
+        // O que a Apple documenta: o parâmetro de `convert(to:error:withInputFrom:)`
+        // é non-escaping, então o bloco só roda enquanto a chamada está em curso.
+        // O que ela não documenta: em qual thread. O lock custa nanossegundos
+        // por chamada e torna a resposta irrelevante.
+        let pending = OSAllocatedUnfairLock<AVAudioPCMBuffer?>(uncheckedState: input)
         return try pump { _, status in
-            if supplied {
+            let buffer = pending.withLockUnchecked { slot -> AVAudioPCMBuffer? in
+                let taken = slot
+                slot = nil
+                return taken
+            }
+            guard let buffer else {
                 status.pointee = .noDataNow
                 return nil
             }
-            supplied = true
             status.pointee = .haveData
-            return input
+            return buffer
         }
     }
 
