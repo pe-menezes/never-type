@@ -421,6 +421,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private static let triggerKey = "trigger"
 
+    /// O commit de que este binário foi compilado, carimbado pelo `build-app.sh`.
+    ///
+    /// Fica no menu para a pergunta "qual versão eu tenho?" ter resposta sem
+    /// terminal — e é o mesmo valor que o `atualizar.sh` compara para decidir se
+    /// há trabalho a fazer.
+    private static var buildCommit: String {
+        Bundle.main.object(forInfoDictionaryKey: "FalaFlowCommit") as? String ?? "desconhecida"
+    }
+
     @objc private func openVocabulary() {
         vocabularyWindow.show()
     }
@@ -526,6 +535,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(disabled("Microfone: \(micAuthorized ? "ok" : "faltando")"))
         menu.addItem(disabled("Acessibilidade: \(acc ? "ok" : "faltando")"))
         menu.addItem(disabled("Modelo: \(modelStatus)"))
+        menu.addItem(disabled("Versão: \(Self.buildCommit)"))
         if let lastTranscript {
             menu.addItem(.separator())
             let copy = NSMenuItem(title: "Copiar última transcrição",

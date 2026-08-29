@@ -38,6 +38,21 @@ Na primeira execução o macOS pede **Microfone** e **Acessibilidade**. As duas 
 necessárias: sem microfone não há áudio, sem Acessibilidade o app não recebe a
 tecla global — e fica mudo, sem erro nenhum, parecendo quebrado.
 
+Terminada a instalação:
+
+```bash
+bash scripts/verificar-instalacao.sh
+```
+
+### Ou peça ao seu agente
+
+Não há binário pré-compilado — cada instalação compila na própria máquina, e é
+isso que dispensa o Gatekeeper. Se você usa um agente de codificação, mande o
+link deste repositório e peça para ele seguir [`docs/INSTALL.md`](docs/INSTALL.md),
+que foi escrito para ser executado por agente: ordem dos passos, o que fazer em
+cada falha conhecida, o que **não** tentar consertar sozinho, e os três momentos
+que exigem você clicando.
+
 ## Uso
 
 Segure **⌘ direito**, fale, solte. O texto aparece onde o cursor estiver.

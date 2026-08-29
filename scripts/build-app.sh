@@ -277,6 +277,16 @@ ok "$(basename "$BIN")"
 
 # --- bundle -------------------------------------------------------------------
 
+# O commit vai carimbado no bundle.
+#
+# Sem isto não há como responder "tem versão nova?" sem recompilar às cegas: o
+# app instalado não carrega nenhuma pista de onde veio. Com o carimbo, comparar
+# o que está em /Applications com o que está no repositório é uma linha.
+#
+# `desconhecido` quando não há git — alguém que baixou um tarball em vez de
+# clonar. O app funciona igual; só o caminho de atualização automática não serve.
+COMMIT="$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || echo desconhecido)"
+
 info "Montando $APP"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
@@ -297,6 +307,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>0.1.0</string>
   <key>CFBundleVersion</key><string>1</string>
+  <key>FalaFlowCommit</key><string>$COMMIT</string>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>LSUIElement</key><true/>
   <key>NSMicrophoneUsageDescription</key>
