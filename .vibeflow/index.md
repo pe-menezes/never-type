@@ -95,8 +95,8 @@ patterns:
 | `scripts/setup-bench.sh` | Constrói os modelos ggml a partir do CDN da OpenAI |
 | `scripts/bench.sh` | Mede latência e qualidade por modelo |
 | `scripts/install.sh` | Instala em `/Applications` e conduz as permissões |
-| `docs/escolha-do-modelo.md` | Qual modelo foi escolhido, com os números |
-| `docs/armadilhas.md` | O que quebrou, e o custo medido de cada erro |
+| `docs/model-choice.md` | Qual modelo foi escolhido, com os números |
+| `docs/pitfalls.md` | O que quebrou, e o custo medido de cada erro |
 
 ## Dependencies (critical only)
 

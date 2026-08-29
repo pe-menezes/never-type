@@ -11,7 +11,7 @@ em quarentena, então o Gatekeeper não aparece.
 
 ## Antes de começar
 
-**Leia `docs/armadilhas.md`.** São os erros já cometidos neste projeto, com o
+**Leia `docs/pitfalls.md`.** São os erros já cometidos neste projeto, com o
 custo medido de cada um. Vários deles são coisas que passariam em revisão de
 código e só apareceram rodando.
 
@@ -87,12 +87,12 @@ assina. **Leva alguns minutos na primeira vez** — é normal, não interrompa.
 `/Applications` sem escrita), instala, verifica a assinatura e confere o modelo.
 Ele só compila se `build/NeverType.app` ainda não existir: depois de mudar código
 — ou de um `git pull` feito à mão —, rode `build-app.sh` antes, senão ele instala
-o `build/` velho sem avisar. O `atualizar.sh` já faz isso na ordem certa.
+o `build/` velho sem avisar. O `update.sh` já faz isso na ordem certa.
 
 Se ele reclamar de `/Applications` sem permissão de escrita: **pare e pergunte**.
 Existe um caminho alternativo (`~/Applications/`), mas ele é uma decisão da
 pessoa, não sua. E se ela escolher esse caminho, saiba que
-`verificar-instalacao.sh` e `atualizar.sh` só conhecem `/Applications` — vão
+`verify-install.sh` e `update.sh` só conhecem `/Applications` — vão
 dizer que o app não está instalado. A verificação passa a ser só o ditado.
 
 ## 3. O modelo
@@ -162,7 +162,7 @@ Não continue sem que a pessoa confirme que fez.
 ## 5. Verificar
 
 ```bash
-bash scripts/verificar-instalacao.sh
+bash scripts/verify-install.sh
 ```
 
 Confere app instalado, assinatura, processo vivo e modelo válido por bytes. Sai
@@ -188,7 +188,7 @@ todos os casos.
 Quando a pessoa disser *"atualiza pra mim"*, é um comando só:
 
 ```bash
-cd nevertype && bash scripts/atualizar.sh
+cd nevertype && bash scripts/update.sh
 ```
 
 Ele confere se há versão nova comparando três coisas — o commit **instalado**

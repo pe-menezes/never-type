@@ -61,7 +61,7 @@ aviso, sem ícone, sem menu. O app simplesmente não abria.
 E regra escrita não é regra aplicada: até 29/08/2026 este parágrafo já existia e
 o piso era 50 MB em três dos cinco lugares que validam o modelo —
 `ModelStore.minimumBytes` no app, `fetch-model.sh` e `setup-bench.sh`; só
-`install.sh` e `verificar-instalacao.sh` usavam 400. Hoje são 400 MB nos cinco,
+`install.sh` e `verify-install.sh` usavam 400. Hoje são 400 MB nos cinco,
 e na bancada o piso é por modelo (130 MB para o `small` de 181 MB). Custo de
 conferir: um `grep` pelo número.
 

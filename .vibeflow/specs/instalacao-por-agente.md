@@ -37,7 +37,7 @@ mãos para clicar nos Ajustes do Sistema.
    `~/Library/Keychains/nevertype-signing.keychain-db`, e qualquer coisa fora do
    repositório e de `~/Library/Application Support/NeverType/`.
 
-3. **`scripts/verificar-instalacao.sh` verifica por estrutura**, e cada
+3. **`scripts/verify-install.sh` verifica por estrutura**, e cada
    verificação falha nomeando a ação de saída:
    - `/Applications/NeverType.app` existe e `codesign --verify --strict` passa;
    - o processo está vivo (`pgrep -x NeverType`);
@@ -62,7 +62,7 @@ mãos para clicar nos Ajustes do Sistema.
 ## Escopo
 
 - `docs/INSTALL.md` (novo)
-- `scripts/verificar-instalacao.sh` (novo)
+- `scripts/verify-install.sh` (novo)
 - `README.md` — o ponteiro para esse caminho
 
 Três arquivos.
@@ -172,5 +172,5 @@ instalação silenciosamente quebrada que o documento existe para evitar.
 - `scripts/fetch-model.sh` — a validação de magic e tamanho que a Decisão 2 reusa
 - `scripts/setup-bench.sh` — o download do CDN da OpenAI, e o comentário que
   explica por que o magic é conferido em hexadecimal
-- `docs/armadilhas.md` — o que o agente deve ler antes de improvisar
+- `docs/pitfalls.md` — o que o agente deve ler antes de improvisar
 - `.vibeflow/patterns/scripts-shell.md` — o contrato do script novo

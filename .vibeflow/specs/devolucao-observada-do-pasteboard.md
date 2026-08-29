@@ -209,7 +209,7 @@ inserção, morre na devolução ou no teto.
 | Gestor de clipboard mal-comportado lê o dado e devolve cedo demais. | O marcador `concealed` é dado concreto e visível sem chamar o provider; gestores bem-comportados param aí. Nesta máquina não há nenhum instalado (varredura de 775 processos e 35 apps), mas o app é para ser instalável por outros — risco documentado, não eliminável. |
 | O provider nunca dispara em algum app que este usuário ainda não testou. | O teto cobre: o comportamento degrada exatamente para o de hoje, que é o que já existe em produção. Nenhuma regressão possível nesse caminho. |
 | Dado prometido muda o que o app de destino cola (formatação, tipo). | DoD 6 exige ditado real no Slack e no terminal, conferindo o texto inserido — não só que "não quebrou". |
-| O provider é chamado numa thread de background e o código toca estado `@MainActor`. | Decisão 3: salto verificado pelo compilador. É a armadilha nº 1 do `docs/armadilhas.md` e tem `@MainActor` explícito no `pending`. |
+| O provider é chamado numa thread de background e o código toca estado `@MainActor`. | Decisão 3: salto verificado pelo compilador. É a armadilha nº 1 do `docs/pitfalls.md` e tem `@MainActor` explícito no `pending`. |
 
 ## References
 

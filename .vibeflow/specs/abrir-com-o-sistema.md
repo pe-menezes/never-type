@@ -69,7 +69,7 @@ registrar, porque depois não existe pergunta que devolva a resposta.
    nenhum XCTest, nenhuma chamada de rede — o check de DoD de rede do projeto
    continua passando no código e no binário.
 
-6. **`docs/inicializacao-com-o-sistema.md` existe com números medidos:** o custo
+6. **`docs/launch-at-login.md` existe com números medidos:** o custo
    do lançamento, e o do primeiro boot com a opção ligada. O número do boot se lê
    no próprio menu, na linha `Modelo: … carga N ms`, depois de reiniciar — o app
    já mede isso sozinho, sem cronômetro e sem terminal. Sem número medido, o
@@ -82,7 +82,7 @@ registrar, porque depois não existe pergunta que devolva a resposta.
 - `Sources/NeverType/main.swift` — o item de menu com checkmark, o caminho de
   `requiresApproval`, e o log de erro.
 - `Tests/NeverTypeCoreTests/LoginItemTests.swift` (novo).
-- `docs/inicializacao-com-o-sistema.md` (novo) — a medição.
+- `docs/launch-at-login.md` (novo) — a medição.
 
 Quatro arquivos. No orçamento de `index.md`.
 

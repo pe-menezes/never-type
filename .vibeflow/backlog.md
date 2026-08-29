@@ -88,7 +88,7 @@ em N ms: M caracteres`), e o doc de `log(_:)` carrega a regra; "Limpar históric
 apaga o JSON **e** o `last.wav`, recusando só com gravação em curso
 (`RecordingSink.removeDestination`, `AudioRecorder.discardLastRecording`, 4
 testes); o doc de `lastRecordingURL()` lista os arquivos; o README ganhou "O que
-fica em disco" e `docs/armadilhas.md` ganhou o caso. Guardar continua deliberado
+fica em disco" e `docs/pitfalls.md` ganhou o caso. Guardar continua deliberado
 e justificado em `TranscriptHistory.swift`.
 
 **Falta você conferir no disco:** dite, abra
@@ -136,7 +136,7 @@ sendo trabalho de subsistema por um ganho que agora se sabe pequeno.
 
 ### L2 · Carregar o modelo sob demanda — P, **depende de L1**
 1,1 GB residentes o tempo todo e **8,3 s de boot frio**, medidos hoje
-(`docs/inicializacao-com-o-sistema.md`). O OpenQuack fica em ~120 MB parado
+(`docs/launch-at-login.md`). O OpenQuack fica em ~120 MB parado
 porque só carrega ao apertar a tecla.
 
 Sozinho isto não compensa — só empurra a espera para o primeiro ditado do dia.
@@ -292,7 +292,7 @@ contagens (`main.swift:526-532`). 12 testes. Commit `43d968f`.
 
 **Falta você usar com termos reais.** O ganho da lista de termos é
 probabilístico e ninguém mediu se o `initial_prompt` melhora o reconhecimento
-nesta máquina. `docs/escolha-do-modelo.md:82` é evidência de que o problema
+nesta máquina. `docs/model-choice.md:82` é evidência de que o problema
 existe, não de que esta solução o resolve — e essa distinção virou a limitação
 honesta no README, no lugar do "não há vocabulário customizado" que estava lá.
 *Evidência:* `CLAUDE.md` (O que falta) · `Vocabulary.swift` · commit `43d968f`

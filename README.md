@@ -23,7 +23,7 @@ cada tarefa. Ver [Segurança](#segurança).
 
 - macOS 14+ em Apple Silicon. O Metal é o que torna a latência viável: sem GPU a
   mesma inferência fica cerca de 11× mais lenta (encode de 1635 ms contra
-  143 ms, medido em `docs/armadilhas.md`), o que inviabiliza o ditado.
+  143 ms, medido em `docs/pitfalls.md`), o que inviabiliza o ditado.
 - Command Line Tools do Xcode. **Xcode completo não é necessário.**
 - `cmake`, só para compilar (`brew install cmake`).
 - **O modelo, 547 MB, que não vem no `.app`.** Fica em
@@ -64,7 +64,7 @@ está quebrado.
 Terminada a instalação:
 
 ```bash
-bash scripts/verificar-instalacao.sh
+bash scripts/verify-install.sh
 ```
 
 ### Ou peça ao seu agente
@@ -182,7 +182,7 @@ lidos do log do app em 2026-08-28: ~614 ms fixos mais ~22 ms por segundo de fala
 31 s.** Os números que circulam neste repositório medem coisas diferentes:
 
 - **~600 ms** é o app com o modelo quente: 599–609 ms num ditado curto
-  (`docs/escolha-do-modelo.md`) e 612–698 ms em quatro ditados reais de 1,5 a
+  (`docs/model-choice.md`) e 612–698 ms em quatro ditados reais de 1,5 a
   19,4 s, lidos do log do app em 2026-08-28 (`.vibeflow/backlog.md`, L1).
 - **~780 ms** é o `whisper-cli` na bancada — 782 ms por ditado de até 30 s, pelo
   cronômetro interno do processo. É o número que escolheu o modelo, não o que
@@ -292,7 +292,7 @@ swift build && swift test
 86 testes em **swift-testing**, não XCTest — o XCTest só existe com o Xcode
 completo instalado, e este projeto compila com Command Line Tools.
 
-Se você vai mexer no código, leia [`docs/armadilhas.md`](docs/armadilhas.md)
+Se você vai mexer no código, leia [`docs/pitfalls.md`](docs/pitfalls.md)
 antes. São os erros que este projeto já cometeu, com o custo medido de cada um —
 vários passariam despercebidos em revisão de código.
 
@@ -306,12 +306,12 @@ vários passariam despercebidos em revisão de código.
 | `scripts/bench.sh` | mede latência e qualidade por modelo |
 | `scripts/build-app.sh` | compila o whisper estático, empacota e assina |
 | `scripts/install.sh` | instala em `/Applications` |
-| `scripts/verificar-instalacao.sh` | confere app, assinatura, processo e modelo por bytes |
-| `scripts/atualizar.sh` | traz o remoto, recompila, reinstala e verifica |
+| `scripts/verify-install.sh` | confere app, assinatura, processo e modelo por bytes |
+| `scripts/update.sh` | traz o remoto, recompila, reinstala e verifica |
 | `docs/INSTALL.md` | roteiro de instalação escrito para um agente executar |
-| `docs/armadilhas.md` | o que quebrou, e por quê |
-| `docs/escolha-do-modelo.md` | por que `large-v3-turbo`, com os números |
-| `docs/inicializacao-com-o-sistema.md` | quanto custa abrir com o sistema, medido |
+| `docs/pitfalls.md` | o que quebrou, e por quê |
+| `docs/model-choice.md` | por que `large-v3-turbo`, com os números |
+| `docs/launch-at-login.md` | quanto custa abrir com o sistema, medido |
 | `fixtures/README.md` | o que gravar para a bancada, e o que não |
 
 ## Licença

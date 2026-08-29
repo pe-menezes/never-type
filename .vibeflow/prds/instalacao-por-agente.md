@@ -85,7 +85,7 @@ O que já existe e o documento aproveita:
 - `scripts/setup-bench.sh` — baixa o checkpoint do CDN da OpenAI e converte,
   ~10 min. Existe porque a HuggingFace é bloqueada na rede corporativa do autor.
 - `scripts/fetch-model.sh` — instala o modelo no lugar certo.
-- `docs/armadilhas.md` — os erros já cometidos, que o agente deve ler antes de
+- `docs/pitfalls.md` — os erros já cometidos, que o agente deve ler antes de
   improvisar.
 
 **Padrões que o documento precisa respeitar:**

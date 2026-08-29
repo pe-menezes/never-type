@@ -452,7 +452,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// O commit de que este binário foi compilado, carimbado pelo `build-app.sh`.
     ///
     /// Fica no menu para a pergunta "qual versão eu tenho?" ter resposta sem
-    /// terminal — e é o mesmo valor que o `atualizar.sh` compara para decidir se
+    /// terminal — e é o mesmo valor que o `update.sh` compara para decidir se
     /// há trabalho a fazer.
     private static var buildCommit: String {
         Bundle.main.object(forInfoDictionaryKey: "NeverTypeCommit") as? String ?? "desconhecida"

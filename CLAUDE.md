@@ -15,7 +15,7 @@ Swift 6 com concorrência estrita, SwiftPM, **sem Xcode** — só Command Line T
 1. `.vibeflow/index.md` — estrutura, orçamento por tarefa, dívidas conhecidas
 2. `.vibeflow/conventions.md` — convenções e a seção **Don'ts**
 3. Os pattern docs relevantes em `.vibeflow/patterns/` (são oito)
-4. `docs/armadilhas.md` — os erros já cometidos, com o custo medido
+4. `docs/pitfalls.md` — os erros já cometidos, com o custo medido
 
 O quarto não é opcional. Vários defeitos deste projeto **passariam em revisão de
 código** e só apareceram rodando — e a maioria fazia o programa relatar que

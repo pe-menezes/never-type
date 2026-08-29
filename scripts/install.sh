@@ -70,10 +70,10 @@ ok "instalado e verificado"
 
 info "Verificando o modelo"
 # 400 MB para um modelo de 547 MB — o mesmo piso de ModelStore.minimumBytes no
-# app, de fetch-model.sh e de verificar-instalacao.sh. Um piso baixo aprovaria
+# app, de fetch-model.sh e de verify-install.sh. Um piso baixo aprovaria
 # um download interrompido: reproduzido com 100 KB do modelo real, o whisper.cpp
 # aceita como "modelo vazio" e o processo morre na primeira inferência (exit 134,
-# ver docs/armadilhas.md).
+# ver docs/pitfalls.md).
 MODEL_MIN_MB=400
 if [ -f "$MODEL_DIR/$MODEL" ] && [ "$(( $(stat -f%z "$MODEL_DIR/$MODEL") / 1048576 ))" -ge "$MODEL_MIN_MB" ]; then
   ok "modelo presente ($(( $(stat -f%z "$MODEL_DIR/$MODEL") / 1048576 )) MB)"

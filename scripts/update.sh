@@ -82,7 +82,7 @@ bash "$REPO_ROOT/scripts/build-app.sh"
 bash "$REPO_ROOT/scripts/install.sh"
 
 info "Conferindo"
-bash "$REPO_ROOT/scripts/verificar-instalacao.sh"
+bash "$REPO_ROOT/scripts/verify-install.sh"
 
 echo
 ok "atualizado para $(defaults read "$PLIST" NeverTypeCommit 2>/dev/null || echo '?')"

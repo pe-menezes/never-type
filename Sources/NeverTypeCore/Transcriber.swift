@@ -24,7 +24,7 @@ public enum ModelStore {
     /// o piso era 50 MB, justificado pelo menor candidato da bancada (181 MB) —
     /// mas o app só carrega `fileName`, que tem 547 MB, e 50 MB aprovava um
     /// download interrompido em qualquer ponto acima disso. O mesmo 400 vale em
-    /// `install.sh`, `verificar-instalacao.sh`, `fetch-model.sh` e, para este
+    /// `install.sh`, `verify-install.sh`, `fetch-model.sh` e, para este
     /// modelo, em `setup-bench.sh`; mudar aqui exige mudar lá.
     public static let minimumBytes = 400 * 1024 * 1024
 

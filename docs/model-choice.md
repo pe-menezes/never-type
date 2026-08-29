@@ -101,4 +101,4 @@ bash scripts/bench.sh                        # mede e imprime a tabela
 ```
 
 A bancada aborta se a inferência cair para CPU — um tempo medido assim é ~11×
-maior e não representa o app. Ver `docs/armadilhas.md`.
+maior e não representa o app. Ver `docs/pitfalls.md`.

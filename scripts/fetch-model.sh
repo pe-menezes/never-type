@@ -13,10 +13,10 @@ DEST_DIR="$HOME/Library/Application Support/NeverType/models"
 DEST="$DEST_DIR/$MODEL"
 GGML_MAGIC_HEX=6c6d6767
 # 400 MB para um modelo de 547 MB — o mesmo piso de ModelStore.minimumBytes no
-# app, de install.sh e de verificar-instalacao.sh. Até 29/08/2026 era 50, o que
+# app, de install.sh e de verify-install.sh. Até 29/08/2026 era 50, o que
 # aprovava um download interrompido em qualquer ponto acima disso: o magic está
 # certo num arquivo truncado, e o whisper.cpp aceita o truncado como "modelo
-# vazio" e morre na primeira inferência (docs/armadilhas.md).
+# vazio" e morre na primeira inferência (docs/pitfalls.md).
 MODEL_MIN_MB=400
 
 info() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }

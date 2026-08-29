@@ -87,7 +87,7 @@ public final class Resampler {
         // `AVAudioPCMBuffer`, que não é `Sendable`. A versão anterior — com
         // `var supplied` e `input` capturados direto — compilava no toolchain em
         // que o projeto nasceu (versão não registrada) e dá três erros no SDK
-        // 26.2 com Swift 6.2.3, sem uma linha ter mudado. Ver docs/armadilhas.md.
+        // 26.2 com Swift 6.2.3, sem uma linha ter mudado. Ver docs/pitfalls.md.
         //
         // `OSAllocatedUnfairLock` é `Sendable` e guarda estado não-Sendable via
         // `uncheckedState`: o salto fica verificado pelo compilador, sem

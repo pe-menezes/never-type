@@ -20,7 +20,7 @@ CDN="https://openaipublic.azureedge.net/main/whisper/models"
 # Candidatos da spec. Turbo é o favorito; small é o piso de latência.
 # Formato: nome-ggml : nome-openai : sha256 (que também é o path no CDN) : quant : piso em MB
 #
-# O piso é por modelo e proporcional ao artefato real (docs/armadilhas.md): o
+# O piso é por modelo e proporcional ao artefato real (docs/pitfalls.md): o
 # magic está certo num arquivo truncado, então só o tamanho pega conversão ou
 # quantização interrompida. Tamanhos registrados neste repositório: turbo-q5_0
 # tem 547 MB (piso 400 — o mesmo que o app exige em ModelStore.minimumBytes) e

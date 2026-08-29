@@ -16,7 +16,7 @@ verificação antes de destruir. Um script novo que não siga isso destoa na hor
 ## Where
 
 `scripts/setup-bench.sh`, `bench.sh`, `record-fixture.sh`, `build-app.sh`,
-`fetch-model.sh`, `install.sh`, `verificar-instalacao.sh`, `atualizar.sh` — os
+`fetch-model.sh`, `install.sh`, `verify-install.sh`, `update.sh` — os
 oito, sem exceção.
 
 ## The Pattern

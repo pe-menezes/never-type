@@ -24,7 +24,7 @@ GGML_MAGIC_HEX=6c6d6767
 # 400 MB para um modelo de 547 MB — o mesmo piso de ModelStore.minimumBytes no
 # app, de install.sh e de fetch-model.sh. Um piso baixo aprovaria download
 # interrompido: reproduzido com 100 KB do modelo real, o whisper.cpp aceita como
-# "modelo vazio" e o processo morre na primeira inferência (docs/armadilhas.md).
+# "modelo vazio" e o processo morre na primeira inferência (docs/pitfalls.md).
 MODEL_MIN_MB=400
 
 info() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }

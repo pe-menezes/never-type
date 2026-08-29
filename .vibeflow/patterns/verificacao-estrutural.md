@@ -109,6 +109,6 @@ vendor_intact() {
 - **Piso de 50 MB para um modelo de 547 MB** — aprovava download truncado, e foi
   o piso do app (`ModelStore.minimumBytes`), do `fetch-model.sh` e do
   `setup-bench.sh` até 29/08/2026, com a regra certa já escrita em
-  `docs/armadilhas.md`. Hoje são 400 MB nos cinco lugares; na bancada, por
+  `docs/pitfalls.md`. Hoje são 400 MB nos cinco lugares; na bancada, por
   modelo. O piso precisa ser proporcional ao artefato real, não a um mínimo
   teórico — e a regra escrita se confere com `grep` pelo número.
