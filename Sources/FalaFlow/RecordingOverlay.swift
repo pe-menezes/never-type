@@ -1,6 +1,17 @@
 import AppKit
 import FalaFlowCore
 
+/// Os três estados que a pílula precisa distinguir.
+///
+/// Antes existiam dois — parado e gravando — e a transcrição acontecia dentro do
+/// "parado": você soltava a tecla, tudo voltava ao repouso, e passavam ~600 ms
+/// em que o app estava trabalhando sem nada na tela dizer isso.
+enum OverlayState {
+    case idle
+    case recording
+    case transcribing
+}
+
 /// Barras que sobem com o que o microfone está ouvindo.
 ///
 /// O ponto vermelho parado que existia aqui antes provava que o app estava
@@ -12,9 +23,17 @@ final class LevelMeter: NSView {
     private static let barCount = 18
     private var levels = [CGFloat](repeating: 0, count: barCount)
 
-    /// Enquanto está parado o medidor não mede nada, e barras achatadas
-    /// pareceriam microfone mudo. Em repouso ele mostra um traço neutro.
-    var isLive = false { didSet { needsDisplay = true } }
+    /// Fase da onda que corre durante a transcrição. Só existe nesse estado.
+    private var phase: CGFloat = 0
+    private var pulse: Timer?
+
+    var state: OverlayState = .idle {
+        didSet {
+            guard state != oldValue else { return }
+            state == .transcribing ? startPulse() : stopPulse()
+            needsDisplay = true
+        }
+    }
 
     /// Empurra o nível novo e rola os anteriores para a esquerda, para o
     /// desenho virar a forma da fala em vez de um valor instantâneo piscando.
@@ -38,7 +57,38 @@ final class LevelMeter: NSView {
     /// Sobre a pílula escura o verde claro anterior brilhava demais e puxava
     /// atenção de quem estava escrevendo — o indicador precisa ser notado sem
     /// disputar o foco.
-    private static let live = NSColor(srgbRed: 0.13, green: 0.68, blue: 0.40, alpha: 1)
+    static let live = NSColor(srgbRed: 0.13, green: 0.68, blue: 0.40, alpha: 1)
+
+    /// Azul para transcrever: cor diferente, e não verde mais fraco.
+    ///
+    /// "Gravando em silêncio" e "transcrevendo" precisam ser distinguíveis num
+    /// relance — se a transcrição fosse um verde apagado, ela ficaria igual ao
+    /// silêncio durante a gravação, que é justamente o par que o medidor de
+    /// nível existe para separar.
+    static let working = NSColor(srgbRed: 0.36, green: 0.60, blue: 0.92, alpha: 1)
+
+    private func startPulse() {
+        stopPulse()
+        phase = 0
+        // 30 fps. A onda existe para dizer "estou trabalhando", e uma animação
+        // travada diria o contrário do que ela existe para dizer.
+        //
+        // `assumeIsolated` aqui é o caso legítimo: o Timer foi agendado no run
+        // loop principal por este método, que já é `@MainActor`.
+        pulse = Timer.scheduledTimer(withTimeInterval: 1.0 / 30, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.phase += 0.045
+                if self.phase > 1 { self.phase -= 1 }
+                self.needsDisplay = true
+            }
+        }
+    }
+
+    private func stopPulse() {
+        pulse?.invalidate()
+        pulse = nil
+    }
 
     override func draw(_ dirtyRect: NSRect) {
         let barWidth: CGFloat = 2.5
@@ -48,31 +98,47 @@ final class LevelMeter: NSView {
         // silêncio não distingue "sem som" de "sem medidor".
         let minHeight: CGFloat = 2.5
 
-        for (i, level) in levels.enumerated() {
-            let height = max(minHeight, level * maxHeight)
+        for i in 0..<Self.barCount {
+            let height: CGFloat
+            let color: NSColor
+
+            switch state {
+            case .transcribing:
+                // Onda que corre da esquerda para a direita, sem relação com o
+                // áudio: aqui não entra mais som, e mostrar níveis congelados
+                // sugeriria que ainda entra.
+                let position = phase * CGFloat(Self.barCount + 6) - 3
+                let distance = CGFloat(i) - position
+                let bump = exp(-(distance * distance) / 6)
+                height = max(minHeight, bump * maxHeight * 0.85)
+                color = Self.working.withAlphaComponent(0.35 + 0.55 * bump)
+
+            case .recording:
+                let level = levels[i]
+                height = max(minHeight, level * maxHeight)
+                // A intensidade acompanha o volume junto com a altura: fala
+                // baixa fica visivelmente mais apagada, não só mais curta.
+                // Em silêncio, verde apagado — antes isto era cinza igual ao
+                // repouso, e segurar a tecla sem falar era idêntico a não ter
+                // apertado nada.
+                color = Self.live.withAlphaComponent(level > 0 ? 0.6 + 0.4 * level : 0.35)
+
+            case .idle:
+                height = minHeight
+                color = NSColor.white.withAlphaComponent(0.16)
+            }
+
             let rect = NSRect(x: CGFloat(i) * (barWidth + gap),
                               y: (maxHeight - height) / 2,
                               width: barWidth,
                               height: height)
-            if isLive && level > 0 {
-                // A intensidade acompanha o volume junto com a altura: fala
-                // baixa fica visivelmente mais apagada, não só mais curta.
-                Self.live.withAlphaComponent(0.6 + 0.4 * level).setFill()
-            } else if isLive {
-                // Gravando e em silêncio: verde apagado.
-                //
-                // Antes isto era cinza igual ao repouso, e segurar a tecla sem
-                // falar era visualmente idêntico a não ter apertado nada — não
-                // dava para saber se a gravação tinha começado.
-                Self.live.withAlphaComponent(0.35).setFill()
-            } else {
-                // Em repouso, neutro. Silêncio durante a gravação e app parado
-                // são estados diferentes e não podem ter o mesmo desenho.
-                NSColor.white.withAlphaComponent(0.16).setFill()
-            }
+            color.setFill()
             NSBezierPath(roundedRect: rect, xRadius: barWidth / 2, yRadius: barWidth / 2).fill()
         }
     }
+
+    // Sem `deinit { stopPulse() }`: `deinit` é nonisolated e não pode tocar
+    // estado da main actor. O medidor vive enquanto o app vive.
 }
 
 /// O corpo da pílula: desenha o fundo e carrega o arrasto.
@@ -83,10 +149,11 @@ final class LevelMeter: NSView {
 @MainActor
 final class PillView: NSView {
     var onDragEnd: (() -> Void)?
-    /// Segunda pista do estado de gravação, junto com a cor das barras: em
-    /// silêncio absoluto as barras quase não aparecem, e a borda continua
-    /// dizendo que a tecla está sendo segurada.
-    var isLive = false { didSet { needsDisplay = true } }
+
+    /// Segunda pista do estado, junto com as barras: em silêncio absoluto as
+    /// barras quase não aparecem, e a borda continua dizendo o que acontece.
+    var state: OverlayState = .idle { didSet { needsDisplay = true } }
+
     private var dragOrigin: NSPoint?
     private var windowOrigin: NSPoint?
 
@@ -101,10 +168,15 @@ final class PillView: NSView {
         // fundo.
         NSColor(srgbRed: 0.09, green: 0.10, blue: 0.12, alpha: 0.92).setFill()
         path.fill()
-        if isLive {
-            NSColor(srgbRed: 0.13, green: 0.68, blue: 0.40, alpha: 0.85).setStroke()
+
+        switch state {
+        case .recording:
+            LevelMeter.live.withAlphaComponent(0.85).setStroke()
             path.lineWidth = 1.5
-        } else {
+        case .transcribing:
+            LevelMeter.working.withAlphaComponent(0.85).setStroke()
+            path.lineWidth = 1.5
+        case .idle:
             NSColor.white.withAlphaComponent(0.09).setStroke()
             path.lineWidth = 1
         }
@@ -130,7 +202,7 @@ final class PillView: NSView {
     }
 }
 
-/// Indicador flutuante de gravação, sempre visível.
+/// Indicador flutuante, sempre visível.
 ///
 /// Existe porque o ícone da menu bar não basta: em tela cheia — o modo normal de
 /// uso de Slack, VS Code e Chrome — a menu bar fica oculta, e com ela o único
@@ -150,30 +222,41 @@ final class RecordingOverlay {
     private static let snapDistance: CGFloat = 48
 
     func showIdle() {
+        apply(.idle)
+        panel?.orderFrontRegardless()
+    }
+
+    /// Gravando: a tecla foi pressionada.
+    func show() {
+        meter?.reset()
+        apply(.recording)
+        panel?.orderFrontRegardless()
+    }
+
+    /// Transcrevendo: a tecla foi solta e o modelo está trabalhando.
+    ///
+    /// Sem este estado, soltar a tecla devolvia tudo ao repouso e o app ficava
+    /// ~600 ms trabalhando sem nada na tela dizer isso — e num ditado longo a
+    /// zona morta é maior.
+    func transcribing() {
+        apply(.transcribing)
+    }
+
+    /// Volta ao repouso. Não some da tela: sumir era o que fazia "app morto" e
+    /// "app parado" terem a mesma aparência — nenhuma.
+    func hide() {
+        meter?.reset()
+        apply(.idle)
+    }
+
+    private func apply(_ state: OverlayState) {
         let panel = self.panel ?? makePanel()
         self.panel = panel
-        meter?.isLive = false
-        pill?.isLive = false
-        meter?.reset()
-        panel.orderFrontRegardless()
+        meter?.state = state
+        pill?.state = state
     }
 
-    func show() {
-        showIdle()
-        meter?.reset()
-        meter?.isLive = true
-        pill?.isLive = true
-    }
-
-    func hide() {
-        // Não some da tela: volta ao repouso. Sumir era o que fazia "app morto"
-        // e "app parado" terem a mesma aparência — nenhuma.
-        meter?.isLive = false
-        pill?.isLive = false
-        meter?.reset()
-    }
-
-    /// Chamado a cada buffer do microfone, ~12 vezes por segundo.
+    /// Chamado a cada fatia do buffer do microfone.
     func push(level: Float) {
         meter?.push(level)
     }
@@ -202,7 +285,6 @@ final class RecordingOverlay {
         self.pill = pill
 
         let meter = LevelMeter(frame: NSRect(x: 16, y: 7, width: 76, height: 18))
-        // O medidor não intercepta o clique: quem arrasta é a pílula inteira.
         meter.autoresizingMask = [.minXMargin, .maxXMargin]
         self.meter = meter
 
@@ -221,8 +303,8 @@ final class RecordingOverlay {
     /// em que ela estava — e uma pílula invisível não prova nada.
     private func restoredOrigin(for size: NSSize) -> NSPoint {
         let visible = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
-        let saved = UserDefaults.standard.string(forKey: Self.originKey).map(NSPointFromString)
         let physical = NSScreen.main?.frame ?? visible
+        let saved = UserDefaults.standard.string(forKey: Self.originKey).map(NSPointFromString)
         let candidate = saved ?? NSPoint(x: physical.maxX - size.width - 12, y: physical.minY + 12)
         let onScreen = NSScreen.screens.contains {
             $0.visibleFrame.intersects(NSRect(origin: candidate, size: size))

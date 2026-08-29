@@ -261,21 +261,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         case .released:
             let url = recorder.stop()
-            overlay.hide()
             render(.idle)
-            guard url != nil else { return }
+            guard url != nil else {
+                overlay.hide()
+                return
+            }
+            // A pílula segue na tela dizendo "trabalhando" até o texto sair.
+            // Antes ela voltava ao repouso aqui, e o app passava a transcrição
+            // inteira sem nenhum sinal do que estava acontecendo.
+            overlay.transcribing()
             let samples = recorder.lastSamples
             log("gravado: \(samples.count) amostras (\(String(format: "%.1f", Double(samples.count) / 16_000)) s)")
             Task {
                 switch await self.transcription.transcribe(samples) {
                 case .success(let result):
                     self.log("transcrito em \(result.ms) ms → \(result.text)")
+                    self.overlay.hide()
                     self.deliver(result.text)
                 case .failure(let failure):
                     // Sinal visível: sem isto o ditado sumia em silêncio — o
                     // ícone já voltou ao normal, o app não tem janela, e o
                     // stderr não vai a lugar nenhum quando aberto pelo Finder.
                     self.log("TRANSCRIÇÃO FALHOU: \(failure.reason)")
+                    self.overlay.hide()
                     self.render(.blocked)
                 }
             }
