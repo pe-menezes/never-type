@@ -1,6 +1,6 @@
 import Foundation
 
-/// Uma troca literal aplicada depois da transcrição.
+/// A literal swap applied after transcription.
 public struct Replacement: Codable, Equatable, Sendable {
     public var from: String
     public var to: String
@@ -11,18 +11,18 @@ public struct Replacement: Codable, Equatable, Sendable {
     }
 }
 
-/// As duas listas que corrigem o que o modelo escreve — e são duas de
-/// propósito, porque resolvem problemas diferentes.
+/// The two lists that correct what the model writes — and there are two on
+/// purpose, because they solve different problems.
 ///
-/// **Termos** viram o `initial_prompt` do whisper: dica de reconhecimento, que
-/// ajuda o modelo a *ouvir* a palavra. É probabilístico e não garante nada, mas
-/// influencia também pontuação e formatação.
+/// **Terms** become whisper's `initial_prompt`: a recognition hint, which helps
+/// the model *hear* the word. It is probabilistic and guarantees nothing, but it
+/// also influences punctuation and formatting.
 ///
-/// **Substituições** rodam depois, sobre o texto pronto. São determinísticas:
-/// "saiu X, eu queria Y" sempre vira Y. É o que resolve o caso de uma palavra
-/// que o modelo consistentemente troca por outra parecida.
+/// **Replacements** run afterwards, on the finished text. They are deterministic:
+/// "X came out, I wanted Y" always becomes Y. This is what solves the case of a
+/// word the model consistently swaps for a similar one.
 ///
-/// Misturar as duas numa lista só seria prometer garantia onde não existe.
+/// Mixing the two into one list would promise a guarantee where none exists.
 public final class Vocabulary {
     private let url: URL
 
@@ -34,7 +34,7 @@ public final class Vocabulary {
         load()
     }
 
-    // MARK: - Edição
+    // MARK: - Editing
 
     public func setTerms(_ value: [String]) {
         terms = value.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
@@ -45,29 +45,29 @@ public final class Vocabulary {
         replacements = value
             .map { Replacement(from: $0.from.trimmingCharacters(in: .whitespaces),
                                to: $0.to.trimmingCharacters(in: .whitespaces)) }
-            // Origem vazia casaria com tudo; destino vazio é apagar palavra, e
-            // quem quer isso escreve a substituição inteira.
+            // An empty source would match everything; an empty target is
+            // deleting a word, and whoever wants that writes out the whole replacement.
             .filter { !$0.from.isEmpty && !$0.to.isEmpty }
         save()
     }
 
-    // MARK: - Uso
+    // MARK: - Use
 
-    /// O `initial_prompt` do whisper, ou `nil` quando não há termos.
+    /// Whisper's `initial_prompt`, or `nil` when there are no terms.
     ///
-    /// Frase com vírgulas, e não lista crua: o prompt é interpretado como texto
-    /// que *precede* a fala, então ele funciona melhor parecendo linguagem.
+    /// A sentence with commas, not a raw list: the prompt is interpreted as text
+    /// that *precedes* the speech, so it works better when it looks like language.
     public var prompt: String? {
         guard !terms.isEmpty else { return nil }
         return terms.joined(separator: ", ") + "."
     }
 
-    /// Aplica as substituições no texto transcrito.
+    /// Applies the replacements to the transcribed text.
     ///
-    /// Casa palavra inteira e ignora maiúsculas na busca, mas escreve exatamente
-    /// o que foi pedido no destino — trocar "pix" por "Pix" é justamente um dos
-    /// usos. Sem a fronteira de palavra, trocar "ia" por "IA" estragaria
-    /// "família".
+    /// Matches whole words and ignores case when searching, but writes exactly
+    /// what was asked for in the target — swapping "pix" for "Pix" is precisely
+    /// one of the uses. Without the word boundary, swapping "ia" for "IA" would
+    /// wreck "família".
     public func apply(to text: String) -> String {
         var output = text
         for replacement in replacements {
@@ -81,7 +81,7 @@ public final class Vocabulary {
         return output
     }
 
-    // MARK: - Disco
+    // MARK: - Disk
 
     private struct Stored: Codable {
         var terms: [String]
@@ -99,8 +99,8 @@ public final class Vocabulary {
         try? FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         guard let data = try? JSONEncoder().encode(Stored(terms: terms, replacements: replacements)) else { return }
-        // Atômico: escrita interrompida deixaria um JSON truncado, e a lista
-        // inteira sumiria na próxima abertura.
+        // Atomic: an interrupted write would leave a truncated JSON, and the
+        // whole list would vanish on the next launch.
         try? data.write(to: url, options: .atomic)
     }
 }

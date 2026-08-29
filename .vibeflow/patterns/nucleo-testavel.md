@@ -44,7 +44,7 @@ public static func insert(_ text: String,
     ...
     if (secureInput ?? IsSecureEventInputEnabled)() { ... }
     ...
-    return (paste ?? postCommandV)() ? .inserted : .failed("não consegui enviar ⌘V")
+    return (paste ?? postCommandV)() ? .inserted : .failed("could not send ⌘V")
 }
 ```
 

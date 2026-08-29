@@ -119,4 +119,4 @@ if (secureInput ?? IsSecureEventInputEnabled)() {
   qualquer gestor de clipboard (declarado no README desde 29/08/2026).
 - **Log com o texto da transcrição.** `nevertype.log` guardou o texto de cada
   ditado da sessão até 29/08/2026, fora de "Limpar histórico" e de qualquer doc.
-  Hoje a linha é `transcrito em N ms: M caracteres`.
+  Hoje a linha é `transcribed in N ms: M chars`.

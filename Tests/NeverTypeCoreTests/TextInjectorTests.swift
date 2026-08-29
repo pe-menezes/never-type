@@ -3,12 +3,12 @@ import Carbon.HIToolbox
 import Testing
 @testable import NeverTypeCore
 
-/// O contrato central: mexemos no pasteboard da pessoa, então devolvemos o que
-/// estava lá — inclusive quando a inserção falha no meio.
+/// The central contract: we touch the user's pasteboard, so we give back what was
+/// there — including when the insertion fails midway.
 ///
-/// Usa um pasteboard nomeado próprio, nunca o `.general`: um teste que sequestra
-/// a área de transferência de quem está rodando a suíte é hostil.
-@Suite("Inserção de texto no cursor")
+/// Uses its own named pasteboard, never `.general`: a test that hijacks the
+/// clipboard of whoever is running the suite is hostile.
+@Suite("Text insertion at the cursor")
 @MainActor
 struct TextInjectorTests {
 
@@ -16,165 +16,165 @@ struct TextInjectorTests {
         NSPasteboard(name: NSPasteboard.Name("com.nevertype.tests.\(UUID().uuidString)"))
     }
 
-    @Test("o conteúdo anterior volta depois da inserção")
+    @Test("the previous contents come back after the insertion")
     func restoresPreviousContent() async throws {
         let pb = scratchPasteboard()
         defer { pb.releaseGlobally() }
 
         pb.clearContents()
-        pb.setString("o que estava lá antes", forType: .string)
+        pb.setString("what was there before", forType: .string)
 
-        let outcome = TextInjector.insert("texto ditado", pasteboard: pb, paste: { true })
+        let outcome = TextInjector.insert("dictated text", pasteboard: pb, paste: { true })
         #expect(outcome == .inserted)
-        #expect(pb.string(forType: .string) == "texto ditado", "durante a inserção o texto é o ditado")
+        #expect(pb.string(forType: .string) == "dictated text", "during the insertion the text is the dictation")
 
         try await Task.sleep(for: .seconds(TextInjector.restoreDelay + 0.4))
-        #expect(pb.string(forType: .string) == "o que estava lá antes",
-                "o conteúdo anterior tem que voltar")
+        #expect(pb.string(forType: .string) == "what was there before",
+                "the previous contents have to come back")
     }
 
-    /// O caminho que mais importa: se a colagem falha, o pasteboard não pode
-    /// ficar com o texto ditado no lugar do que a pessoa tinha copiado.
-    @Test("devolve o conteúdo mesmo quando a colagem falha")
+    /// The path that matters most: if the paste fails, the pasteboard cannot be
+    /// left with the dictated text in place of what the user had copied.
+    @Test("restores the contents even when the paste fails")
     func restoresEvenWhenPasteFails() async throws {
         let pb = scratchPasteboard()
         defer { pb.releaseGlobally() }
 
         pb.clearContents()
-        pb.setString("conteúdo importante", forType: .string)
+        pb.setString("important content", forType: .string)
 
-        let outcome = TextInjector.insert("texto ditado", pasteboard: pb, paste: { false })
-        #expect(outcome == .failed("não consegui enviar ⌘V"))
+        let outcome = TextInjector.insert("dictated text", pasteboard: pb, paste: { false })
+        #expect(outcome == .failed("could not send ⌘V"))
 
         try await Task.sleep(for: .seconds(TextInjector.restoreDelay + 0.4))
-        #expect(pb.string(forType: .string) == "conteúdo importante",
-                "falhar em colar não pode custar o clipboard da pessoa")
+        #expect(pb.string(forType: .string) == "important content",
+                "failing to paste cannot cost the user their clipboard")
     }
 
-    /// Guardar só a string perderia imagem, arquivo, HTML — tudo que não fosse
-    /// texto simples.
-    @Test("preserva tipos que não são texto")
+    /// Keeping only the string would lose images, files, HTML — everything that
+    /// is not plain text.
+    @Test("preserves types that are not text")
     func preservesNonTextTypes() async throws {
         let pb = scratchPasteboard()
         defer { pb.releaseGlobally() }
 
-        let html = "<b>negrito</b>"
+        let html = "<b>bold</b>"
         pb.clearContents()
         let original = NSPasteboardItem()
-        original.setString("texto simples", forType: .string)
+        original.setString("plain text", forType: .string)
         original.setString(html, forType: .html)
         #expect(pb.writeObjects([original]))
 
-        TextInjector.insert("ditado", pasteboard: pb, paste: { true })
+        TextInjector.insert("dictation", pasteboard: pb, paste: { true })
         try await Task.sleep(for: .seconds(TextInjector.restoreDelay + 0.4))
 
-        #expect(pb.string(forType: .string) == "texto simples")
-        #expect(pb.string(forType: .html) == html, "o HTML tem que sobreviver")
+        #expect(pb.string(forType: .string) == "plain text")
+        #expect(pb.string(forType: .html) == html, "the HTML has to survive")
     }
 
-    @Test("pasteboard vazio antes continua vazio depois")
+    @Test("a pasteboard empty before stays empty after")
     func emptyStaysEmpty() async throws {
         let pb = scratchPasteboard()
         defer { pb.releaseGlobally() }
         pb.clearContents()
 
-        TextInjector.insert("ditado", pasteboard: pb, paste: { true })
+        TextInjector.insert("dictation", pasteboard: pb, paste: { true })
         try await Task.sleep(for: .seconds(TextInjector.restoreDelay + 0.4))
 
-        #expect(pb.string(forType: .string) == nil, "não pode sobrar o texto ditado")
+        #expect(pb.string(forType: .string) == nil, "the dictated text cannot be left over")
     }
 
-    /// Gestores de clipboard bem-comportados respeitam esta marca e não gravam o
-    /// item no histórico. Sem ela, cada ditado sobreviveria à restauração dentro
-    /// do Raycast ou do Maccy.
-    @Test("o item é marcado como oculto para gestores de clipboard")
+    /// Well-behaved clipboard managers honor this mark and do not record the item
+    /// in their history. Without it, every dictation would survive the
+    /// restoration inside Raycast or Maccy.
+    @Test("the item is marked as concealed for clipboard managers")
     func marksItemConcealed() {
         let pb = scratchPasteboard()
         defer { pb.releaseGlobally() }
         pb.clearContents()
 
-        TextInjector.insert("segredo ditado", pasteboard: pb, paste: { true })
+        TextInjector.insert("dictated secret", pasteboard: pb, paste: { true })
         let types = pb.pasteboardItems?.first?.types ?? []
         #expect(types.contains(TextInjector.concealed))
     }
 
-    /// A corrida que a auditoria reproduziu: dois ditados em menos que o atraso
-    /// de restauração deixavam o texto do primeiro no lugar do conteúdo da
-    /// pessoa, permanentemente.
-    @Test("dois ditados seguidos devolvem o conteúdo original, não o do primeiro")
+    /// The race the audit reproduced: two dictations less than the restore delay
+    /// apart left the first one's text in place of the user's contents,
+    /// permanently.
+    @Test("two dictations in a row restore the original contents, not the first one's")
     func consecutiveInsertsRestoreTheOriginal() async throws {
         let pb = scratchPasteboard()
         defer { pb.releaseGlobally() }
 
         pb.clearContents()
-        pb.setString("conteúdo original da pessoa", forType: .string)
+        pb.setString("the user's original content", forType: .string)
 
-        TextInjector.insert("primeiro ditado", pasteboard: pb, paste: { true })
+        TextInjector.insert("first dictation", pasteboard: pb, paste: { true })
         try await Task.sleep(for: .seconds(0.25))
-        TextInjector.insert("segundo ditado", pasteboard: pb, paste: { true })
-        #expect(pb.string(forType: .string) == "segundo ditado")
+        TextInjector.insert("second dictation", pasteboard: pb, paste: { true })
+        #expect(pb.string(forType: .string) == "second dictation")
 
         try await Task.sleep(for: .seconds(TextInjector.restoreDelay + 0.6))
-        #expect(pb.string(forType: .string) == "conteúdo original da pessoa",
-                "veio \(pb.string(forType: .string) ?? "nil") — o texto do primeiro ditado não pode sobrar")
+        #expect(pb.string(forType: .string) == "the user's original content",
+                "got \(pb.string(forType: .string) ?? "nil") — the first dictation's text cannot be left over")
     }
 
-    /// A restauração era incondicional: qualquer coisa que a pessoa copiasse nos
-    /// 600 ms seguintes a um ditado era revertida.
-    @Test("não desfaz o que a pessoa copiou depois do ditado")
+    /// The restoration was unconditional: anything the user copied in the 600 ms
+    /// after a dictation was reverted.
+    @Test("does not undo what the user copied after the dictation")
     func doesNotClobberLaterCopy() async throws {
         let pb = scratchPasteboard()
         defer { pb.releaseGlobally() }
 
         pb.clearContents()
-        pb.setString("antigo", forType: .string)
+        pb.setString("old", forType: .string)
 
-        TextInjector.insert("ditado", pasteboard: pb, paste: { true })
+        TextInjector.insert("dictation", pasteboard: pb, paste: { true })
         try await Task.sleep(for: .seconds(0.2))
 
-        // A pessoa copia outra coisa antes de a restauração disparar.
+        // The user copies something else before the restoration fires.
         pb.clearContents()
-        pb.setString("acabei de copiar isto", forType: .string)
+        pb.setString("just copied this", forType: .string)
 
         try await Task.sleep(for: .seconds(TextInjector.restoreDelay + 0.6))
-        #expect(pb.string(forType: .string) == "acabei de copiar isto",
-                "a restauração não pode atropelar uma cópia mais nova")
+        #expect(pb.string(forType: .string) == "just copied this",
+                "the restoration cannot run over a newer copy")
     }
 
-    /// Com a entrada segura ligada o app não cola — então o texto tem que ficar
-    /// no pasteboard, que é o que a spec pede. A versão anterior retornava antes
-    /// de tocar no pasteboard e não deixava nada.
-    @Test("entrada segura deixa o texto no pasteboard em vez de colar")
+    /// With secure input on the app does not paste — so the text has to stay on
+    /// the pasteboard, which is what the spec asks for. The previous version
+    /// returned before touching the pasteboard and left nothing.
+    @Test("secure input leaves the text on the pasteboard instead of pasting")
     func secureInputLeavesTextBehind() async throws {
         let pb = scratchPasteboard()
         defer { pb.releaseGlobally() }
         pb.clearContents()
-        pb.setString("conteúdo anterior", forType: .string)
+        pb.setString("previous content", forType: .string)
 
         var pasted = false
-        let outcome = TextInjector.insert("texto ditado", pasteboard: pb,
+        let outcome = TextInjector.insert("dictated text", pasteboard: pb,
                                           paste: { pasted = true; return true },
                                           secureInput: { true })
 
         #expect(outcome == .blockedBySecureInput)
-        #expect(!pasted, "com a entrada segura ligada o app não posta o ⌘V")
-        #expect(pb.string(forType: .string) == "texto ditado",
-                "o texto tem que ficar disponível para a pessoa colar")
+        #expect(!pasted, "with secure input on the app does not post the ⌘V")
+        #expect(pb.string(forType: .string) == "dictated text",
+                "the text has to stay available for the user to paste")
 
-        // Sem colagem não há restauração: o texto precisa permanecer.
+        // Without a paste there is no restoration: the text needs to remain.
         try await Task.sleep(for: .seconds(TextInjector.restoreDelay + 0.4))
-        #expect(pb.string(forType: .string) == "texto ditado",
-                "sem colar, o texto não pode ser apagado por uma restauração")
+        #expect(pb.string(forType: .string) == "dictated text",
+                "without pasting, the text cannot be erased by a restoration")
     }
 
-    @Test("texto vazio não mexe no pasteboard")
+    @Test("empty text does not touch the pasteboard")
     func emptyTextIsNoop() {
         let pb = scratchPasteboard()
         defer { pb.releaseGlobally() }
         pb.clearContents()
-        pb.setString("intacto", forType: .string)
+        pb.setString("untouched", forType: .string)
 
-        #expect(TextInjector.insert("", pasteboard: pb, paste: { true }) == .failed("texto vazio"))
-        #expect(pb.string(forType: .string) == "intacto")
+        #expect(TextInjector.insert("", pasteboard: pb, paste: { true }) == .failed("empty text"))
+        #expect(pb.string(forType: .string) == "untouched")
     }
 }

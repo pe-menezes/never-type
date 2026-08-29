@@ -1,32 +1,33 @@
 import AppKit
 import Carbon.HIToolbox
 
-/// Insere texto onde o cursor estiver, via área de transferência.
+/// Inserts text where the cursor is, via the clipboard.
 ///
-/// Colar, e não digitar caractere a caractere: `CGEvent` por caractere leva
-/// dezenas de ms por letra — um parágrafo ditado levaria segundos, jogando fora
-/// o ganho de latência — e quebra em campos com autocomplete, que reagem a cada
-/// tecla. Colar é atômico e funciona igual em AppKit, Electron e terminal.
+/// Paste, not type character by character: one `CGEvent` per character takes
+/// tens of ms per letter — a dictated paragraph would take seconds, throwing away
+/// the latency gain — and breaks in fields with autocomplete, which react to
+/// every key. Pasting is atomic and works the same in AppKit, Electron and the
+/// terminal.
 ///
-/// O preço é mexer no pasteboard da pessoa. Por isso salvar e devolver não é
-/// polimento: é obrigação, e vale inclusive quando a inserção falha.
+/// The price is touching the user's pasteboard. That is why saving and restoring
+/// is not polish: it is an obligation, and it holds even when the insertion fails.
 public enum TextInjector {
 
     public enum Outcome: Equatable {
         case inserted
-        /// A entrada segura da sessão está ligada (`IsSecureEventInputEnabled()`).
-        /// É flag global: algum processo a ligou — um campo de senha em foco é o
-        /// caso comum, mas qualquer app liga, e há quem esqueça ligada. O ⌘V não
-        /// foi postado; o texto ficou na área de transferência para a pessoa
-        /// colar. Avisar é melhor que fingir que colou.
+        /// The session's secure input is on (`IsSecureEventInputEnabled()`). It is
+        /// a global flag: some process turned it on — a password field in focus is
+        /// the common case, but any app can turn it on, and some forget to turn
+        /// it off. The ⌘V was not posted; the text was left on the clipboard for
+        /// the user to paste. Warning is better than pretending it pasted.
         case blockedBySecureInput
         case failed(String)
     }
 
-    /// Cópia completa do pasteboard: todos os itens, todos os tipos.
+    /// Full copy of the pasteboard: every item, every type.
     ///
-    /// Guardar só a string perderia imagem, arquivo, HTML — tudo que a pessoa
-    /// tivesse copiado antes de ditar.
+    /// Keeping only the string would lose images, files, HTML — everything the
+    /// user had copied before dictating.
     struct Snapshot {
         let items: [[NSPasteboard.PasteboardType: Data]]
 
@@ -50,36 +51,36 @@ public enum TextInjector {
         }
     }
 
-    /// Quanto esperar antes de devolver o pasteboard.
+    /// How long to wait before restoring the pasteboard.
     ///
-    /// Vários apps leem o pasteboard de forma assíncrona depois do ⌘V. Devolver
-    /// rápido demais faz colar o conteúdo antigo. Generoso de propósito: o custo
-    /// de esperar é invisível, o de errar é colar a coisa errada.
+    /// Several apps read the pasteboard asynchronously after the ⌘V. Restoring
+    /// too fast pastes the old contents. Generous on purpose: the cost of waiting
+    /// is invisible, the cost of getting it wrong is pasting the wrong thing.
     public static let restoreDelay: TimeInterval = 0.6
 
-    /// Marca que gestores de clipboard bem-comportados respeitam para não gravar
-    /// o item no histórico. Sem isto, cada ditado entraria no histórico do
-    /// Raycast ou do Maccy e sobreviveria à restauração.
+    /// Mark that well-behaved clipboard managers honor so as not to record the
+    /// item in their history. Without it, every dictation would enter Raycast's
+    /// or Maccy's history and survive the restoration.
     static let concealed = NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType")
 
-    /// Geração da inserção em curso, e o retrato ainda por devolver.
+    /// Generation of the insertion in progress, and the snapshot still to be restored.
     ///
-    /// Sem isto a restauração era incondicional e destruía dado do usuário de
-    /// duas formas, ambas reproduzidas em auditoria:
+    /// Without this the restoration was unconditional and destroyed user data in
+    /// two ways, both reproduced in audit:
     ///
-    /// 1. **Qualquer escrita no pasteboard nos 600 ms seguintes a um ditado era
-    ///    revertida** — um ⌘C seu, o Universal Clipboard, um gestor de clipboard.
-    /// 2. **Dois ditados em menos de 600 ms** deixavam o texto do primeiro no
-    ///    lugar do conteúdo original, permanentemente: o segundo `insert`
-    ///    fotografava o pasteboard já contaminado pelo primeiro.
+    /// 1. **Any write to the pasteboard in the 600 ms after a dictation was
+    ///    reverted** — a ⌘C of yours, Universal Clipboard, a clipboard manager.
+    /// 2. **Two dictations less than 600 ms apart** left the first one's text in
+    ///    place of the original contents, permanently: the second `insert`
+    ///    snapshotted the pasteboard already contaminated by the first.
     ///
-    /// A geração faz só a restauração mais recente valer; o retrato herdado faz
-    /// ela devolver o conteúdo **original**, não o intermediário; e o
-    /// `changeCount` faz ela desistir se alguém escreveu no meio.
-    /// Indexado pelo pasteboard: o retrato pendente pertence a um pasteboard
-    /// específico, não ao processo. Em produção existe só o `.general`, mas
-    /// tratar como estado global fazia dois pasteboards distintos interferirem
-    /// um no outro — o que os testes paralelos expuseram na hora.
+    /// The generation makes only the most recent restoration count; the inherited
+    /// snapshot makes it restore the **original** contents, not the intermediate
+    /// ones; and the `changeCount` makes it give up if someone wrote in between.
+    /// Indexed by pasteboard: the pending snapshot belongs to a specific
+    /// pasteboard, not to the process. In production only `.general` exists, but
+    /// treating it as global state made two distinct pasteboards interfere with
+    /// each other — which the parallel tests exposed right away.
     private struct Pending {
         var generation: Int
         var snapshot: Snapshot
@@ -92,19 +93,19 @@ public enum TextInjector {
                               pasteboard: NSPasteboard = .general,
                               paste: (() -> Bool)? = nil,
                               secureInput: (() -> Bool)? = nil) -> Outcome {
-        guard !text.isEmpty else { return .failed("texto vazio") }
+        guard !text.isEmpty else { return .failed("empty text") }
 
-        // Entrada segura ligada: o app não posta o ⌘V. A premissa original — de
-        // que o macOS descartaria o evento sintético — nunca foi medida aqui; o
-        // que o código sabe é o valor da flag (se recusar é o certo está no
-        // backlog D3). Aqui a spec manda deixar o texto no pasteboard — e a
-        // versão anterior retornava **antes** de tocá-lo, então não deixava
-        // nada. Sem colar não há o que restaurar, então o texto fica lá para a
-        // pessoa colar quando quiser.
+        // Secure input on: the app does not post the ⌘V. The original premise —
+        // that macOS would drop the synthetic event — was never measured here;
+        // what the code knows is the flag's value (whether refusing is right is
+        // in backlog D3). Here the spec says to leave the text on the pasteboard
+        // — and the previous version returned **before** touching it, so it left
+        // nothing. Without pasting there is nothing to restore, so the text stays
+        // there for the user to paste whenever they want.
         //
-        // Atenção ao nome: `IsSecureEventInputEnabled` é flag global da sessão,
-        // não "campo de senha em foco". Qualquer processo pode ligá-la, inclusive
-        // em segundo plano, e há apps que ligam e esquecem de desligar.
+        // Mind the name: `IsSecureEventInputEnabled` is a session-wide flag, not
+        // "password field in focus". Any process can turn it on, including in the
+        // background, and some apps turn it on and forget to turn it off.
         if (secureInput ?? IsSecureEventInputEnabled)() {
             pasteboard.clearContents()
             let item = NSPasteboardItem()
@@ -117,8 +118,8 @@ public enum TextInjector {
         let key = pasteboard.name
         let myGeneration = (pending[key]?.generation ?? 0) + 1
 
-        // Herda o retrato de uma restauração ainda pendente: fotografar agora
-        // capturaria o texto do ditado anterior, não o conteúdo da pessoa.
+        // Inherits the snapshot of a restoration still pending: snapshotting now
+        // would capture the previous dictation's text, not the user's contents.
         let snapshot = pending[key]?.snapshot ?? Snapshot.capture(from: pasteboard)
         pending[key] = Pending(generation: myGeneration, snapshot: snapshot)
 
@@ -128,16 +129,16 @@ public enum TextInjector {
         item.setData(Data(), forType: concealed)
         guard pasteboard.writeObjects([item]) else {
             pending[key] = nil
-            return .failed("não consegui escrever na área de transferência")
+            return .failed("could not write to the clipboard")
         }
 
         let stamp = pasteboard.changeCount
         DispatchQueue.main.asyncAfter(deadline: .now() + restoreDelay) {
             MainActor.assumeIsolated {
-                // Uma inserção mais nova assumiu: ela devolve o retrato.
+                // A newer insertion took over: it restores the snapshot.
                 guard pending[key]?.generation == myGeneration else { return }
-                // Alguém escreveu no pasteboard depois de nós. Devolver agora
-                // apagaria o que essa pessoa acabou de copiar.
+                // Someone wrote to the pasteboard after us. Restoring now would
+                // erase what that person just copied.
                 guard pasteboard.changeCount == stamp else {
                     pending[key] = nil
                     return
@@ -147,13 +148,13 @@ public enum TextInjector {
             }
         }
 
-        return (paste ?? postCommandV)() ? .inserted : .failed("não consegui enviar ⌘V")
+        return (paste ?? postCommandV)() ? .inserted : .failed("could not send ⌘V")
     }
 
-    /// ⌘V sintético.
+    /// Synthetic ⌘V.
     ///
-    /// Postado com as flags explícitas e depois do trigger já solto, então não há
-    /// modificador pendente para contaminar o evento.
+    /// Posted with explicit flags and after the trigger has already been
+    /// released, so there is no pending modifier to contaminate the event.
     private static func postCommandV() -> Bool {
         guard let source = CGEventSource(stateID: .combinedSessionState),
               let down = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_ANSI_V), keyDown: true),

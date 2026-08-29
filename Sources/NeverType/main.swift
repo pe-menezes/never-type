@@ -2,42 +2,43 @@ import AppKit
 import AVFoundation
 import NeverTypeCore
 
-/// Onde o áudio da última gravação fica: um arquivo só, sobrescrito a cada
-/// ditado. A transcrição não lê daqui — usa as amostras que ficam em memória
-/// (`recorder.lastSamples`); o WAV é artefato de depuração.
+/// Where the audio of the last recording lives: a single file, overwritten on
+/// every dictation. Transcription does not read from here — it uses the samples
+/// kept in memory (`recorder.lastSamples`); the WAV is a debugging artifact.
 ///
-/// Não é a única cópia do que você falou que fica em disco, e este comentário
-/// já afirmou o contrário (backlog D4). No mesmo diretório,
-/// `~/Library/Application Support/NeverType/`, ficam:
+/// It is not the only copy of what you said that stays on disk, and this comment
+/// once claimed otherwise (backlog D4). In the same directory,
+/// `~/Library/Application Support/NeverType/`, there are:
 ///
-/// - `last.wav` — o áudio do último ditado, sobrescrito a cada gravação.
-///   "Limpar histórico" apaga (desde 29/08/2026; antes ficava para trás).
-/// - `historico.json` — as últimas 30 transcrições, em texto claro
-///   (`TranscriptHistory`). "Limpar histórico" apaga.
-/// - `nevertype.log` — diagnóstico da sessão, truncado a cada lançamento. Guarda
-///   tempo e tamanho de cada transcrição, nunca o texto (ver `log(_:)`).
-/// - `vocabulario.json` — os termos e substituições que a pessoa cadastrou.
-/// - `ultima-transcricao.txt`, da versão anterior, é apagado no lançamento.
+/// - `last.wav` — the audio of the last dictation, overwritten on every
+///   recording. "Clear History" deletes it (since 2026-08-29; before that it was
+///   left behind).
+/// - `historico.json` — the last 30 transcriptions, in plain text
+///   (`TranscriptHistory`). "Clear History" deletes it.
+/// - `nevertype.log` — session diagnostics, truncated on every launch. Keeps the
+///   time and size of each transcription, never the text (see `log(_:)`).
+/// - `vocabulario.json` — the terms and replacements the user entered.
+/// - `ultima-transcricao.txt`, from the previous version, is deleted on launch.
 ///
-/// Fora do disco: o texto passa pela área de transferência para ser colado
-/// (devolvida depois, marcada como oculta para gestores de clipboard); o que a
-/// pessoa copia pelo menu vai sem a marca (`copy(_:)`).
+/// Off disk: the text goes through the clipboard to be pasted (restored
+/// afterwards, marked as concealed for clipboard managers); what the user copies
+/// from the menu goes without the mark (`copy(_:)`).
 private func lastRecordingURL() -> URL {
     let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
     return base.appendingPathComponent("NeverType/last.wav")
 }
 
-/// Dono do modelo, carregado uma vez e mantido quente.
+/// Owner of the model, loaded once and kept warm.
 ///
-/// É um `actor` e não uma fila serial de propósito: o contexto do whisper.cpp é
-/// de uso serial, e um ator faz o compilador garantir isso. Fila serial
-/// dependeria de eu lembrar de sempre despachar por ela.
-/// `Result` exige que a falha conforme a `Error`; uma String não conforma.
+/// It is an `actor` and not a serial queue on purpose: the whisper.cpp context
+/// must be used serially, and an actor makes the compiler guarantee that. A
+/// serial queue would depend on me remembering to always dispatch through it.
+/// `Result` requires the failure to conform to `Error`; a String does not.
 struct TranscriptionFailure: Error { let reason: String }
 
 actor TranscriptionService {
     private var transcriber: Transcriber?
-    private(set) var status: String = "modelo ainda não carregado"
+    private(set) var status: String = "model not loaded yet"
     private(set) var metalActive = false
     private(set) var loadedOK = false
     private(set) var devices = ""
@@ -46,7 +47,7 @@ actor TranscriptionService {
     func didLoad() -> Bool { loadedOK }
     func deviceList() -> String { devices }
 
-    /// Carrega e aquece. Chamado uma vez, no lançamento.
+    /// Loads and warms up. Called once, at launch.
     func prepare() {
         let started = Date()
         do {
@@ -56,9 +57,9 @@ actor TranscriptionService {
             let warmed = Int(Date().timeIntervalSince(started) * 1000)
             transcriber = t
             let warmedOK = t.warmedUp
-            let gpu = t.usesMetal ? "Metal" : "CPU (LENTO)"
-            status = "\(gpu) · carga \(loaded) ms · aquecimento \(warmed - loaded) ms"
-                + (warmedOK ? "" : " (AQUECIMENTO FALHOU)")
+            let gpu = t.usesMetal ? "Metal" : "CPU (SLOW)"
+            status = "\(gpu) · load \(loaded) ms · warm-up \(warmed - loaded) ms"
+                + (warmedOK ? "" : " (WARM-UP FAILED)")
             metalActive = t.usesMetal
             devices = t.backend
             loadedOK = true
@@ -67,12 +68,12 @@ actor TranscriptionService {
         }
     }
 
-    /// Devolve o erro real em vez de `nil`.
+    /// Returns the real error instead of `nil`.
     ///
-    /// A versão anterior usava `try?` e o delegate reportava o status de *carga
-    /// do modelo* como se fosse a causa: com o modelo carregado e o whisper
-    /// devolvendo código de erro, o usuário lia "transcrição indisponível:
-    /// Metal · carga 168 ms" — uma mensagem que descreve saúde, não falha.
+    /// The previous version used `try?` and the delegate reported the *model
+    /// load* status as if it were the cause: with the model loaded and whisper
+    /// returning an error code, the user read "transcription unavailable:
+    /// Metal · load 168 ms" — a message that describes health, not failure.
     func transcribe(_ samples: [Float], prompt: String? = nil) -> Result<(text: String, ms: Int), TranscriptionFailure> {
         guard let transcriber else { return .failure(TranscriptionFailure(reason: status)) }
         let started = Date()
@@ -87,43 +88,43 @@ actor TranscriptionService {
     func currentStatus() -> String { status }
 }
 
-/// Retorno auditivo das ações do ditado.
+/// Audible feedback for dictation actions.
 ///
-/// A pílula é arrastável e pode estar num canto que você não está olhando — e
-/// mesmo olhando, confirmar pelo som é mais rápido que conferir pela cor.
+/// The pill is draggable and may be in a corner you are not looking at — and
+/// even when you are, confirming by sound is faster than checking by color.
 ///
-/// Os tons são gerados, e não escolhidos entre os do sistema: `Tink` e `Pop` são
-/// alertas, desenhados para serem notados. Aqui o som confirma uma ação que a
-/// pessoa acabou de fazer de propósito, então precisa ser o contrário disso.
+/// The tones are generated, not picked from the system's: `Tink` and `Pop` are
+/// alerts, designed to be noticed. Here the sound confirms an action the user
+/// just took on purpose, so it needs to be the opposite of that.
 ///
-/// As notas descem quando algo termina e sobem quando algo começa ou trava —
-/// a direção carrega o significado, então dá para saber o que aconteceu sem
-/// aprender qual som é qual.
+/// The notes go down when something ends and up when something starts or locks
+/// — the direction carries the meaning, so you can tell what happened without
+/// learning which sound is which.
 @MainActor
 enum Feedback {
     private static let key = "somDasAcoes"
 
-    /// Ligado por padrão, e desligável pelo menu. Som que não se pode desligar é
-    /// defeito para quem trabalha em sala compartilhada.
+    /// On by default, and switchable off from the menu. A sound that cannot be
+    /// turned off is a defect for anyone working in a shared room.
     static var isEnabled: Bool {
         get { UserDefaults.standard.object(forKey: key) as? Bool ?? true }
         set { UserDefaults.standard.set(newValue, forKey: key) }
     }
 
-    /// Gerados uma vez. Recriar o WAV a cada ditado seria refazer ~7,5 KB
-    /// (começo e fim: 0,085 s × 44 100 Hz × 2 bytes) ou ~11,5 KB (trava e
-    /// descarte: duas notas de 0,065 s) de aritmética para nada.
+    /// Generated once. Rebuilding the WAV on every dictation would redo ~7.5 KB
+    /// (start and stop: 0.085 s × 44,100 Hz × 2 bytes) or ~11.5 KB (latch and
+    /// discard: two notes of 0.065 s) of arithmetic for nothing.
     private static let start   = sound(Tone.wav([330], seconds: 0.085))
     private static let stop    = sound(Tone.wav([262], seconds: 0.085))
     private static let latch   = sound(Tone.wav([294, 392], seconds: 0.065))
     private static let discard = sound(Tone.wav([262, 196], seconds: 0.065))
 
-    /// Começou a gravar.
+    /// Recording started.
     ///
-    /// O tom entra no áudio pelo alto-falante e volta pelo microfone, nos
-    /// primeiros ~85 ms da gravação (a duração de `start`). É um seno curto,
-    /// não fala, e a aposta é que o Whisper o ignora — não medido (backlog I3);
-    /// é por isso que ele é curto e baixo.
+    /// The tone enters the audio through the speaker and comes back through the
+    /// microphone, in the first ~85 ms of the recording (the duration of
+    /// `start`). It is a short sine, not speech, and the bet is that Whisper
+    /// ignores it — not measured (backlog I3); that is why it is short and quiet.
     static func started()   { play(start) }
     static func stopped()   { play(stop) }
     static func latched()   { play(latch) }
@@ -137,8 +138,8 @@ enum Feedback {
 
     private static func play(_ sound: NSSound?) {
         guard isEnabled, let sound else { return }
-        // Rebobina: `play()` num som que ainda está tocando não reinicia, e dois
-        // ditados seguidos ficariam sem o segundo som.
+        // Rewind: `play()` on a sound that is still playing does not restart it,
+        // and two dictations in a row would lose the second sound.
         sound.stop()
         sound.play()
     }
@@ -146,32 +147,32 @@ enum Feedback {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    // Criado em applicationDidFinishLaunching, não aqui.
+    // Created in applicationDidFinishLaunching, not here.
     //
-    // O construtor do delegate roda antes de `setActivationPolicy(.accessory)`,
-    // e trocar a política de ativação depois de já existir um item na menu bar
-    // faz o item ser descartado. O app segue vivo, o objeto responde
-    // `isVisible = true` e `frame.width = 30`, e mesmo assim nada é desenhado.
+    // The delegate's constructor runs before `setActivationPolicy(.accessory)`,
+    // and changing the activation policy after an item already exists in the
+    // menu bar gets the item discarded. The app stays alive, the object answers
+    // `isVisible = true` and `frame.width = 30`, and still nothing is drawn.
     private var statusItem: NSStatusItem!
     private let monitor = HotkeyMonitor()
     private let recorder = AudioRecorder(destination: lastRecordingURL())
     private let menu = NSMenu()
     private let overlay = RecordingOverlay()
     private let transcription = TranscriptionService()
-    private var modelStatus = "carregando modelo…"
+    private var modelStatus = "loading model…"
 
-    /// A última transcrição, guardada para o menu.
+    /// The last transcription, kept for the menu.
     ///
-    /// Resolve uma tensão da spec: ela manda devolver o pasteboard depois de
-    /// colar (educado) e também manda não perder a transcrição se não houver
-    /// onde colar. As duas juntas se contradizem — devolver apaga o texto. E não
-    /// dá para saber se a colagem chegou em algum lugar sem consultar a API de
-    /// Acessibilidade, que está no anti-escopo.
+    /// Resolves a tension in the spec: it says to restore the pasteboard after
+    /// pasting (polite) and also not to lose the transcription if there is
+    /// nowhere to paste. Together they contradict each other — restoring erases
+    /// the text. And there is no way to know whether the paste landed anywhere
+    /// without querying the Accessibility API, which is out of scope.
     ///
-    /// Então: devolve o pasteboard sempre, e o texto continua alcançável por
-    /// aqui. Nada se perde, e o clipboard de ninguém é sequestrado.
-    /// Não é mais uma variável: a última é a primeira do histórico, e ter as
-    /// duas coisas criaria duas fontes de verdade para o mesmo texto.
+    /// So: always restore the pasteboard, and the text stays reachable from
+    /// here. Nothing is lost, and nobody's clipboard is hijacked.
+    /// No longer a variable: the last one is the first in the history, and
+    /// having both would create two sources of truth for the same text.
     private var lastTranscript: String? { history.last?.text }
 
     private let vocabulary = Vocabulary(
@@ -185,43 +186,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         logURL.deletingLastPathComponent().appendingPathComponent("ultima-transcricao.txt")
     }
 
-    /// O arquivo da versão anterior guardava a última transcrição e agora nunca
-    /// mais seria atualizado. Deixá-lo no disco seria abandonar uma cópia do que
-    /// a pessoa falou num arquivo que o app não usa e ela não sabe que existe.
+    /// The previous version's file held the last transcription and would now
+    /// never be updated again. Leaving it on disk would abandon a copy of what
+    /// the user said in a file the app does not use and they do not know exists.
     private func removeLegacyTranscriptFile() {
         try? FileManager.default.removeItem(at: Self.legacyTranscriptURL)
     }
 
-    /// Consultado ao sistema toda vez, em vez de guardado numa variável.
+    /// Queried from the system every time, instead of kept in a variable.
     ///
-    /// A versão anterior guardava o estado numa flag preenchida durante o
-    /// lançamento, e o menu era montado antes disso — então exibia "Microfone:
-    /// faltando" com a permissão concedida e a gravação funcionando. Estado de
-    /// permissão também muda por fora, nos Ajustes do Sistema, sem avisar o app.
-    /// Perguntar é barato e nunca desatualiza.
+    /// The previous version kept the state in a flag filled during launch, and
+    /// the menu was built before that — so it showed "Microphone: missing" with
+    /// the permission granted and recording working. Permission state also
+    /// changes from outside, in System Settings, without telling the app.
+    /// Asking is cheap and never goes stale.
     private var micAuthorized: Bool {
         AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
     }
 
-    /// Consultado ao sistema toda vez, igual ao microfone.
+    /// Queried from the system every time, same as the microphone.
     ///
-    /// A pessoa desliga o app em Ajustes do Sistema › Itens de Início de Sessão
-    /// sem o app ficar sabendo. Um checkmark guardado em variável passaria a
-    /// mentir a partir daí — e o menu se remonta a cada abertura justamente para
-    /// nunca mostrar estado velho.
+    /// The user turns the app off in System Settings › Login Items without the
+    /// app finding out. A checkmark kept in a variable would start lying from
+    /// then on — and the menu is rebuilt on every open precisely so it never
+    /// shows stale state.
     private var loginItemState: LoginItem.State { LoginItem.current() }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Uma instância só, com trava atômica.
+        // A single instance, with an atomic lock.
         //
-        // A versão anterior consultava `NSRunningApplication` e decidia — dois
-        // passos, e o registro no LaunchServices é assíncrono. Em lançamentos
-        // simultâneos as duas instâncias liam zero e as duas sobreviviam: a
-        // auditoria reproduziu 3 de 3. O efeito não é cosmético — dois monitores
-        // globais de tecla fazem um ditado virar duas gravações, duas
-        // transcrições e dois ⌘V, e são 1,1 GB de modelo em memória.
+        // The previous version queried `NSRunningApplication` and decided — two
+        // steps, and the LaunchServices registration is asynchronous. In
+        // simultaneous launches both instances read zero and both survived: the
+        // audit reproduced it 3 out of 3. The effect is not cosmetic — two
+        // global key monitors turn one dictation into two recordings, two
+        // transcriptions and two ⌘V, and that is 1.1 GB of model in memory.
         //
-        // `flock` resolve num passo indivisível: quem pega, roda.
+        // `flock` solves it in one indivisible step: whoever grabs it, runs.
         guard Self.acquireInstanceLock() else {
             NSRunningApplication
                 .runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "com.nevertype.app")
@@ -235,8 +236,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         removeLegacyTranscriptFile()
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         render(.idle)
-        // O menu se remonta ao ser aberto (menuNeedsUpdate), então nunca mostra
-        // estado velho.
+        // The menu rebuilds itself when opened (menuNeedsUpdate), so it never
+        // shows stale state.
         menu.delegate = self
         statusItem.menu = menu
 
@@ -251,81 +252,81 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.log(message)
         }
         monitor.start()
-        // Sempre na tela: um app acessório que morre não muda nada visualmente,
-        // então a pílula parada é o único sinal de que ele continua vivo.
+        // Always on screen: an accessory app that dies changes nothing visually,
+        // so the idle pill is the only sign that it is still alive.
         overlay.showIdle()
 
         requestMicrophoneAccess()
         warnIfAccessibilityMissing()
 
-        // Carrega e aquece fora da main thread: são centenas de MB e uma
-        // inferência descartável. Bloquear aqui congelaria a menu bar.
+        // Load and warm up off the main thread: it is hundreds of MB and a
+        // throwaway inference. Blocking here would freeze the menu bar.
         Task {
             await transcription.prepare()
             let status = await transcription.currentStatus()
             self.modelStatus = status
-            self.log("modelo: \(status)")
-            // O aviso de Metal só cabe se o modelo carregou. Antes, modelo
-            // ausente também disparava "sem Metal" — mandando quem fosse depurar
-            // para o lado errado.
+            self.log("model: \(status)")
+            // The Metal warning only applies if the model loaded. Before, a
+            // missing model also triggered "no Metal" — sending whoever was
+            // debugging in the wrong direction.
             if await self.transcription.didLoad() {
-                self.log("dispositivos do ggml: \(await self.transcription.deviceList())")
+                self.log("ggml devices: \(await self.transcription.deviceList())")
                 if await !self.transcription.isMetalActive() {
-                    self.log("ATENÇÃO: sem Metal, a transcrição roda em CPU e fica ~11x mais lenta.")
+                    self.log("WARNING: without Metal, transcription runs on the CPU and is ~11x slower.")
                     self.render(.blocked)
                 }
             } else {
                 self.render(.blocked)
             }
         }
-        log("pronto. trigger: \(monitor.trigger.label)")
+        log("ready. trigger: \(monitor.trigger.label)")
     }
 
-    // MARK: - Estados visuais
+    // MARK: - Visual states
 
     private enum Visual { case idle, recording, blocked }
 
     private func render(_ state: Visual) {
         guard let button = statusItem.button else {
-            log("SEM BOTÃO no status item — o ícone não tem onde ser desenhado")
+            log("NO BUTTON on the status item — nowhere to draw the icon")
             return
         }
         let symbol: String
         switch state {
-        // A forma muda junto com a cor: contorno quando parado, preenchido
-        // gravando, cortado quando bloqueado. Cor sozinha não serve como único
-        // sinal de estado.
+        // The shape changes along with the color: outline when idle, filled
+        // while recording, slashed when blocked. Color alone does not work as
+        // the only state signal.
         case .idle:      symbol = "mic"
         case .recording: symbol = "mic.fill"
         case .blocked:   symbol = "mic.slash"
         }
         let image = NSImage(systemSymbolName: symbol, accessibilityDescription: "NeverType")
-        if image == nil { log("símbolo '\(symbol)' não carregou") }
-        // Sempre template.
+        if image == nil { log("symbol '\(symbol)' did not load") }
+        // Always template.
         //
-        // Imagem template é a que o macOS repinta conforme o fundo da barra;
-        // sem isso o símbolo é desenhado na cor natural dele, preto, e some
-        // contra a barra escura — o ícone ficava invisível exatamente enquanto
-        // estava gravando. E `contentTintColor` só tinge imagem template, então
-        // o vermelho que eu queria também não acontecia.
+        // A template image is the one macOS repaints to match the bar's
+        // background; without it the symbol is drawn in its natural color,
+        // black, and vanishes against the dark bar — the icon was invisible
+        // exactly while recording. And `contentTintColor` only tints template
+        // images, so the red I wanted did not happen either.
         image?.isTemplate = true
         button.image = image
         button.contentTintColor = (state == .recording) ? .systemRed : nil
-        // Fallback de largura: um item de largura variável só com imagem nula
-        // fica com zero pixels e desaparece sem erro nenhum.
+        // Width fallback: a variable-length item with only a nil image ends up
+        // zero pixels wide and disappears without any error.
         button.title = (image == nil) ? "NT" : ""
-        let tint = (state == .recording) ? "vermelho" : "padrão"
-        log("ícone → \(symbol) (\(tint)), template=\(image?.isTemplate ?? false), largura=\(button.frame.width)")
+        let tint = (state == .recording) ? "red" : "default"
+        log("icon → \(symbol) (\(tint)), template=\(image?.isTemplate ?? false), width=\(button.frame.width)")
     }
 
-    // MARK: - Ciclo do ditado
+    // MARK: - Dictation cycle
 
     private func handle(_ event: HotkeyMonitor.Event) {
         switch event {
         case .pressed:
             guard micAuthorized else {
                 render(.blocked)
-                log("microfone não autorizado — ditado ignorado")
+                log("microphone not authorized — dictation ignored")
                 return
             }
             do {
@@ -335,7 +336,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 overlay.show()
             } catch {
                 render(.blocked)
-                log("falha ao iniciar gravação: \(error)")
+                log("failed to start recording: \(error)")
             }
         case .released:
             Feedback.stopped()
@@ -345,57 +346,57 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 overlay.hide()
                 return
             }
-            // A pílula segue na tela dizendo "trabalhando" até o texto sair.
-            // Antes ela voltava ao repouso aqui, e o app passava a transcrição
-            // inteira sem nenhum sinal do que estava acontecendo.
+            // The pill stays on screen saying "working" until the text comes
+            // out. Before, it went back to idle here, and the app spent the
+            // whole transcription with no sign of what was happening.
             overlay.transcribing()
             let samples = recorder.lastSamples
-            log("gravado: \(samples.count) amostras (\(String(format: "%.1f", Double(samples.count) / 16_000)) s)")
+            log("recorded: \(samples.count) samples (\(String(format: "%.1f", Double(samples.count) / 16_000)) s)")
             Task {
                 switch await self.transcription.transcribe(samples, prompt: self.vocabulary.prompt) {
                 case .success(let result):
-                    // As substituições rodam aqui, sobre o texto pronto: elas são
-                    // determinísticas e não passam pelo modelo.
+                    // The replacements run here, on the finished text: they are
+                    // deterministic and do not go through the model.
                     let corrected = self.vocabulary.apply(to: result.text)
-                    // Tempo e tamanho, nunca o texto. Até 29/08/2026 estas linhas
-                    // gravavam a transcrição inteira em `nevertype.log` — uma
-                    // cópia em disco que nenhum doc mencionava e que "Limpar
-                    // histórico" não apaga. O prefixo "transcrito em N ms" fica:
-                    // é o que a medição de latência do backlog lê.
-                    var line = "transcrito em \(result.ms) ms: \(result.text.count) caracteres"
+                    // Time and size, never the text. Until 2026-08-29 these lines
+                    // wrote the whole transcription to `nevertype.log` — a copy
+                    // on disk that no doc mentioned and that "Clear History"
+                    // does not delete. The "transcribed in N ms" prefix stays:
+                    // it is what the backlog's latency measurement reads.
+                    var line = "transcribed in \(result.ms) ms: \(result.text.count) chars"
                     if corrected != result.text {
-                        line += ", \(corrected.count) depois das substituições"
+                        line += ", \(corrected.count) after replacements"
                     }
                     self.log(line)
                     self.overlay.hide()
                     self.deliver(corrected)
                 case .failure(let failure):
-                    // Sinal visível: sem isto o ditado sumia em silêncio — o
-                    // ícone já voltou ao normal, o app não tem janela, e o
-                    // stderr não vai a lugar nenhum quando aberto pelo Finder.
-                    self.log("TRANSCRIÇÃO FALHOU: \(failure.reason)")
+                    // Visible signal: without this the dictation vanished in
+                    // silence — the icon is already back to normal, the app has
+                    // no window, and stderr goes nowhere when opened from Finder.
+                    self.log("TRANSCRIPTION FAILED: \(failure.reason)")
                     self.overlay.hide()
                     self.render(.blocked)
                 }
             }
         case .latched:
-            // A gravação já está rolando desde o primeiro toque; aqui só muda
-            // quem a mantém viva — a máquina de estados, não a tecla.
+            // The recording has been running since the first tap; here only
+            // what keeps it alive changes — the state machine, not the key.
             Feedback.latched()
-            log("mãos-livres travado. Toque no \(monitor.trigger.label) para transcrever, Esc para descartar.")
+            log("hands-free locked. Tap \(monitor.trigger.label) to transcribe, Esc to discard.")
         case .cancelled:
             Feedback.discarded()
             recorder.cancel()
             overlay.hide()
             render(.idle)
-            log("cancelado: tecla comum pressionada durante o hold")
+            log("cancelled: regular key pressed during the hold")
         }
     }
 
-    /// Coloca o texto onde o cursor está.
+    /// Puts the text where the cursor is.
     private func deliver(_ text: String) {
         guard !text.isEmpty else {
-            log("transcrição vazia — nada a inserir")
+            log("empty transcription — nothing to insert")
             return
         }
         history.add(text)
@@ -404,24 +405,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .inserted:
             break
         case .blockedBySecureInput:
-            // `IsSecureEventInputEnabled()` é flag global da sessão, não "campo de
-            // senha em foco": algum processo ligou a entrada segura — um campo de
-            // senha é o caso comum, mas qualquer app liga, inclusive em segundo
-            // plano, e há quem esqueça ligada. Enquanto ela está ligada o app não
-            // posta o ⌘V (se recusar é o certo está em discussão no backlog D3);
-            // o texto fica na área de transferência e no menu.
-            log("entrada segura ligada nesta sessão — não colei. Algum processo a ligou (campo de senha em foco é o caso comum, mas há apps que a deixam ligada). O texto está na área de transferência e no menu, em \"Copiar última transcrição\".")
+            // `IsSecureEventInputEnabled()` is a session-wide flag, not "password
+            // field in focus": some process turned secure input on — a password
+            // field is the common case, but any app can turn it on, including in
+            // the background, and some forget to turn it off. While it is on the
+            // app does not post the ⌘V (whether refusing is right is under
+            // discussion in backlog D3); the text stays on the clipboard and in
+            // the menu.
+            log("secure input is on for this session — did not paste. Some process turned it on (a password field in focus is the common case, but some apps leave it on). The text is on the clipboard and in the menu, under \"Copy Last Transcription\".")
             render(.blocked)
             flashIdle()
         case .failed(let reason):
-            log("não consegui inserir: \(reason). O texto está no menu.")
+            log("could not insert: \(reason). The text is in the menu.")
             render(.blocked)
             flashIdle()
         }
     }
 
-    /// Volta ao ícone normal depois de sinalizar um problema, para o app não
-    /// ficar preso em estado de erro por causa de um ditado.
+    /// Back to the normal icon after signaling a problem, so the app does not
+    /// stay stuck in an error state because of one dictation.
     private func flashIdle() {
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(2))
@@ -435,8 +437,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return f
     }()
 
-    /// Uma linha de menu não comporta um ditado inteiro; o texto completo fica
-    /// no tooltip e chega ao pasteboard pelo clique.
+    /// A menu line cannot hold a whole dictation; the full text goes in the
+    /// tooltip and reaches the pasteboard on click.
     private func preview(of text: String) -> String {
         let flat = text.replacingOccurrences(of: "\n", with: " ")
         return flat.count > 44 ? String(flat.prefix(44)) + "…" : flat
@@ -449,13 +451,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private static let triggerKey = "trigger"
 
-    /// O commit de que este binário foi compilado, carimbado pelo `build-app.sh`.
+    /// The commit this binary was built from, stamped by `build-app.sh`.
     ///
-    /// Fica no menu para a pergunta "qual versão eu tenho?" ter resposta sem
-    /// terminal — e é o mesmo valor que o `update.sh` compara para decidir se
-    /// há trabalho a fazer.
+    /// Lives in the menu so the question "which version do I have?" has an
+    /// answer without a terminal — and it is the same value `update.sh`
+    /// compares to decide whether there is work to do.
     private static var buildCommit: String {
-        Bundle.main.object(forInfoDictionaryKey: "NeverTypeCommit") as? String ?? "desconhecida"
+        Bundle.main.object(forInfoDictionaryKey: "NeverTypeCommit") as? String ?? "unknown"
     }
 
     @objc private func openVocabulary() {
@@ -467,24 +469,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               let option = HotkeyMonitor.Trigger.named(id) else { return }
         monitor.trigger = option
         UserDefaults.standard.set(id, forKey: Self.triggerKey)
-        log("trigger agora é \(option.label)")
+        log("trigger is now \(option.label)")
     }
 
     @objc private func toggleSound() {
         Feedback.isEnabled.toggle()
-        log("sons: \(Feedback.isEnabled ? "ligados" : "desligados")")
+        log("sounds: \(Feedback.isEnabled ? "on" : "off")")
     }
 
     @objc private func clearHistory() {
         history.clear()
-        // O áudio é a outra cópia do que a pessoa falou, e é a gravação inteira.
-        // Até 29/08/2026 este item apagava só o texto e deixava o `last.wav`
-        // para trás. Em mãos-livres o menu abre com gravação em curso: aí o
-        // arquivo aberto é o do ditado atual, e o gravador recusa apagá-lo.
+        // The audio is the other copy of what the user said, and it is the whole
+        // recording. Until 2026-08-29 this item deleted only the text and left
+        // `last.wav` behind. In hands-free mode the menu opens with a recording
+        // in progress: then the open file is the current dictation's, and the
+        // recorder refuses to delete it.
         if recorder.discardLastRecording() {
-            log("histórico apagado, e o last.wav junto")
+            log("history cleared, and last.wav with it")
         } else {
-            log("histórico apagado; o last.wav ficou — há gravação em curso")
+            log("history cleared; last.wav kept — a recording is in progress")
         }
     }
 
@@ -496,39 +499,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func copyLastTranscript() {
         guard let lastTranscript else { return }
         copy(lastTranscript)
-        log("última transcrição copiada")
+        log("last transcription copied")
     }
 
-    // MARK: - Permissões
+    // MARK: - Permissions
 
     private func requestMicrophoneAccess() {
         guard AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined else {
             if !micAuthorized { render(.blocked) }
             return
         }
-        // A API assíncrona, e não a de closure.
+        // The async API, not the closure one.
         //
-        // Uma closure escrita dentro de um método `@MainActor` **herda** esse
-        // isolamento por inferência, e o Swift insere uma checagem em runtime.
-        // O callback do TCC chega numa fila de background, a checagem falha e o
-        // processo morre — foi o que derrubou o app duas vezes. Trocar o corpo
-        // por `Task { @MainActor in }` não resolvia: a checagem estoura na
-        // closure externa, antes de chegar no corpo.
+        // A closure written inside a `@MainActor` method **inherits** that
+        // isolation by inference, and Swift inserts a runtime check. The TCC
+        // callback arrives on a background queue, the check fails and the
+        // process dies — that is what crashed the app twice. Swapping the body
+        // for `Task { @MainActor in }` did not fix it: the check trips in the
+        // outer closure, before reaching the body.
         //
-        // Com `await` não existe closure para herdar isolamento, e a retomada
-        // acontece na main actor por construção.
+        // With `await` there is no closure to inherit isolation, and resumption
+        // happens on the main actor by construction.
         Task { @MainActor in
             let granted = await AVCaptureDevice.requestAccess(for: .audio)
             self.render(granted ? .idle : .blocked)
         }
     }
 
-    /// Sem Acessibilidade, os monitores globais não recebem evento nenhum — e não
-    /// avisam. O app ficaria mudo parecendo quebrado, então isto é dito em voz alta.
+    /// Without Accessibility, the global monitors receive no events at all — and
+    /// do not say so. The app would sit mute looking broken, so this is said out loud.
     private func warnIfAccessibilityMissing() {
         guard !HotkeyMonitor.hasAccessibilityPermission else { return }
         render(.blocked)
-        log("Acessibilidade não concedida: o trigger global não vai funcionar.")
+        log("Accessibility not granted: the global trigger will not work.")
         HotkeyMonitor.requestAccessibilityPermission()
     }
 
@@ -537,10 +540,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func rebuildMenu() {
         menu.removeAllItems()
         let acc = HotkeyMonitor.hasAccessibilityPermission
-        menu.addItem(disabled("Trigger: \(monitor.trigger.label) (segure e fale)"))
-        menu.addItem(disabled("  dois toques travam · toque para encerrar · Esc descarta"))
+        menu.addItem(disabled("Trigger: \(monitor.trigger.label) (hold and speak)"))
+        menu.addItem(disabled("  double-tap locks · tap to finish · Esc discards"))
 
-        let keyItem = NSMenuItem(title: "Tecla", action: nil, keyEquivalent: "")
+        let keyItem = NSMenuItem(title: "Hotkey", action: nil, keyEquivalent: "")
         let keyMenu = NSMenu()
         for option in HotkeyMonitor.Trigger.all {
             let line = NSMenuItem(title: option.label,
@@ -551,7 +554,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             keyMenu.addItem(line)
         }
         keyMenu.addItem(.separator())
-        let soundItem = NSMenuItem(title: "Sons",
+        let soundItem = NSMenuItem(title: "Sounds",
                                    action: #selector(toggleSound), keyEquivalent: "")
         soundItem.target = self
         soundItem.state = Feedback.isEnabled ? .on : .off
@@ -559,29 +562,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         keyItem.submenu = keyMenu
         menu.addItem(keyItem)
 
-        let vocab = NSMenuItem(title: "Vocabulário…", action: #selector(openVocabulary), keyEquivalent: "")
+        let vocab = NSMenuItem(title: "Vocabulary…", action: #selector(openVocabulary), keyEquivalent: "")
         vocab.target = self
         let counts = vocabulary.terms.count + vocabulary.replacements.count
         if counts > 0 {
-            vocab.title = "Vocabulário (\(vocabulary.terms.count) termos, \(vocabulary.replacements.count) trocas)…"
+            vocab.title = "Vocabulary (\(vocabulary.terms.count) terms, \(vocabulary.replacements.count) replacements)…"
         }
         menu.addItem(vocab)
 
         menu.addItem(.separator())
-        menu.addItem(disabled("Microfone: \(micAuthorized ? "ok" : "faltando")"))
-        menu.addItem(disabled("Acessibilidade: \(acc ? "ok" : "faltando")"))
-        menu.addItem(disabled("Modelo: \(modelStatus)"))
-        menu.addItem(disabled("Versão: \(Self.buildCommit)"))
+        menu.addItem(disabled("Microphone: \(micAuthorized ? "ok" : "missing")"))
+        menu.addItem(disabled("Accessibility: \(acc ? "ok" : "missing")"))
+        menu.addItem(disabled("Model: \(modelStatus)"))
+        menu.addItem(disabled("Version: \(Self.buildCommit)"))
         if let lastTranscript {
             menu.addItem(.separator())
-            let copy = NSMenuItem(title: "Copiar última transcrição",
+            let copy = NSMenuItem(title: "Copy Last Transcription",
                                   action: #selector(copyLastTranscript), keyEquivalent: "")
             copy.target = self
             copy.toolTip = preview(of: lastTranscript)
             menu.addItem(copy)
 
             if history.entries.count > 1 {
-                let item = NSMenuItem(title: "Histórico (\(history.entries.count))",
+                let item = NSMenuItem(title: "History (\(history.entries.count))",
                                       action: nil, keyEquivalent: "")
                 let submenu = NSMenu()
                 for (index, entry) in history.entries.enumerated() {
@@ -593,7 +596,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     submenu.addItem(line)
                 }
                 submenu.addItem(.separator())
-                let clear = NSMenuItem(title: "Limpar histórico",
+                let clear = NSMenuItem(title: "Clear History",
                                        action: #selector(clearHistory), keyEquivalent: "")
                 clear.target = self
                 submenu.addItem(clear)
@@ -602,29 +605,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         if !acc {
-            let fix = NSMenuItem(title: "Abrir Ajustes de Acessibilidade…",
+            let fix = NSMenuItem(title: "Open Accessibility Settings…",
                                  action: #selector(openAccessibilitySettings), keyEquivalent: "")
             fix.target = self
             menu.addItem(fix)
         }
         menu.addItem(.separator())
         let loginState = loginItemState
-        let login = NSMenuItem(title: "Abrir com o sistema",
+        let login = NSMenuItem(title: "Open at Login",
                                action: #selector(toggleLoginItem), keyEquivalent: "")
         login.target = self
         login.state = loginState == .on ? .on : .off
         menu.addItem(login)
-        // O item fala a linguagem daqui; o aviso fala a da Apple, que é a que a
-        // pessoa vai procurar quando for atrás de onde religar.
+        // The item speaks this app's language; the notice speaks Apple's, which
+        // is what the user will search for when looking for where to turn it back on.
         if loginState == .needsApproval {
-            menu.addItem(disabled("  desativado em Itens de Início de Sessão"))
-            let allow = NSMenuItem(title: "Abrir Itens de Início de Sessão…",
+            menu.addItem(disabled("  turned off in Login Items"))
+            let allow = NSMenuItem(title: "Open Login Items…",
                                    action: #selector(openLoginItemsSettings), keyEquivalent: "")
             allow.target = self
             menu.addItem(allow)
         }
         menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "Sair do NeverType", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        menu.addItem(NSMenuItem(title: "Quit NeverType", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
     }
 
     private func disabled(_ title: String) -> NSMenuItem {
@@ -642,13 +645,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let outcome = loginItemState == .on ? LoginItem.disable() : LoginItem.enable()
         switch outcome {
         case .changed(let state):
-            log("abrir com o sistema: \(state)")
+            log("open at login: \(state)")
         case .refused(let reason):
-            // Sinal visível, e não só log. O menu já fechou quando isto
-            // acontece, o app não tem janela, e o stderr não vai a lugar nenhum
-            // quando ele é aberto pelo Finder: sem o ícone, a recusa não
-            // chegaria à pessoa.
-            log("não consegui mudar 'abrir com o sistema': \(reason)")
+            // Visible signal, not just log. The menu has already closed when
+            // this happens, the app has no window, and stderr goes nowhere when
+            // it is opened from Finder: without the icon, the refusal would not
+            // reach the user.
+            log("could not change 'open at login': \(reason)")
             render(.blocked)
             flashIdle()
         }
@@ -658,18 +661,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         LoginItem.openSettings()
     }
 
-    /// Diário do app.
+    /// The app's diary.
     ///
-    /// Escreve no stderr e num arquivo. Aberto pelo Finder, o stderr do app não
-    /// vai para lugar nenhum — e foi por isso que três bugs seguidos (o ícone
-    /// descartado, o crash na permissão e o ícone preto sobre fundo preto)
-    /// tiveram que ser diagnosticados olhando a tela em vez de lendo log.
-    /// Truncado a cada lançamento: é diagnóstico da sessão atual, não histórico.
+    /// Writes to stderr and to a file. Opened from Finder, the app's stderr goes
+    /// nowhere — which is why three bugs in a row (the discarded icon, the crash
+    /// on the permission and the black icon on a black background) had to be
+    /// diagnosed by looking at the screen instead of reading a log.
+    /// Truncated on every launch: it is diagnostics for the current session, not
+    /// history.
     ///
-    /// Nunca recebe texto de transcrição, de histórico nem de vocabulário: o
-    /// arquivo fica em disco e "Limpar histórico" não o toca, então qualquer
-    /// texto aqui seria uma cópia do que a pessoa falou fora do alcance dela.
-    /// Só tempo, tamanho e estado.
+    /// Never receives transcription, history or vocabulary text: the file stays
+    /// on disk and "Clear History" does not touch it, so any text here would be
+    /// a copy of what the user said beyond their reach. Only time, size and state.
     private func log(_ message: String) {
         let line = "nevertype: \(message)\n"
         FileHandle.standardError.write(Data(line.utf8))
@@ -679,7 +682,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         try? handle.write(contentsOf: Data(line.utf8))
     }
 
-    /// Mantido aberto pela vida do processo: fechar libera a trava.
+    /// Kept open for the life of the process: closing releases the lock.
     private nonisolated(unsafe) static var instanceLock: CInt = -1
 
     private static func acquireInstanceLock() -> Bool {
@@ -687,8 +690,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let path = dir.appendingPathComponent(".instance.lock").path
         let fd = open(path, O_CREAT | O_RDWR, 0o600)
-        // Sem conseguir abrir a trava, melhor deixar o app rodar do que travar
-        // por causa de um arquivo.
+        // If the lock cannot be opened, better to let the app run than to hang
+        // because of a file.
         guard fd >= 0 else { return true }
         guard flock(fd, LOCK_EX | LOCK_NB) == 0 else {
             close(fd)
@@ -718,7 +721,7 @@ extension AppDelegate: NSMenuDelegate {
 let app = NSApplication.shared
 let delegate = AppDelegate()
 app.delegate = delegate
-// Acessório: sem ícone no Dock. Vive na menu bar; as únicas janelas são a pílula
-// (um `NSPanel`, em RecordingOverlay) e a do vocabulário (VocabularyWindow).
+// Accessory: no Dock icon. Lives in the menu bar; the only windows are the pill
+// (an `NSPanel`, in RecordingOverlay) and the vocabulary one (VocabularyWindow).
 app.setActivationPolicy(.accessory)
 app.run()

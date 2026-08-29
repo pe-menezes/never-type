@@ -2,70 +2,70 @@ import Foundation
 import Testing
 @testable import NeverTypeCore
 
-@Suite("Localização e validação do modelo")
+@Suite("Model location and validation")
 struct ModelStoreTests {
 
-    @Test("o magic do ggml é validado pelos bytes, não pelo texto")
+    @Test("the ggml magic is validated by bytes, not by text")
     func validatesByMagicBytes() throws {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("nevertype-model-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
 
-        // O magic 0x67676d6c gravado little-endian: os bytes saem "lmgg".
-        // Procurar o texto "ggml" reprova todo modelo válido — erro já cometido
-        // neste projeto, e este teste existe para ele não voltar.
+        // The magic 0x67676d6c written little-endian: the bytes come out "lmgg".
+        // Looking for the text "ggml" rejects every valid model — a mistake
+        // already made in this project, and this test exists so it does not come back.
         //
-        // A regra é exercitada sem tocar o disco para não escrever 400 MB por
-        // execução da suíte.
+        // The rule is exercised without touching the disk so as not to write
+        // 400 MB per run of the suite.
         let ok = Data([0x6c, 0x6d, 0x67, 0x67])
         #expect(ModelStore.isValid(magic: ok, size: ModelStore.minimumBytes))
         #expect(!ModelStore.isValid(magic: ok, size: ModelStore.minimumBytes - 1),
-                "magic certo com tamanho de download truncado não pode passar")
+                "the right magic with a truncated download's size cannot pass")
         #expect(!ModelStore.isValid(magic: Data("ggml".utf8), size: ModelStore.minimumBytes),
-                "\"ggml\" como texto não é o magic")
+                "\"ggml\" as text is not the magic")
 
-        // O que um proxy de filtragem devolve quando bloqueia o download.
-        let html = dir.appendingPathComponent("bloqueado.bin")
+        // What a filtering proxy returns when it blocks the download.
+        let html = dir.appendingPathComponent("blocked.bin")
         try Data("<html><body>403</body></html>".utf8).write(to: html)
         #expect(!ModelStore.isValid(html))
 
-        let empty = dir.appendingPathComponent("vazio.bin")
+        let empty = dir.appendingPathComponent("empty.bin")
         try Data().write(to: empty)
         #expect(!ModelStore.isValid(empty))
 
-        #expect(!ModelStore.isValid(dir.appendingPathComponent("nao-existe.bin")))
+        #expect(!ModelStore.isValid(dir.appendingPathComponent("does-not-exist.bin")))
     }
 
-    /// Modelo truncado começa com o magic certo, o whisper.cpp o aceita como
-    /// "modelo vazio", e a primeira inferência mata o processo com uma exceção
-    /// de C++ que nenhum `try` do Swift intercepta. A auditoria da Parte 3
-    /// reproduziu: 100 KB do modelo real no caminho de produção → exit 134, sem
-    /// nenhum aviso na tela.
-    @Test("modelo truncado com magic válido é recusado")
+    /// A truncated model starts with the right magic, whisper.cpp accepts it as an
+    /// "empty model", and the first inference kills the process with a C++
+    /// exception no Swift `try` intercepts. The Part 3 audit reproduced it:
+    /// 100 KB of the real model in the production path → exit 134, with no
+    /// warning on screen.
+    @Test("a truncated model with a valid magic is rejected")
     func truncatedModelRejected() throws {
         let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("truncado-\(UUID().uuidString).bin")
+            .appendingPathComponent("truncated-\(UUID().uuidString).bin")
         defer { try? FileManager.default.removeItem(at: url) }
 
-        // Magic correto, tamanho de um download interrompido.
+        // Correct magic, size of an interrupted download.
         var bytes = Data([0x6c, 0x6d, 0x67, 0x67])
         bytes.append(Data(repeating: 0, count: 100 * 1024))
         try bytes.write(to: url)
 
-        #expect(!ModelStore.isValid(url), "magic válido não pode bastar")
+        #expect(!ModelStore.isValid(url), "a valid magic cannot be enough")
         #expect(throws: TranscriberError.self) { _ = try Transcriber(modelURL: url) }
     }
 
-    /// O positivo do validador de disco. Até aqui `isValid(_:)` só tinha os
-    /// negativos exercitados (HTML, vazio, truncado, ausente): um validador que
-    /// recusasse tudo passaria na suíte. Arquivo esparso: `truncate` estende o
-    /// tamanho lógico sem escrever os bytes, então o teste custa KB, não os
-    /// 400 MB do piso — e é o tamanho lógico que `isValid` lê.
-    @Test("no disco, o piso de tamanho separa modelo inteiro de download truncado")
+    /// The positive case of the disk validator. Until here `isValid(_:)` only had
+    /// its negatives exercised (HTML, empty, truncated, absent): a validator that
+    /// refused everything would pass the suite. Sparse file: `truncate` extends
+    /// the logical size without writing the bytes, so the test costs KB, not the
+    /// floor's 400 MB — and the logical size is what `isValid` reads.
+    @Test("on disk, the size floor separates a whole model from a truncated download")
     func diskFloorSeparatesWholeFromTruncated() throws {
         let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("nevertype-piso-\(UUID().uuidString)")
+            .appendingPathComponent("nevertype-floor-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
 
@@ -78,39 +78,39 @@ struct ModelStoreTests {
             return url
         }
 
-        let whole = try sparseModel(named: "inteiro.bin", bytes: ModelStore.minimumBytes)
-        let truncated = try sparseModel(named: "truncado.bin", bytes: ModelStore.minimumBytes - 1)
+        let whole = try sparseModel(named: "whole.bin", bytes: ModelStore.minimumBytes)
+        let truncated = try sparseModel(named: "truncated.bin", bytes: ModelStore.minimumBytes - 1)
 
         let wholeAttributes = try FileManager.default.attributesOfItem(atPath: whole.path)
         let wholeSize = try #require(wholeAttributes[.size] as? Int)
         #expect(wholeSize == ModelStore.minimumBytes,
-                "o arquivo esparso precisa reportar o tamanho lógico, veio \(wholeSize)")
-        #expect(ModelStore.isValid(whole), "magic certo e tamanho no piso é modelo inteiro")
-        #expect(!ModelStore.isValid(truncated), "um byte abaixo do piso é download truncado")
+                "the sparse file needs to report the logical size, got \(wholeSize)")
+        #expect(ModelStore.isValid(whole), "right magic and size at the floor is a whole model")
+        #expect(!ModelStore.isValid(truncated), "one byte below the floor is a truncated download")
     }
 
-    @Test("o modelo é procurado em Application Support, fora do repositório")
+    @Test("the model is looked for in Application Support, outside the repository")
     func modelLivesOutsideTheRepo() {
         let path = ModelStore.modelURL.path
         #expect(path.contains("Application Support/NeverType/models"))
         #expect(path.hasSuffix("ggml-large-v3-turbo-q5_0.bin"))
     }
 
-    @Test("modelo ausente falha com instrução, não com erro cru")
+    @Test("a missing model fails with an instruction, not a raw error")
     func missingModelExplainsItself() {
         let absent = FileManager.default.temporaryDirectory
-            .appendingPathComponent("nao-existe-\(UUID().uuidString).bin")
+            .appendingPathComponent("does-not-exist-\(UUID().uuidString).bin")
         #expect(throws: TranscriberError.self) {
             _ = try Transcriber(modelURL: absent)
         }
         let message = String(describing: TranscriberError.modelMissing(absent))
-        #expect(message.contains("fetch-model.sh"), "o erro precisa dizer o que fazer")
+        #expect(message.contains("fetch-model.sh"), "the error needs to say what to do")
     }
 
-    @Test("arquivo inválido é recusado antes de tentar carregar")
+    @Test("an invalid file is rejected before trying to load")
     func invalidModelRejectedEarly() throws {
         let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("invalido-\(UUID().uuidString).bin")
+            .appendingPathComponent("invalid-\(UUID().uuidString).bin")
         try Data("<html>403</html>".utf8).write(to: url)
         defer { try? FileManager.default.removeItem(at: url) }
         #expect(throws: TranscriberError.self) {
@@ -120,11 +120,12 @@ struct ModelStoreTests {
 }
 
 
-/// Primeiro fixture disponível, se houver algum.
+/// First available fixture, if there is any.
 ///
-/// Os fixtures são gravações de voz de quem desenvolve e não são versionados, então
-/// num clone limpo não existe nenhum. Sem esta checagem a suíte inteira **falhava**
-/// em vez de ser pulada — `#require` reprova o teste, não o suspende.
+/// The fixtures are voice recordings of whoever develops and are not versioned,
+/// so in a clean clone there is none. Without this check the whole suite
+/// **failed** instead of being skipped — `#require` fails the test, it does not
+/// suspend it.
 func firstFixture() -> URL? {
     let dir = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         .appendingPathComponent("fixtures")
@@ -138,48 +139,48 @@ func transcriptionTestsRunnable() -> Bool {
     FileManager.default.fileExists(atPath: ModelStore.modelURL.path) && firstFixture() != nil
 }
 
-/// Transcrição de verdade. Precisa do modelo instalado **e** de pelo menos um
-/// fixture gravado — os dois ficam fora do repositório.
-@Suite("Transcrição local", .enabled(if: transcriptionTestsRunnable()))
+/// Real transcription. Needs the model installed **and** at least one recorded
+/// fixture — both live outside the repository.
+@Suite("Local transcription", .enabled(if: transcriptionTestsRunnable()))
 struct TranscriberTests {
 
-    @Test("transcreve um fixture gravado")
+    @Test("transcribes a recorded fixture")
     func transcribesRealAudio() throws {
         let fixture = try #require(firstFixture())
         let samples = try readSamples(fixture)
-        #expect(samples.count > 16_000, "o fixture precisa ter pelo menos 1 s de áudio")
+        #expect(samples.count > 16_000, "the fixture needs at least 1 s of audio")
 
         let transcriber = try Transcriber()
         let text = try transcriber.transcribe(samples)
 
-        // A assertiva é sobre o mecanismo, não sobre palavras específicas: o
-        // conteúdo depende do que quem clonou gravou.
-        #expect(!text.isEmpty, "a transcrição não pode voltar vazia")
+        // The assertion is about the mechanism, not about specific words: the
+        // content depends on what whoever cloned recorded.
+        #expect(!text.isEmpty, "the transcription cannot come back empty")
         #expect(text.count < samples.count / 40,
-                "texto desproporcional ao áudio sugere alucinação: \(text.count) caracteres")
+                "text out of proportion to the audio suggests hallucination: \(text.count) chars")
     }
 
-    /// O aquecimento existe para a primeira transcrição real não ser a mais
-    /// lenta. Aqui só se garante que ele roda e não quebra.
-    @Test("aquecimento não lança nem invalida o contexto")
+    /// The warm-up exists so the first real transcription is not the slowest.
+    /// Here we only make sure it runs and does not break.
+    @Test("warm-up neither throws nor invalidates the context")
     func warmUpKeepsContextUsable() throws {
         let transcriber = try Transcriber()
         transcriber.warmUp()
         let text = try transcriber.transcribe([Float](repeating: 0, count: 16_000))
-        #expect(text.count < 200, "silêncio não deveria virar parágrafo: \(text)")
+        #expect(text.count < 200, "silence should not become a paragraph: \(text)")
     }
 
-    /// Percorre os chunks RIFF até achar o `data`, em vez de assumir 44 bytes.
+    /// Walks the RIFF chunks until it finds `data`, instead of assuming 44 bytes.
     ///
-    /// Os fixtures do ffmpeg têm o `data` em exatamente 44 bytes, mas o WAV que o
-    /// próprio app grava (via `AVAudioFile`) tem em **4096** — há um chunk JUNK
-    /// de padding. Com o offset fixo, apontar o teste para um arquivo do app
-    /// engoliria 4052 bytes de padding como áudio e o teste **passaria** lendo
-    /// entrada errada. A premissa antiga era verdadeira por acidente da
-    /// ferramenta de gravação, não por propriedade do formato.
+    /// The ffmpeg fixtures have `data` at exactly 44 bytes, but the WAV the app
+    /// itself writes (via `AVAudioFile`) has it at **4096** — there is a JUNK
+    /// padding chunk. With the fixed offset, pointing the test at a file from the
+    /// app would swallow 4052 bytes of padding as audio and the test would
+    /// **pass** reading the wrong input. The old premise was true by accident of
+    /// the recording tool, not by property of the format.
     private func readSamples(_ url: URL) throws -> [Float] {
         let data = try Data(contentsOf: url)
-        var offset = 12   // "RIFF" + tamanho + "WAVE"
+        var offset = 12   // "RIFF" + size + "WAVE"
         var dataRange: Range<Int>?
 
         func u32(_ at: Int) -> Int {
@@ -193,10 +194,10 @@ struct TranscriberTests {
                 dataRange = (offset + 8)..<min(offset + 8 + size, data.count)
                 break
             }
-            offset += 8 + size + (size % 2)   // chunks têm padding para tamanho par
+            offset += 8 + size + (size % 2)   // chunks are padded to an even size
         }
 
-        let range = try #require(dataRange, "chunk 'data' não encontrado em \(url.lastPathComponent)")
+        let range = try #require(dataRange, "'data' chunk not found in \(url.lastPathComponent)")
         let pcm = Array(data[(data.startIndex + range.lowerBound)..<(data.startIndex + range.upperBound)])
         return stride(from: 0, to: pcm.count - 1, by: 2).map { i in
             Float(Int16(bitPattern: UInt16(pcm[i]) | UInt16(pcm[i + 1]) << 8)) / 32768.0

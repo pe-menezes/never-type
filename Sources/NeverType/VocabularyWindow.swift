@@ -1,15 +1,15 @@
 import AppKit
 import NeverTypeCore
 
-/// A janela de vocabulário.
+/// The vocabulary window.
 ///
-/// É a primeira janela do app, que até aqui vivia só na menu bar. Um app
-/// acessório pode ter janela sem virar app de Dock — o que muda é que ele
-/// precisa se ativar antes de mostrar, senão a janela aparece sem foco e o
-/// teclado não chega nela.
+/// It is the app's first window; until here it lived only in the menu bar. An
+/// accessory app can have a window without becoming a Dock app — what changes is
+/// that it needs to activate before showing, otherwise the window appears without
+/// focus and the keyboard does not reach it.
 ///
-/// Duas abas porque são duas coisas diferentes: termo é dica para o modelo,
-/// substituição é troca literal depois. Ver `Vocabulary`.
+/// Two tabs because they are two different things: a term is a hint to the
+/// model, a replacement is a literal swap afterwards. See `Vocabulary`.
 @MainActor
 final class VocabularyWindow: NSObject, NSWindowDelegate, NSTableViewDataSource, NSTableViewDelegate {
     private let vocabulary: Vocabulary
@@ -17,7 +17,7 @@ final class VocabularyWindow: NSObject, NSWindowDelegate, NSTableViewDataSource,
     private var termsTable: NSTableView!
     private var replacementsTable: NSTableView!
 
-    /// Cópias de trabalho: a tabela edita estas, e o disco só é tocado ao salvar.
+    /// Working copies: the table edits these, and the disk is only touched on save.
     private var terms: [String] = []
     private var replacements: [Replacement] = []
 
@@ -34,21 +34,21 @@ final class VocabularyWindow: NSObject, NSWindowDelegate, NSTableViewDataSource,
         self.window = window
         termsTable.reloadData()
         replacementsTable.reloadData()
-        // Ativar antes de mostrar: sem isto a janela de um app acessório abre
-        // atrás do que estiver na frente e não recebe teclado.
+        // Activate before showing: without this the window of an accessory app
+        // opens behind whatever is in front and gets no keyboard.
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
         window.center()
     }
 
-    // MARK: - Construção
+    // MARK: - Building
 
     private func makeWindow() -> NSWindow {
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 460, height: 380),
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered, defer: false)
-        window.title = "NeverType · Vocabulário"
+        window.title = "NeverType · Vocabulary"
         window.delegate = self
         window.isReleasedWhenClosed = false
 
@@ -56,15 +56,15 @@ final class VocabularyWindow: NSObject, NSWindowDelegate, NSTableViewDataSource,
         tabs.autoresizingMask = [.width, .height]
 
         let (termsTab, termsTable) = makeTab(
-            title: "Vocabulário",
-            columns: [("termo", "Termo que o modelo deve esperar", 380)],
-            hint: "Enviesa o modelo a ouvir estas palavras. Não garante nada, mas também não estraga nada — use para palavra que às vezes é legítima.")
+            title: "Vocabulary",
+            columns: [("termo", "Term the model should expect", 380)],
+            hint: "Nudges the model toward hearing these words. Guarantees nothing, breaks nothing — use it for a word that is sometimes legitimate.")
         self.termsTable = termsTable
 
         let (replacementsTab, replacementsTable) = makeTab(
-            title: "Substituições",
-            columns: [("de", "Saiu", 180), ("para", "Deveria ser", 180)],
-            hint: "Troca literal, SEMPRE. Só para o que nunca é certo (vibe flow → vibeflow). Palavra que às vezes é legítima: use a frase inteira, ou a aba Vocabulário.")
+            title: "Replacements",
+            columns: [("de", "Came out as", 180), ("para", "Should be", 180)],
+            hint: "Literal replacement, ALWAYS. Only for what is never right (vibe flow → vibeflow). For a word that is sometimes legitimate, use the whole phrase, or the Vocabulary tab.")
         self.replacementsTable = replacementsTable
 
         tabs.addTabViewItem(termsTab)
@@ -126,10 +126,10 @@ final class VocabularyWindow: NSObject, NSWindowDelegate, NSTableViewDataSource,
     }
 
     private func isTerms(_ id: NSUserInterfaceItemIdentifier?) -> Bool {
-        id?.rawValue == "Vocabulário"
+        id?.rawValue == "Vocabulary"
     }
 
-    // MARK: - Dados
+    // MARK: - Data
 
     func numberOfRows(in tableView: NSTableView) -> Int {
         isTerms(tableView.identifier) ? terms.count : replacements.count
@@ -143,9 +143,9 @@ final class VocabularyWindow: NSObject, NSWindowDelegate, NSTableViewDataSource,
         field.font = .systemFont(ofSize: 12)
         field.target = self
         field.action = #selector(commitEdit(_:))
-        // O row e a coluna viajam no próprio campo: sem isto, descobrir qual
-        // célula foi editada dependeria de perguntar à tabela onde está o foco,
-        // que já mudou quando a ação chega.
+        // The row and the column travel in the field itself: without this,
+        // finding out which cell was edited would depend on asking the table
+        // where the focus is, which has already moved by the time the action arrives.
         field.tag = row
         field.identifier = NSUserInterfaceItemIdentifier(
             "\(tableView.identifier?.rawValue ?? "")|\(tableColumn?.identifier.rawValue ?? "")")
@@ -160,7 +160,7 @@ final class VocabularyWindow: NSObject, NSWindowDelegate, NSTableViewDataSource,
         return column?.identifier.rawValue == "de" ? replacements[row].from : replacements[row].to
     }
 
-    // MARK: - Ações
+    // MARK: - Actions
 
     @objc private func commitEdit(_ sender: NSTextField) {
         let parts = (sender.identifier?.rawValue ?? "").split(separator: "|", maxSplits: 1)
@@ -168,7 +168,7 @@ final class VocabularyWindow: NSObject, NSWindowDelegate, NSTableViewDataSource,
         let column = parts.count > 1 ? String(parts[1]) : ""
         let row = sender.tag
 
-        if table == "Vocabulário" {
+        if table == "Vocabulary" {
             guard terms.indices.contains(row) else { return }
             terms[row] = sender.stringValue
         } else {
@@ -212,11 +212,11 @@ final class VocabularyWindow: NSObject, NSWindowDelegate, NSTableViewDataSource,
         table.editColumn(0, row: row, with: nil, select: true)
     }
 
-    /// Salva a cada edição, e não num botão "Salvar".
+    /// Saves on every edit, not on a "Save" button.
     ///
-    /// A janela pode ser fechada de várias formas — botão, ⌘W, encerrar o app —
-    /// e um botão de salvar transformaria cada uma delas numa chance de perder
-    /// o que foi digitado.
+    /// The window can be closed in several ways — button, ⌘W, quitting the app —
+    /// and a save button would turn each of them into a chance to lose what was
+    /// typed.
     private func persist() {
         vocabulary.setTerms(terms)
         vocabulary.setReplacements(replacements)
@@ -224,8 +224,8 @@ final class VocabularyWindow: NSObject, NSWindowDelegate, NSTableViewDataSource,
 
     func windowWillClose(_ notification: Notification) {
         persist()
-        // Devolve o foco: um app acessório que fica ativo depois de fechar a
-        // janela deixa a pessoa sem saber para onde o teclado vai.
+        // Give the focus back: an accessory app that stays active after closing
+        // its window leaves the user not knowing where the keyboard goes.
         NSApp.hide(nil)
     }
 }

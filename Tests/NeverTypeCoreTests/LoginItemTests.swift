@@ -3,14 +3,14 @@ import ServiceManagement
 import Testing
 @testable import NeverTypeCore
 
-/// A guarda que impede registrar a cópia errada, e os caminhos de falha do
-/// registro.
+/// The guard that prevents registering the wrong copy, and the registration's
+/// failure paths.
 ///
-/// Nenhum teste aqui toca o `SMAppService` de verdade: registrar login item
-/// mexe no BTM do macOS, que é estado da máquina de quem está rodando a suíte —
-/// e a baixa nem sempre é imediata. Todas as chamadas de sistema entram pelos
-/// parâmetros injetados.
-@Suite("Abrir com o sistema")
+/// No test here touches the real `SMAppService`: registering a login item
+/// changes the macOS BTM, which is machine state of whoever is running the suite
+/// — and unregistering is not always immediate. Every system call comes in
+/// through the injected parameters.
+@Suite("Open at Login")
 struct LoginItemTests {
 
     private func erroFalso(_ mensagem: String) -> NSError {
@@ -18,73 +18,73 @@ struct LoginItemTests {
                 userInfo: [NSLocalizedDescriptionKey: mensagem])
     }
 
-    // MARK: - O que o sistema responde
+    // MARK: - What the system answers
 
-    @Test("os quatro estados do SMAppService viram os três que a interface usa")
+    @Test("the four SMAppService states become the three the interface uses")
     func mapeiaTodosOsStatus() {
         #expect(LoginItem.state(from: .enabled) == .on)
         #expect(LoginItem.state(from: .requiresApproval) == .needsApproval,
-                "desativado nos Ajustes exige ação fora do app, não colapsa em off")
+                "turned off in Settings requires action outside the app, does not collapse into off")
         #expect(LoginItem.state(from: .notRegistered) == .off)
         #expect(LoginItem.state(from: .notFound) == .off,
-                "notFound e notRegistered são distintos no sistema e iguais para a interface")
+                "notFound and notRegistered are distinct in the system and the same for the interface")
     }
 
-    @Test("o estado atual é lido do sistema, não de cache")
+    @Test("the current state is read from the system, not from a cache")
     func leOEstadoDoSistema() {
         var consultas = 0
         let ler: () -> SMAppService.Status = { consultas += 1; return .enabled }
 
         #expect(LoginItem.current(status: ler) == .on)
         #expect(LoginItem.current(status: ler) == .on)
-        #expect(consultas == 2, "cada consulta pergunta ao sistema de novo")
+        #expect(consultas == 2, "each query asks the system again")
     }
 
-    // MARK: - A guarda de caminho
+    // MARK: - The path guard
 
-    @Test("aceita os dois locais instalados e recusa o resto")
+    @Test("accepts the two installed locations and refuses the rest")
     func reconheceOLocalInstalado() {
-        let home = "/Users/alguem"
+        let home = "/Users/someone"
 
         #expect(LoginItem.isInstalledLocation(bundlePath: "/Applications/NeverType.app", home: home))
-        #expect(LoginItem.isInstalledLocation(bundlePath: "/Users/alguem/Applications/NeverType.app", home: home),
-                "o install.sh documenta ~/Applications como fallback para máquina gerida")
+        #expect(LoginItem.isInstalledLocation(bundlePath: "/Users/someone/Applications/NeverType.app", home: home),
+                "install.sh documents ~/Applications as the fallback for managed machines")
         #expect(LoginItem.isInstalledLocation(bundlePath: "/Applications/NeverType.app/", home: home),
-                "barra no fim é o mesmo lugar")
+                "a trailing slash is the same place")
 
-        #expect(!LoginItem.isInstalledLocation(bundlePath: "/Users/alguem/repo/build/NeverType.app", home: home),
-                "a cópia de build/ é apagada a cada compilação")
+        #expect(!LoginItem.isInstalledLocation(bundlePath: "/Users/someone/repo/build/NeverType.app", home: home),
+                "the build/ copy is deleted on every build")
         #expect(!LoginItem.isInstalledLocation(bundlePath: "/private/tmp/NeverType.app", home: home))
-        #expect(!LoginItem.isInstalledLocation(bundlePath: "/Applications/Outro.app", home: home))
-        #expect(!LoginItem.isInstalledLocation(bundlePath: "/Users/outra-pessoa/Applications/NeverType.app", home: home),
-                "o ~/Applications que vale é o de quem está rodando")
+        #expect(!LoginItem.isInstalledLocation(bundlePath: "/Applications/Other.app", home: home))
+        #expect(!LoginItem.isInstalledLocation(bundlePath: "/Users/someone-else/Applications/NeverType.app", home: home),
+                "the ~/Applications that counts is the one of whoever is running")
     }
 
-    /// O ponto do DoD: a recusa acontece **antes** de falar com o sistema.
-    /// Registrar e depois arrepender-se não desfaz — o BTM já gravou.
-    @Test("fora do local instalado, recusa sem chamar o registrador")
+    /// The point of the DoD: the refusal happens **before** talking to the system.
+    /// Registering and then regretting it does not undo — BTM has already recorded it.
+    @Test("outside the installed location, refuses without calling the registrar")
     func recusaSemRegistrar() {
         var chamou = false
         let outcome = LoginItem.enable(
-            bundlePath: "/Users/alguem/repo/build/NeverType.app",
-            home: "/Users/alguem",
+            bundlePath: "/Users/someone/repo/build/NeverType.app",
+            home: "/Users/someone",
             register: { chamou = true })
 
-        #expect(!chamou, "o registrador não pode ser chamado fora do local instalado")
+        #expect(!chamou, "the registrar cannot be called outside the installed location")
         guard case .refused(let razao) = outcome else {
-            Issue.record("esperava recusa, veio \(outcome)")
+            Issue.record("expected a refusal, got \(outcome)")
             return
         }
-        #expect(razao.contains("build/NeverType.app"), "a mensagem diz onde a cópia está")
-        #expect(razao.contains("scripts/install.sh"), "a mensagem nomeia a ação de saída")
+        #expect(razao.contains("build/NeverType.app"), "the message says where the copy is")
+        #expect(razao.contains("scripts/install.sh"), "the message names the way out")
     }
 
-    @Test("no local instalado, registra e devolve o estado novo")
+    @Test("in the installed location, registers and returns the new state")
     func registraNoLocalCerto() {
         var chamou = false
         let outcome = LoginItem.enable(
             bundlePath: "/Applications/NeverType.app",
-            home: "/Users/alguem",
+            home: "/Users/someone",
             register: { chamou = true },
             status: { .enabled })
 
@@ -92,43 +92,43 @@ struct LoginItemTests {
         #expect(outcome == .changed(.on))
     }
 
-    /// O estado vem de perguntar de novo, não de assumir que deu certo.
-    @Test("register que passa mas não liga devolve o estado real")
+    /// The state comes from asking again, not from assuming it worked.
+    @Test("a register that passes but does not turn on returns the real state")
     func naoAssumeQueRegistrouLigou() {
         let outcome = LoginItem.enable(
             bundlePath: "/Applications/NeverType.app",
-            home: "/Users/alguem",
+            home: "/Users/someone",
             register: {},
             status: { .requiresApproval })
 
         #expect(outcome == .changed(.needsApproval),
-                "register() sem erro não prova que ligou — quem responde é o status")
+                "register() without an error does not prove it turned on — the status answers")
     }
 
-    // MARK: - Os caminhos de falha
+    // MARK: - The failure paths
 
-    @Test("register que lança vira recusa com a razão do sistema")
+    @Test("a register that throws becomes a refusal with the system's reason")
     func registroQueLanca() {
         let outcome = LoginItem.enable(
             bundlePath: "/Applications/NeverType.app",
-            home: "/Users/alguem",
+            home: "/Users/someone",
             register: { throw self.erroFalso("Operation not permitted") })
 
-        #expect(outcome == .refused("o macOS recusou o registro: Operation not permitted"))
+        #expect(outcome == .refused("macOS refused to register: Operation not permitted"))
     }
 
-    @Test("unregister que lança vira recusa com a razão do sistema")
+    @Test("an unregister that throws becomes a refusal with the system's reason")
     func baixaQueLanca() {
         let outcome = LoginItem.disable(
             unregister: { throw self.erroFalso("Operation not permitted") })
 
-        #expect(outcome == .refused("o macOS recusou a baixa do registro: Operation not permitted"))
+        #expect(outcome == .refused("macOS refused to unregister: Operation not permitted"))
     }
 
-    /// Desligar não tem guarda de caminho de propósito: o BTM indexa por bundle
-    /// ID, a baixa de qualquer cópia limpa todas, e travar o desligamento
-    /// prenderia a pessoa num estado que ela quer sair.
-    @Test("desligar funciona de qualquer cópia")
+    /// Turning off has no path guard on purpose: BTM indexes by bundle ID,
+    /// unregistering from any copy clears them all, and blocking the turn-off
+    /// would trap the user in a state they want out of.
+    @Test("turning off works from any copy")
     func desligaDeQualquerLugar() {
         var chamou = false
         let outcome = LoginItem.disable(

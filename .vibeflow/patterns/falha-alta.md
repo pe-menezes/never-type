@@ -49,9 +49,9 @@ public var onError: (@MainActor @Sendable (String) -> Void)?
 ```swift
 // Sources/NeverTypeCore/Transcriber.swift
 case .modelMissing(let u):
-    return "modelo não encontrado em \(u.path). Rode scripts/fetch-model.sh"
+    return "model not found at \(u.path). Run scripts/fetch-model.sh"
 case .modelInvalid(let u):
-    return "o arquivo em \(u.path) não é um modelo ggml completo (truncado ou corrompido). Rode scripts/fetch-model.sh"
+    return "the file at \(u.path) is not a complete ggml model (truncated or corrupt). Run scripts/fetch-model.sh"
 ```
 
 ## Rules
@@ -74,7 +74,7 @@ case .failure(let failure):
     // Sinal visível: sem isto o ditado sumia em silêncio — o
     // ícone já voltou ao normal, o app não tem janela, e o
     // stderr não vai a lugar nenhum quando aberto pelo Finder.
-    self.log("TRANSCRIÇÃO FALHOU: \(failure.reason)")
+    self.log("TRANSCRIPTION FAILED: \(failure.reason)")
     self.render(.blocked)
 ```
 
@@ -92,7 +92,7 @@ log e é citado:
   que protegia de falha do modelo. O modo de falha real era exceção de C++
   (`std::out_of_range`), que `try` nenhum do Swift intercepta — o `try?`
   mascarava só o que não acontecia. Hoje `warmUp()` devolve `Bool` e o status
-  diz `AQUECIMENTO FALHOU`.
+  diz `WARM-UP FAILED`.
 - **Fallback inalcançável.** `[ -n "$load_ms" ] || load_ms=0` nunca rodava:
   `set -e` mais `pipefail` derrubavam o script na atribuição quando o `grep` não
   casava. Sob `pipefail`, um `grep` que pode não casar vai entre

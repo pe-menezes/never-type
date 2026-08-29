@@ -1,12 +1,12 @@
 import AVFoundation
 import os
 
-/// Formato que o Whisper consome: 16 kHz, mono.
+/// The format Whisper consumes: 16 kHz, mono.
 public enum AudioSpec {
     public static let sampleRate: Double = 16_000
     public static let channels: AVAudioChannelCount = 1
 
-    /// Formato de processamento em memória: float32, o que o AVAudioConverter produz.
+    /// In-memory processing format: float32, which is what AVAudioConverter produces.
     public static var processing: AVAudioFormat {
         AVAudioFormat(commonFormat: .pcmFormatFloat32,
                       sampleRate: sampleRate,
@@ -14,8 +14,8 @@ public enum AudioSpec {
                       interleaved: false)!
     }
 
-    /// Formato em disco: PCM 16-bit little-endian. O AVAudioFile converte de
-    /// float32 para inteiro ao escrever.
+    /// On-disk format: 16-bit little-endian PCM. AVAudioFile converts from
+    /// float32 to integer when writing.
     public static var fileSettings: [String: Any] {
         [
             AVFormatIDKey: kAudioFormatLinearPCM,
@@ -28,8 +28,8 @@ public enum AudioSpec {
     }
 }
 
-// Os casos guardam texto, e não os objetos do AVFoundation: `Error` implica
-// `Sendable` no Swift 6, e AVAudioFormat não é. O texto é tudo que a mensagem usa.
+// The cases hold text, not AVFoundation objects: `Error` implies `Sendable` in
+// Swift 6, and AVAudioFormat is not. The text is all the message uses.
 public enum AudioError: Error, CustomStringConvertible {
     case converterUnavailable(from: String)
     case bufferAllocationFailed
@@ -38,26 +38,26 @@ public enum AudioError: Error, CustomStringConvertible {
     public var description: String {
         switch self {
         case .converterUnavailable(let f):
-            return "não consegui converter de \(f) para 16 kHz mono"
+            return "could not convert from \(f) to 16 kHz mono"
         case .bufferAllocationFailed:
-            return "falha ao alocar buffer de áudio"
+            return "failed to allocate audio buffer"
         case .conversionFailed(let e):
-            return "conversão de áudio falhou: \(e)"
+            return "audio conversion failed: \(e)"
         }
     }
 }
 
 extension AVAudioFormat {
-    /// Descrição curta para mensagem de erro: "48000 Hz / 2 canais".
+    /// Short description for error messages: "48000 Hz / 2 channel(s)".
     var shortDescription: String {
-        "\(Int(sampleRate)) Hz / \(channelCount) canal(is)"
+        "\(Int(sampleRate)) Hz / \(channelCount) channel(s)"
     }
 }
 
-/// Converte áudio do formato do hardware para 16 kHz mono.
+/// Converts audio from the hardware format to 16 kHz mono.
 ///
-/// É uma unidade separada do gravador de propósito: é a parte que dá para testar
-/// sem microfone, e é onde mora o erro fácil de cometer.
+/// A separate unit from the recorder on purpose: it is the part that can be
+/// tested without a microphone, and it is where the easy-to-make mistake lives.
 public final class Resampler {
     public let inputFormat: AVAudioFormat
     public let outputFormat: AVAudioFormat
@@ -73,31 +73,32 @@ public final class Resampler {
         self.converter = converter
     }
 
-    /// Converte um buffer, devolvendo tudo que o conversor produziu.
+    /// Converts one buffer, returning everything the converter produced.
     ///
-    /// Devolve uma lista porque uma única chamada de `convert` não esgota o
-    /// conversor: ele preenche até a capacidade do buffer de saída e guarda o
-    /// resto. Ao subir de 8 kHz para 16 kHz isso transbordava e o excedente era
-    /// perdido em silêncio.
+    /// Returns a list because a single `convert` call does not exhaust the
+    /// converter: it fills up to the output buffer's capacity and keeps the
+    /// rest. Going up from 8 kHz to 16 kHz that overflowed and the excess was
+    /// silently lost.
     public func convert(_ input: AVAudioPCMBuffer) throws -> [AVAudioPCMBuffer] {
-        // O buffer fica num lock, e não numa `var` capturada pelo bloco.
+        // The buffer sits in a lock, not in a `var` captured by the block.
         //
-        // Desde o SDK do macOS 26.0, `AVAudioConverterInputBlock` chega ao Swift
-        // como `@Sendable`, e um bloco `@Sendable` não pode capturar `var` nem
-        // `AVAudioPCMBuffer`, que não é `Sendable`. A versão anterior — com
-        // `var supplied` e `input` capturados direto — compilava no toolchain em
-        // que o projeto nasceu (versão não registrada) e dá três erros no SDK
-        // 26.2 com Swift 6.2.3, sem uma linha ter mudado. Ver docs/pitfalls.md.
+        // Since the macOS 26.0 SDK, `AVAudioConverterInputBlock` reaches Swift as
+        // `@Sendable`, and a `@Sendable` block cannot capture a `var` nor an
+        // `AVAudioPCMBuffer`, which is not `Sendable`. The previous version — with
+        // `var supplied` and `input` captured directly — compiled on the toolchain
+        // the project was born on (version not recorded) and gives three errors on
+        // SDK 26.2 with Swift 6.2.3, without a line having changed. See
+        // docs/pitfalls.md.
         //
-        // `OSAllocatedUnfairLock` é `Sendable` e guarda estado não-Sendable via
-        // `uncheckedState`: o salto fica verificado pelo compilador, sem
-        // `@unchecked Sendable` afirmado por mim. O contrato do bloco não muda —
-        // entrega o buffer uma vez e responde `.noDataNow` nas chamadas seguintes.
+        // `OSAllocatedUnfairLock` is `Sendable` and holds non-Sendable state via
+        // `uncheckedState`: the hop stays compiler-checked, with no `@unchecked
+        // Sendable` asserted by me. The block's contract does not change — it
+        // hands over the buffer once and answers `.noDataNow` on later calls.
         //
-        // O que a Apple documenta: o parâmetro de `convert(to:error:withInputFrom:)`
-        // é non-escaping, então o bloco só roda enquanto a chamada está em curso.
-        // O que ela não documenta: em qual thread. O lock custa nanossegundos
-        // por chamada e torna a resposta irrelevante.
+        // What Apple documents: the `convert(to:error:withInputFrom:)` parameter
+        // is non-escaping, so the block only runs while the call is in progress.
+        // What it does not document: on which thread. The lock costs nanoseconds
+        // per call and makes the answer irrelevant.
         let pending = OSAllocatedUnfairLock<AVAudioPCMBuffer?>(uncheckedState: input)
         return try pump { _, status in
             let buffer = pending.withLockUnchecked { slot -> AVAudioPCMBuffer? in
@@ -114,14 +115,14 @@ public final class Resampler {
         }
     }
 
-    /// Esvazia o filtro no fim da gravação.
+    /// Empties the filter at the end of the recording.
     ///
-    /// O conversor segura amostras dentro do filtro de reamostragem entre
-    /// chamadas. Durante a gravação isso não importa: o resíduo sai na chamada
-    /// seguinte. No fim, importa — sem esvaziar, o último pedaço da fala é
-    /// descartado, e é aí que costuma estar o fim da frase.
+    /// The converter holds samples inside the resampling filter between calls.
+    /// During recording that does not matter: the residue comes out on the next
+    /// call. At the end, it matters — without emptying, the last piece of speech
+    /// is discarded, and that is where the end of the sentence usually is.
     ///
-    /// Depois do dreno o conversor não serve mais; a instância morre com a gravação.
+    /// After draining the converter is no longer usable; the instance dies with the recording.
     public func drain() throws -> [AVAudioPCMBuffer] {
         try pump { _, status in
             status.pointee = .endOfStream
@@ -129,7 +130,7 @@ public final class Resampler {
         }
     }
 
-    /// Chama o conversor até ele parar de produzir.
+    /// Calls the converter until it stops producing.
     private func pump(_ block: @escaping AVAudioConverterInputBlock) throws -> [AVAudioPCMBuffer] {
         var produced: [AVAudioPCMBuffer] = []
         while true {
@@ -142,7 +143,7 @@ public final class Resampler {
                 throw AudioError.conversionFailed(conversionError.localizedDescription)
             }
             if out.frameLength > 0 { produced.append(out) }
-            // .haveData com buffer cheio significa que ainda há saída represada.
+            // .haveData with a full buffer means there is still output held back.
             guard status == .haveData, out.frameLength > 0 else { break }
         }
         return produced
@@ -150,11 +151,11 @@ public final class Resampler {
 }
 
 extension AVAudioPCMBuffer {
-    /// Cópia independente do conteúdo.
+    /// Independent copy of the contents.
     ///
-    /// O buffer entregue ao tap é reaproveitado pelo AVAudioEngine assim que o
-    /// callback retorna. Levar ele para outra fila sem copiar é ler memória que
-    /// já foi reescrita.
+    /// The buffer handed to the tap is reused by AVAudioEngine as soon as the
+    /// callback returns. Taking it to another queue without copying is reading
+    /// memory that has already been overwritten.
     func deepCopy() -> AVAudioPCMBuffer? {
         guard format.commonFormat == .pcmFormatFloat32,
               let source = floatChannelData,
@@ -168,24 +169,25 @@ extension AVAudioPCMBuffer {
     }
 }
 
-/// Escreve o WAV: conversão, dreno e descarte.
+/// Writes the WAV: conversion, drain and discard.
 ///
-/// Separado do `AudioRecorder` de propósito. A parte que decide se o arquivo
-/// sobrevive ou é apagado é exatamente a que o DoD manda garantir, e ela não
-/// precisa de microfone para ser exercitada. Antes só dava para testá-la falando.
+/// Separated from `AudioRecorder` on purpose. The part that decides whether the
+/// file survives or is deleted is exactly the one the DoD says to guarantee, and
+/// it does not need a microphone to be exercised. Before, it could only be
+/// tested by speaking.
 ///
-/// Não é seguro para uso concorrente: quem usa serializa o acesso.
+/// Not safe for concurrent use: the caller serializes access.
 public final class RecordingSink {
     public let destination: URL
     private var file: AVAudioFile?
     private var resampler: Resampler?
     private var discarded = false
 
-    /// As amostras já convertidas, acumuladas em memória.
+    /// The already-converted samples, accumulated in memory.
     ///
-    /// A Parte 3 transcreve a partir daqui, não relendo o WAV: o arquivo em
-    /// disco continua existindo como artefato de depuração, não como canal
-    /// entre os módulos. Um ditado de 30 s são ~1,9 MB.
+    /// Part 3 transcribes from here, not by re-reading the WAV: the file on disk
+    /// keeps existing as a debugging artifact, not as a channel between modules.
+    /// A 30 s dictation is ~1.9 MB.
     public private(set) var samples: [Float] = []
 
     public init(destination: URL) { self.destination = destination }
@@ -216,15 +218,16 @@ public final class RecordingSink {
 
     public func discard() { discarded = true }
 
-    /// Apaga o WAV do último ditado, e as amostras dele em memória.
+    /// Deletes the last dictation's WAV, and its samples in memory.
     ///
-    /// É o que "Limpar histórico" chama. Até 29/08/2026 o menu apagava só o
-    /// `historico.json` e deixava o `last.wav` para trás — a gravação inteira,
-    /// não o texto. Recusa enquanto há arquivo aberto: em mãos-livres o menu
-    /// abre com gravação em curso, e aí o arquivo é o do ditado que a pessoa
-    /// está fazendo; apagá-lo por baixo do `AVAudioFile` perderia esse ditado.
+    /// This is what "Clear History" calls. Until 2026-08-29 the menu deleted only
+    /// `historico.json` and left `last.wav` behind — the whole recording, not
+    /// the text. Refuses while a file is open: in hands-free mode the menu opens
+    /// with a recording in progress, and then the file is the dictation the user
+    /// is making; deleting it from under the `AVAudioFile` would lose that
+    /// dictation.
     ///
-    /// Devolve `true` quando não sobra arquivo — apagado agora ou já ausente.
+    /// Returns `true` when no file is left — deleted now or already absent.
     @discardableResult
     public func removeDestination() -> Bool {
         guard !isOpen else { return false }
@@ -233,7 +236,7 @@ public final class RecordingSink {
         return !FileManager.default.fileExists(atPath: destination.path)
     }
 
-    /// Fecha e devolve o arquivo, ou nil se foi descartado. Idempotente.
+    /// Closes and returns the file, or nil if it was discarded. Idempotent.
     @discardableResult
     public func finish() throws -> URL? {
         guard let resampler, let file else { return nil }
@@ -252,37 +255,37 @@ public final class RecordingSink {
     }
 }
 
-/// Nível de entrada para o indicador de gravação, de 0 a 1.
+/// Input level for the recording indicator, from 0 to 1.
 ///
-/// Existe porque o overlay desenhava exatamente a mesma coisa — ponto vermelho
-/// parado e "ouvindo…" — com o microfone funcionando, mudo, ou apontado para a
-/// entrada errada. O resultado era uma transcrição vazia sem nenhuma pista do
-/// motivo, que é degradação silenciosa e este projeto trata como erro.
+/// Exists because the overlay drew exactly the same thing — static red dot and
+/// "listening…" — with the microphone working, muted, or pointed at the wrong
+/// input. The result was an empty transcription with no clue as to why, which is
+/// silent degradation and this project treats it as an error.
 ///
-/// Puro de propósito: silêncio, fala e saturação são exercitáveis sem microfone.
+/// Pure on purpose: silence, speech and clipping are exercisable without a microphone.
 public enum AudioLevel {
-    /// Abaixo disto é silêncio para efeito de desenho.
+    /// Below this is silence for drawing purposes.
     ///
-    /// -50 dBFS, e não -60: num microfone de laptop o ruído de sala e o
-    /// ventilador ficam por volta de -55 dBFS, e com o piso mais baixo a barra
-    /// mexia sozinha numa sala em silêncio — o que destruiria justamente a
-    /// pergunta que o medidor existe para responder.
+    /// -50 dBFS, not -60: on a laptop microphone the room noise and the fan sit
+    /// around -55 dBFS, and with the lower floor the bar moved on its own in a
+    /// silent room — which would destroy precisely the question the meter exists
+    /// to answer.
     public static let floorDB: Float = -50
 
-    /// Converte energia em altura de barra, na escala em que o ouvido mede.
+    /// Converts energy into bar height, on the scale the ear measures with.
     ///
-    /// Linear não serve: fala normal fica em torno de 0,05 de RMS, e uma barra
-    /// linear mal sairia do chão com alguém falando alto.
+    /// Linear does not work: normal speech sits around 0.05 RMS, and a linear bar
+    /// would barely leave the floor with someone speaking loudly.
     public static func normalized(rms: Float) -> Float {
         guard rms > 0 else { return 0 }
         let db = 20 * log10(rms)
         guard db > floorDB else { return 0 }
         let linear = min(1, (db - floorDB) / -floorDB)
-        // Expoente < 1 abre a parte de baixo da escala.
+        // Exponent < 1 opens up the bottom of the scale.
         //
-        // Só com dB, fala de conversa ficava em 0,48 e o desenho mal saía do
-        // meio: as barras variavam poucos pixels e o medidor parecia morto
-        // mesmo com alguém falando.
+        // With dB alone, conversational speech sat at 0.48 and the drawing barely
+        // left the middle: the bars varied by a few pixels and the meter looked
+        // dead even with someone speaking.
         return pow(linear, 0.65)
     }
 
@@ -293,8 +296,8 @@ public enum AudioLevel {
         }
     }
 
-    /// A versão sobre ponteiro é a que o tap usa: ele roda na thread de áudio em
-    /// tempo real e não pode alocar um array por buffer.
+    /// The pointer version is the one the tap uses: it runs on the real-time
+    /// audio thread and cannot allocate an array per buffer.
     static func rms(_ samples: UnsafePointer<Float>, count: Int) -> Float {
         guard count > 0 else { return 0 }
         var sum: Float = 0
@@ -303,40 +306,41 @@ public enum AudioLevel {
     }
 }
 
-/// Grava do microfone e escreve um WAV de 16 kHz mono.
+/// Records from the microphone and writes a 16 kHz mono WAV.
 public final class AudioRecorder {
     public let destination: URL
 
-    // O motor nasce e morre com cada ditado, em vez de viver junto com o app.
-    // Um AVAudioEngine parado mas vivo mantém o nó de entrada configurado, e o
-    // macOS continua contando o app como usuário do microfone — o indicador
-    // laranja da menu bar fica aceso o tempo todo. Num app cujo argumento é
-    // privacidade, isso é inaceitável mesmo sendo só um indicador.
+    // The engine is born and dies with each dictation, instead of living with the
+    // app. A stopped but alive AVAudioEngine keeps the input node configured, and
+    // macOS keeps counting the app as a microphone user — the orange indicator in
+    // the menu bar stays lit the whole time. In an app whose argument is privacy
+    // that is unacceptable even if it is only an indicator.
     private var engine: AVAudioEngine?
 
-    /// Fila serial que possui `file`, `resampler` e `discarded`.
+    /// Serial queue that owns `file`, `resampler` and `discarded`.
     ///
-    /// O tap roda na thread de áudio em tempo real e o encerramento roda na main.
-    /// Antes, os dois tocavam o mesmo arquivo e o mesmo conversor sem
-    /// sincronização — e o compilador não acusava, porque `AVAudioNodeTapBlock`
-    /// não é marcado como `Sendable`. Concentrar toda mutação nesta fila resolve
-    /// a corrida sem travar a thread de áudio: o tap só copia e despacha.
+    /// The tap runs on the real-time audio thread and the shutdown runs on main.
+    /// Before, both touched the same file and the same converter with no
+    /// synchronization — and the compiler did not complain, because
+    /// `AVAudioNodeTapBlock` is not marked `Sendable`. Concentrating all mutation
+    /// on this queue fixes the race without blocking the audio thread: the tap
+    /// only copies and dispatches.
     private let io = DispatchQueue(label: "com.nevertype.audio-io")
     private let sink: RecordingSink
 
     public private(set) var isRecording = false
 
-    /// Amostras do último ditado concluído, em 16 kHz mono. Vazio se cancelado.
+    /// Samples of the last completed dictation, in 16 kHz mono. Empty if cancelled.
     public private(set) var lastSamples: [Float] = []
 
-    /// Chamado quando a gravação falha no meio. Sem isto, o erro morria num
-    /// stderr que não vai a lugar nenhum quando o app é aberto pelo Finder: o
-    /// ícone seguia vermelho e `stop()` devolvia a URL como se tivesse dado certo.
-    /// Definido uma vez, antes da primeira gravação.
+    /// Called when the recording fails midway. Without this, the error died in a
+    /// stderr that goes nowhere when the app is opened from Finder: the icon
+    /// stayed red and `stop()` returned the URL as if it had worked.
+    /// Set once, before the first recording.
     public var onError: (@MainActor @Sendable (String) -> Void)?
 
-    /// Nível de entrada durante a gravação, de 0 a 1. Mesmo contrato do
-    /// `onError`: definido uma vez, antes da primeira gravação.
+    /// Input level during recording, from 0 to 1. Same contract as `onError`:
+    /// set once, before the first recording.
     public var onLevel: (@MainActor @Sendable (Float) -> Void)?
 
     public init(destination: URL) {
@@ -351,15 +355,15 @@ public final class AudioRecorder {
             at: destination.deletingLastPathComponent(),
             withIntermediateDirectories: true)
 
-        // O formato de entrada é lido agora, e não na inicialização: trocar de
-        // microfone no meio do dia (fone Bluetooth) muda o formato do inputNode,
-        // e um conversor cacheado passaria a converter do formato errado.
+        // The input format is read now, not at initialization: switching
+        // microphones mid-day (Bluetooth headset) changes the inputNode's format,
+        // and a cached converter would start converting from the wrong format.
         let engine = AVAudioEngine()
         self.engine = engine
-        // Se qualquer coisa abaixo lançar, `isRecording` fica falso e `stop()`
-        // sai pelo guard sem soltar nada — o motor ficaria vivo em repouso, com
-        // o indicador de microfone aceso, que é exatamente o que a criação por
-        // ditado existe para evitar.
+        // If anything below throws, `isRecording` stays false and `stop()` exits
+        // through the guard without releasing anything — the engine would stay
+        // alive at rest, with the microphone indicator lit, which is exactly what
+        // per-dictation creation exists to avoid.
         var started = false
         defer { if !started { self.engine?.reset(); self.engine = nil } }
 
@@ -368,21 +372,21 @@ public final class AudioRecorder {
         try io.sync { try self.sink.begin(inputFormat: hardwareFormat) }
 
         input.installTap(onBus: 0, bufferSize: 4096, format: hardwareFormat) { [weak self] buffer, _ in
-            // Na thread de áudio, só copiar e sair. Converter e escrever acontece
-            // na fila de E/S.
+            // On the audio thread, only copy and leave. Converting and writing
+            // happen on the I/O queue.
             guard let self else { return }
-            // O nível sai daqui, antes da cópia: são 4096 multiplicações, e
-            // esperar a fila de E/S atrasaria o indicador em relação à voz.
-            // `Task { @MainActor in }` e não `assumeIsolated` — a thread de
-            // áudio definitivamente não é a main.
+            // The level comes from here, before the copy: it is 4096
+            // multiplications, and waiting for the I/O queue would lag the
+            // indicator behind the voice. `Task { @MainActor in }` and not
+            // `assumeIsolated` — the audio thread is definitely not main.
             if let onLevel = self.onLevel, let channel = buffer.floatChannelData?[0] {
-                // Quatro leituras por buffer, e não uma.
+                // Four readings per buffer, not one.
                 //
-                // O buffer do tap tem 4096 quadros — a ~48 kHz, 85 ms. Um nível
-                // por buffer dava 12 quadros por segundo, e o medidor ficava
-                // com cara de parado mesmo durante a fala. Fatiar aqui
-                // quadruplica a taxa sem tocar no tamanho do buffer, ou seja,
-                // sem mexer no caminho que grava o áudio.
+                // The tap's buffer has 4096 frames — at ~48 kHz, 85 ms. One level
+                // per buffer gave 12 frames per second, and the meter looked
+                // frozen even during speech. Slicing here quadruples the rate
+                // without touching the buffer size, that is, without touching the
+                // path that records the audio.
                 let total = Int(buffer.frameLength)
                 let slices = 4
                 let size = total / slices
@@ -404,19 +408,19 @@ public final class AudioRecorder {
         isRecording = true
     }
 
-    /// Converte e escreve. Sempre na fila de E/S.
+    /// Converts and writes. Always on the I/O queue.
     private func append(_ buffer: AVAudioPCMBuffer) {
-        do { try sink.append(buffer) } catch { report("gravação interrompida: \(error)") }
+        do { try sink.append(buffer) } catch { report("recording interrupted: \(error)") }
     }
 
     private func report(_ message: String) {
         FileHandle.standardError.write(Data("nevertype: \(message)\n".utf8))
-        // `Task { @MainActor in }` em vez de assumir isolamento: o salto é
-        // verificado pelo compilador, não afirmado por mim.
+        // `Task { @MainActor in }` instead of assuming isolation: the hop is
+        // checked by the compiler, not asserted by me.
         if let onError { Task { @MainActor in onError(message) } }
     }
 
-    /// Encerra e devolve o arquivo. Devolve nil se a gravação foi cancelada.
+    /// Stops and returns the file. Returns nil if the recording was cancelled.
     @discardableResult
     public func stop() -> URL? {
         guard isRecording else { return nil }
@@ -425,37 +429,37 @@ public final class AudioRecorder {
             engine.stop()
             engine.reset()
         }
-        // Soltar a instância é o que faz o macOS liberar o microfone de verdade.
+        // Releasing the instance is what makes macOS actually free the microphone.
         engine = nil
         isRecording = false
 
-        // `sync` funciona como barreira: espera qualquer append em voo terminar
-        // antes de drenar e fechar. `removeTap` não garante que não haja callback
-        // em execução.
+        // `sync` works as a barrier: waits for any in-flight append to finish
+        // before draining and closing. `removeTap` does not guarantee that no
+        // callback is running.
         var result: URL?
         io.sync {
             do { result = try self.sink.finish() }
-            catch { self.report("fim da gravação perdido: \(error)") }
+            catch { self.report("end of recording lost: \(error)") }
             self.lastSamples = self.sink.samples
         }
         return result
     }
 
-    /// Cancela: encerra e apaga o arquivo, sem deixar rastro.
+    /// Cancels: stops and deletes the file, leaving no trace.
     public func cancel() {
         guard isRecording else { return }
         io.sync { self.sink.discard() }
         stop()
     }
 
-    /// Apaga o WAV do último ditado e esquece as amostras dele.
+    /// Deletes the last dictation's WAV and forgets its samples.
     ///
-    /// Chamado por "Limpar histórico". Não faz nada durante uma gravação: o
-    /// arquivo aberto é o do ditado em curso. A guarda que vale é a do
-    /// `RecordingSink` (arquivo aberto), exercitada em teste; esta lê o mesmo
-    /// fato pelo lado do gravador, para nem entrar na fila de E/S — e é a
-    /// única parte deste caminho que o teste não alcança sem microfone.
-    /// Devolve `true` quando não sobra arquivo.
+    /// Called by "Clear History". Does nothing during a recording: the open file
+    /// is the dictation in progress. The guard that counts is the
+    /// `RecordingSink`'s (open file), exercised in tests; this one reads the same
+    /// fact from the recorder's side, so as not to even enter the I/O queue — and
+    /// it is the only part of this path the test cannot reach without a microphone.
+    /// Returns `true` when no file is left.
     @discardableResult
     public func discardLastRecording() -> Bool {
         guard !isRecording else { return false }

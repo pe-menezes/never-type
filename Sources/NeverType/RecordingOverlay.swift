@@ -1,29 +1,29 @@
 import AppKit
 import NeverTypeCore
 
-/// Os três estados que a pílula precisa distinguir.
+/// The three states the pill needs to tell apart.
 ///
-/// Antes existiam dois — parado e gravando — e a transcrição acontecia dentro do
-/// "parado": você soltava a tecla, tudo voltava ao repouso, e passavam ~600 ms
-/// em que o app estava trabalhando sem nada na tela dizer isso.
+/// There used to be two — idle and recording — and transcription happened inside
+/// "idle": you released the key, everything went back to rest, and ~600 ms went
+/// by with the app working and nothing on screen saying so.
 enum OverlayState {
     case idle
     case recording
     case transcribing
 }
 
-/// Barras que sobem com o que o microfone está ouvindo.
+/// Bars that rise with what the microphone is hearing.
 ///
-/// O ponto vermelho parado que existia aqui antes provava que o app estava
-/// gravando, e não que havia som entrando. Com o microfone mudo ou na entrada
-/// errada o desenho era idêntico ao de tudo funcionando, e o único sinal de
-/// problema chegava depois, como transcrição vazia.
+/// The static red dot that used to be here proved the app was recording, not
+/// that sound was coming in. With the microphone muted or on the wrong input the
+/// drawing was identical to everything working, and the only sign of trouble
+/// came later, as an empty transcription.
 @MainActor
 final class LevelMeter: NSView {
     private static let barCount = 18
     private var levels = [CGFloat](repeating: 0, count: barCount)
 
-    /// Fase da onda que corre durante a transcrição. Só existe nesse estado.
+    /// Phase of the wave that runs during transcription. Only exists in that state.
     private var phase: CGFloat = 0
     private var pulse: Timer?
 
@@ -35,8 +35,8 @@ final class LevelMeter: NSView {
         }
     }
 
-    /// Empurra o nível novo e rola os anteriores para a esquerda, para o
-    /// desenho virar a forma da fala em vez de um valor instantâneo piscando.
+    /// Pushes the new level and scrolls the previous ones to the left, so the
+    /// drawing becomes the shape of the speech instead of a flickering instant value.
     func push(_ level: Float) {
         levels.removeFirst()
         levels.append(CGFloat(max(0, min(1, level))))
@@ -48,33 +48,33 @@ final class LevelMeter: NSView {
         needsDisplay = true
     }
 
-    /// Transparente ao mouse: o medidor ocupa quase toda a pílula, e se ele
-    /// engolisse o clique só a borda seria arrastável.
+    /// Transparent to the mouse: the meter covers almost the whole pill, and if
+    /// it swallowed the click only the border would be draggable.
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
-    /// Verde escuro e saturado, não o `systemGreen`.
+    /// Dark, saturated green, not `systemGreen`.
     ///
-    /// Sobre a pílula escura o verde claro anterior brilhava demais e puxava
-    /// atenção de quem estava escrevendo — o indicador precisa ser notado sem
-    /// disputar o foco.
+    /// On the dark pill the previous light green glowed too much and pulled
+    /// attention from whoever was writing — the indicator needs to be noticed
+    /// without competing for focus.
     static let live = NSColor(srgbRed: 0.13, green: 0.68, blue: 0.40, alpha: 1)
 
-    /// Azul para transcrever: cor diferente, e não verde mais fraco.
+    /// Blue for transcribing: a different color, not a weaker green.
     ///
-    /// "Gravando em silêncio" e "transcrevendo" precisam ser distinguíveis num
-    /// relance — se a transcrição fosse um verde apagado, ela ficaria igual ao
-    /// silêncio durante a gravação, que é justamente o par que o medidor de
-    /// nível existe para separar.
+    /// "Recording in silence" and "transcribing" need to be distinguishable at a
+    /// glance — if transcription were a dimmed green, it would look the same as
+    /// silence during recording, which is precisely the pair the level meter
+    /// exists to separate.
     static let working = NSColor(srgbRed: 0.36, green: 0.60, blue: 0.92, alpha: 1)
 
     private func startPulse() {
         stopPulse()
         phase = 0
-        // 30 fps. A onda existe para dizer "estou trabalhando", e uma animação
-        // travada diria o contrário do que ela existe para dizer.
+        // 30 fps. The wave exists to say "I am working", and a stuttering
+        // animation would say the opposite of what it exists to say.
         //
-        // `assumeIsolated` aqui é o caso legítimo: o Timer foi agendado no run
-        // loop principal por este método, que já é `@MainActor`.
+        // `assumeIsolated` here is the legitimate case: the Timer was scheduled
+        // on the main run loop by this method, which is already `@MainActor`.
         pulse = Timer.scheduledTimer(withTimeInterval: 1.0 / 30, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
@@ -94,8 +94,8 @@ final class LevelMeter: NSView {
         let barWidth: CGFloat = 2.5
         let gap: CGFloat = 1.9
         let maxHeight = bounds.height
-        // Piso: barra de altura zero desapareceria, e um medidor que some no
-        // silêncio não distingue "sem som" de "sem medidor".
+        // Floor: a zero-height bar would disappear, and a meter that vanishes in
+        // silence does not distinguish "no sound" from "no meter".
         let minHeight: CGFloat = 2.5
 
         for i in 0..<Self.barCount {
@@ -104,9 +104,9 @@ final class LevelMeter: NSView {
 
             switch state {
             case .transcribing:
-                // Onda que corre da esquerda para a direita, sem relação com o
-                // áudio: aqui não entra mais som, e mostrar níveis congelados
-                // sugeriria que ainda entra.
+                // Wave running left to right, unrelated to the audio: no more
+                // sound comes in here, and showing frozen levels would suggest
+                // it still does.
                 let position = phase * CGFloat(Self.barCount + 6) - 3
                 let distance = CGFloat(i) - position
                 let bump = exp(-(distance * distance) / 6)
@@ -116,11 +116,10 @@ final class LevelMeter: NSView {
             case .recording:
                 let level = levels[i]
                 height = max(minHeight, level * maxHeight)
-                // A intensidade acompanha o volume junto com a altura: fala
-                // baixa fica visivelmente mais apagada, não só mais curta.
-                // Em silêncio, verde apagado — antes isto era cinza igual ao
-                // repouso, e segurar a tecla sem falar era idêntico a não ter
-                // apertado nada.
+                // Intensity follows volume along with height: quiet speech gets
+                // visibly dimmer, not just shorter. In silence, dimmed green —
+                // this used to be gray, same as idle, and holding the key without
+                // speaking was identical to not having pressed anything.
                 color = Self.live.withAlphaComponent(level > 0 ? 0.6 + 0.4 * level : 0.35)
 
             case .idle:
@@ -137,21 +136,21 @@ final class LevelMeter: NSView {
         }
     }
 
-    // Sem `deinit { stopPulse() }`: `deinit` é nonisolated e não pode tocar
-    // estado da main actor. O medidor vive enquanto o app vive.
+    // No `deinit { stopPulse() }`: `deinit` is nonisolated and cannot touch
+    // main-actor state. The meter lives as long as the app does.
 }
 
-/// O corpo da pílula: desenha o fundo e carrega o arrasto.
+/// The pill's body: draws the background and carries the drag.
 ///
-/// O painel não usa `isMovableByWindowBackground` porque com ele não há como
-/// saber quando o arrasto terminou — e é no fim que a pílula gruda na borda e
-/// a posição é guardada.
+/// The panel does not use `isMovableByWindowBackground` because with it there is
+/// no way to know when the drag ended — and the end is when the pill snaps to the
+/// edge and the position is saved.
 @MainActor
 final class PillView: NSView {
     var onDragEnd: (() -> Void)?
 
-    /// Segunda pista do estado, junto com as barras: em silêncio absoluto as
-    /// barras quase não aparecem, e a borda continua dizendo o que acontece.
+    /// Second cue of the state, along with the bars: in absolute silence the bars
+    /// barely show, and the border keeps saying what is happening.
     var state: OverlayState = .idle { didSet { needsDisplay = true } }
 
     private var dragOrigin: NSPoint?
@@ -160,12 +159,11 @@ final class PillView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         let radius = bounds.height / 2
         let path = NSBezierPath(roundedRect: bounds, xRadius: radius, yRadius: radius)
-        // Escura nos dois temas, de propósito.
+        // Dark in both themes, on purpose.
         //
-        // O material `.hudWindow` desenhava quase branco no modo claro, e o
-        // painel ficava com cara de caixa de diálogo antiga. Uma pílula escura é
-        // legível sobre qualquer conteúdo e não muda de personalidade conforme o
-        // fundo.
+        // The `.hudWindow` material drew almost white in light mode, and the
+        // panel looked like an old dialog box. A dark pill is legible over any
+        // content and does not change personality with the background.
         NSColor(srgbRed: 0.09, green: 0.10, blue: 0.12, alpha: 0.92).setFill()
         path.fill()
 
@@ -202,15 +200,15 @@ final class PillView: NSView {
     }
 }
 
-/// Indicador flutuante, sempre visível.
+/// Floating indicator, always visible.
 ///
-/// Existe porque o ícone da menu bar não basta: em tela cheia — o modo normal de
-/// uso de Slack, VS Code e Chrome — a menu bar fica oculta, e com ela o único
-/// sinal de que o app está ouvindo.
+/// Exists because the menu bar icon is not enough: in full screen — the normal
+/// mode for Slack, VS Code and Chrome — the menu bar is hidden, and with it the
+/// only sign that the app is listening.
 ///
-/// Fica na tela o tempo todo, e não só durante o ditado: um app acessório sem
-/// janela não deixa rastro de ausência, então quando ele morre não há nada na
-/// tela que mude. A pílula parada é a prova de que ele está vivo.
+/// Stays on screen the whole time, not just during dictation: an accessory app
+/// with no window leaves no trace of absence, so when it dies nothing on screen
+/// changes. The idle pill is the proof that it is alive.
 @MainActor
 final class RecordingOverlay {
     private var panel: NSPanel?
@@ -218,7 +216,7 @@ final class RecordingOverlay {
     private var pill: PillView?
 
     private static let originKey = "overlayOrigin"
-    /// Distância em que a pílula gruda na borda ao soltar.
+    /// Distance at which the pill snaps to the edge on release.
     private static let snapDistance: CGFloat = 48
 
     func showIdle() {
@@ -226,24 +224,24 @@ final class RecordingOverlay {
         panel?.orderFrontRegardless()
     }
 
-    /// Gravando: a tecla foi pressionada.
+    /// Recording: the key was pressed.
     func show() {
         meter?.reset()
         apply(.recording)
         panel?.orderFrontRegardless()
     }
 
-    /// Transcrevendo: a tecla foi solta e o modelo está trabalhando.
+    /// Transcribing: the key was released and the model is working.
     ///
-    /// Sem este estado, soltar a tecla devolvia tudo ao repouso e o app ficava
-    /// ~600 ms trabalhando sem nada na tela dizer isso — e num ditado longo a
-    /// zona morta é maior.
+    /// Without this state, releasing the key returned everything to rest and the
+    /// app spent ~600 ms working with nothing on screen saying so — and on a
+    /// long dictation the dead zone is bigger.
     func transcribing() {
         apply(.transcribing)
     }
 
-    /// Volta ao repouso. Não some da tela: sumir era o que fazia "app morto" e
-    /// "app parado" terem a mesma aparência — nenhuma.
+    /// Back to rest. Does not leave the screen: leaving was what made "dead app"
+    /// and "idle app" look the same — like nothing.
     func hide() {
         meter?.reset()
         apply(.idle)
@@ -256,7 +254,7 @@ final class RecordingOverlay {
         pill?.state = state
     }
 
-    /// Chamado a cada fatia do buffer do microfone.
+    /// Called for every slice of the microphone buffer.
     func push(level: Float) {
         meter?.push(level)
     }
@@ -275,7 +273,7 @@ final class RecordingOverlay {
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hasShadow = true
-        // Acima de apps em tela cheia. `.floating` ficaria por baixo delas.
+        // Above full-screen apps. `.floating` would sit below them.
         panel.level = .screenSaver
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
 
@@ -294,13 +292,13 @@ final class RecordingOverlay {
         return panel
     }
 
-    // MARK: - Posição
+    // MARK: - Position
 
-    /// Onde a pílula estava, ou o canto inferior direito na primeira vez.
+    /// Where the pill was, or the bottom-right corner the first time.
     ///
-    /// Sempre validada contra as telas atuais: guardar a posição e restaurá-la
-    /// cegamente deixa a pílula fora da tela quando alguém desconecta o monitor
-    /// em que ela estava — e uma pílula invisível não prova nada.
+    /// Always validated against the current screens: saving the position and
+    /// restoring it blindly leaves the pill off screen when someone unplugs the
+    /// monitor it was on — and an invisible pill proves nothing.
     private func restoredOrigin(for size: NSSize) -> NSPoint {
         let visible = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
         let physical = NSScreen.main?.frame ?? visible
@@ -315,21 +313,21 @@ final class RecordingOverlay {
         return candidate
     }
 
-    /// Ao soltar, gruda na borda mais próxima e guarda onde ficou.
+    /// On release, snaps to the nearest edge and saves where it ended up.
     private func snapAndPersist() {
         guard let panel else { return }
         let frame = panel.frame
         let screen = NSScreen.screens.first { $0.frame.intersects(frame) } ?? NSScreen.main
         guard let visible = screen?.visibleFrame else { return }
 
-        // Chão, laterais e teto vêm de fontes diferentes de propósito.
+        // Floor, sides and ceiling come from different sources on purpose.
         //
-        // `visibleFrame` exclui o Dock, então usá-lo embaixo fazia "o mais baixo
-        // possível" ser a borda superior do Dock — e como em cima o limite é
-        // logo abaixo da barra de menu, subir parecia funcionar e descer não.
-        // A pílula flutua acima de tudo, então o chão e as laterais são a tela
-        // física. Só o teto respeita `visibleFrame`, para não cobrir a barra de
-        // menu nem sumir atrás dela.
+        // `visibleFrame` excludes the Dock, so using it at the bottom made "as low
+        // as possible" mean the top edge of the Dock — and since at the top the
+        // limit is just below the menu bar, going up seemed to work and going
+        // down did not. The pill floats above everything, so the floor and the
+        // sides are the physical screen. Only the ceiling respects
+        // `visibleFrame`, so as not to cover the menu bar or vanish behind it.
         let physical = screen?.frame ?? visible
         var origin = frame.origin
         let margin: CGFloat = 12

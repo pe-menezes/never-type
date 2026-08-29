@@ -1,13 +1,14 @@
-// Ponte para o whisper.cpp compilado estático em vendor/whisper.
+// Bridge to the whisper.cpp built statically in vendor/whisper.
 //
-// Caminhos relativos a este arquivo: SwiftPM resolve headers de um alvo
-// `systemLibrary` na hora do import, antes de qualquer flag do consumidor.
+// Paths are relative to this file: SwiftPM resolves the headers of a
+// `systemLibrary` target at import time, before any consumer flag.
 //
-// `ggml-backend.h` entra junto porque `ggml_backend_dev_count`, `_dev_get` e
-// `_dev_name` moram lá e não são expostas por `whisper.h` (que inclui só ggml.h
-// e ggml-cpu.h). É com elas que Transcriber.swift enumera os dispositivos para
-// provar que o Metal está ativo. `ggml_backend_load_all()`, o motivo original
-// deste header, foi removida do app — ver o comentário em `Transcriber.init`.
+// `ggml-backend.h` comes along because `ggml_backend_dev_count`, `_dev_get` and
+// `_dev_name` live there and are not exposed by `whisper.h` (which includes only
+// ggml.h and ggml-cpu.h). They are what Transcriber.swift uses to enumerate the
+// devices and prove Metal is active. `ggml_backend_load_all()`, the original
+// reason for this header, was removed from the app — see the comment in
+// `Transcriber.init`.
 module CWhisper [system] {
     header "../../vendor/whisper/include/whisper.h"
     header "../../vendor/whisper/include/ggml-backend.h"

@@ -83,8 +83,8 @@ que você falou"*. A auditoria de 29/08 achou **três** cópias em disco, não u
 da sessão — sem doc nenhum e fora de "Limpar histórico") e `last.wav` (a gravação
 inteira, também fora de "Limpar histórico").
 
-O que mudou: o log passou a guardar tempo e tamanho, nunca o texto (`transcrito
-em N ms: M caracteres`), e o doc de `log(_:)` carrega a regra; "Limpar histórico"
+O que mudou: o log passou a guardar tempo e tamanho, nunca o texto (`transcribed
+in N ms: M chars`), e o doc de `log(_:)` carrega a regra; "Limpar histórico"
 apaga o JSON **e** o `last.wav`, recusando só com gravação em curso
 (`RecordingSink.removeDestination`, `AudioRecorder.discardLastRecording`, 4
 testes); o doc de `lastRecordingURL()` lista os arquivos; o README ganhou "O que
@@ -106,8 +106,8 @@ o texto e que "Limpar histórico" some com `historico.json` e `last.wav`.
 **Rebaixado em 28/08 por medição.** Era "o item mais valioso do backlog".
 
 Cinco ditados reais, do log do app (lidos quando a linha ainda era `transcrito em
-N ms → texto`; desde 29/08 ela é `transcrito em N ms: M caracteres`, sem o texto —
-o número continua no mesmo lugar):
+N ms → texto`; desde 29/08 ela é `transcribed in N ms: M chars[, K after
+replacements]`, sem o texto — o número continua no mesmo lugar):
 
 | áudio | transcrição | fator |
 |---|---|---|

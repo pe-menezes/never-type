@@ -1,47 +1,46 @@
 import AppKit
 
-/// Observa uma tecla modificadora global: pressiona começa, solta termina.
+/// Watches a global modifier key: press starts, release finishes.
 ///
-/// Usa um modificador puro de propósito. Segurar ⌘ direito sozinho não digita
-/// caractere nem dispara ação do sistema, então não é preciso *engolir* o evento
-/// — basta escutar. Isso dispensa um CGEventTap interceptador, que é mais código
-/// e pode travar a entrada do sistema inteiro se algo der errado.
-/// Vive na main actor. Os monitores do `NSEvent` são API do AppKit ligada ao
-/// run loop principal, e o tipo passa a dizer isso em vez de deixar implícito.
+/// Uses a pure modifier on purpose. Holding right ⌘ alone types no character and
+/// triggers no system action, so there is no need to *swallow* the event — just
+/// listen. That spares an intercepting CGEventTap, which is more code and can
+/// freeze input for the whole system if something goes wrong.
+/// Lives on the main actor. `NSEvent` monitors are AppKit API tied to the main
+/// run loop, and the type now says so instead of leaving it implicit.
 @MainActor
 public final class HotkeyMonitor {
     public enum Event {
         case pressed
         case released
-        /// Uma tecla comum foi pressionada durante o hold. Sem isso, um ⌘V normal
-        /// feito com a mão direita viraria um ditado fantasma.
+        /// A regular key was pressed during the hold. Without this, a normal ⌘V
+        /// done with the right hand would become a phantom dictation.
         case cancelled
-        /// Duplo toque: a gravação continua sem a tecla segurada.
+        /// Double tap: the recording continues without the key held.
         case latched
     }
 
-    /// A regra do gatilho, separada do `NSEvent`.
+    /// The trigger rule, separated from `NSEvent`.
     ///
-    /// Pura de propósito: um ditado de 31 segundos apareceu no log de uso, e
-    /// segurar a tecla esse tempo todo é o incômodo que o modo mãos-livres
-    /// resolve. Toda a lógica de "isto foi um toque ou um hold?" mora aqui, para
-    /// cada caminho ser exercitável sem teclado — inclusive os que só acontecem
-    /// em milissegundos específicos.
+    /// Pure on purpose: a 31-second dictation showed up in the usage log, and
+    /// holding the key that whole time is the nuisance hands-free mode solves.
+    /// All the "was this a tap or a hold?" logic lives here, so every path is
+    /// exercisable without a keyboard — including the ones that only happen at
+    /// specific milliseconds.
     public struct Latch {
-        /// Hold mais curto que isto é toque, não ditado.
+        /// A hold shorter than this is a tap, not a dictation.
         ///
-        /// O preço: um toque curto tem a conclusão adiada em até `tapWindow`,
-        /// esperando para ver se vem o segundo. Só afeta hold abaixo de 250 ms,
-        /// que não tem áudio aproveitável de qualquer jeito — o ditado normal
-        /// não paga nada.
+        /// The price: a short tap has its conclusion delayed by up to `tapWindow`,
+        /// waiting to see whether the second one comes. Only affects holds under
+        /// 250 ms, which have no usable audio anyway — normal dictation pays nothing.
         public static let tapThreshold: TimeInterval = 0.25
-        /// Intervalo máximo entre os dois toques.
+        /// Maximum interval between the two taps.
         public static let tapWindow: TimeInterval = 0.30
 
         public enum Input {
             case down(TimeInterval)
             case up(TimeInterval)
-            /// Tecla comum, que durante o hold significa "isto era um atalho".
+            /// Regular key, which during the hold means "this was a shortcut".
             case otherKey
             case escape
             case timeout
@@ -59,10 +58,10 @@ public final class HotkeyMonitor {
         enum State: Equatable {
             case idle
             case holding(since: TimeInterval)
-            /// Já soltou um toque curto; a gravação continua enquanto se espera
-            /// o segundo toque.
+            /// Already released a short tap; the recording continues while
+            /// waiting for the second tap.
             case awaitingSecondTap
-            /// Mãos-livres: grava sem a tecla segurada.
+            /// Hands-free: records without the key held.
             case latched
         }
 
@@ -91,12 +90,12 @@ public final class HotkeyMonitor {
                 state = .idle
                 return [.cancel]
 
-            // Segundo toque dentro da janela: trava.
+            // Second tap inside the window: lock.
             case (.awaitingSecondTap, .down):
                 state = .latched
                 return [.disarmTimeout, .latch]
 
-            // A janela passou: era só um toque curto mesmo.
+            // The window passed: it really was just a short tap.
             case (.awaitingSecondTap, .timeout):
                 state = .idle
                 return [.finish]
@@ -105,8 +104,8 @@ public final class HotkeyMonitor {
                 state = .idle
                 return [.disarmTimeout, .cancel]
 
-            // Travado, um toque encerra. O `up` seguinte cai no `.idle` e é
-            // ignorado lá.
+            // Locked, one tap finishes. The following `up` lands in `.idle` and
+            // is ignored there.
             case (.latched, .down):
                 state = .idle
                 return [.finish]
@@ -115,12 +114,12 @@ public final class HotkeyMonitor {
                 state = .idle
                 return [.cancel]
 
-            // Travado, tecla comum NÃO cancela.
+            // Locked, a regular key does NOT cancel.
             //
-            // Segurando a tecla, uma tecla comum significa "isto era um atalho,
-            // não um ditado". Em mãos-livres não há modificador segurado, então
-            // teclar é só teclar — e cancelar um ditado longo por causa disso
-            // seria perder justamente o que o modo existe para permitir.
+            // While holding the key, a regular key means "this was a shortcut,
+            // not a dictation". In hands-free there is no modifier held, so
+            // typing is just typing — and cancelling a long dictation because of
+            // that would lose precisely what the mode exists to allow.
             case (.latched, .otherKey):
                 return []
 
@@ -130,27 +129,27 @@ public final class HotkeyMonitor {
         }
     }
 
-    /// ⌘ direito. O keyCode identifica a tecla; a máscara identifica o *lado*,
-    /// já que `.command` fica ligada com qualquer um dos dois ⌘.
+    /// Right ⌘. The keyCode identifies the key; the mask identifies the *side*,
+    /// since `.command` is set with either of the two ⌘.
     public struct Trigger: Sendable {
         public let keyCode: UInt16
         public let deviceMask: UInt
         public let label: String
 
-        public static let rightCommand = Trigger(keyCode: 54, deviceMask: 0x0010, label: "⌘ direito")
-        public static let rightOption  = Trigger(keyCode: 61, deviceMask: 0x0040, label: "⌥ direito")
-        public static let rightControl = Trigger(keyCode: 62, deviceMask: 0x2000, label: "⌃ direito")
+        public static let rightCommand = Trigger(keyCode: 54, deviceMask: 0x0010, label: "Right ⌘")
+        public static let rightOption  = Trigger(keyCode: 61, deviceMask: 0x0040, label: "Right ⌥")
+        public static let rightControl = Trigger(keyCode: 62, deviceMask: 0x2000, label: "Right ⌃")
 
-        /// As opções oferecidas no menu.
+        /// The options offered in the menu.
         ///
-        /// Só modificadores puros do lado direito. Um modificador sozinho não
-        /// digita caractere nem dispara ação do sistema, que é o que dispensa o
-        /// `CGEventTap` interceptador — e o lado direito é o que a mão que não
-        /// está no mouse alcança sem sair da posição.
+        /// Only pure right-side modifiers. A modifier alone types no character
+        /// and triggers no system action, which is what spares the intercepting
+        /// `CGEventTap` — and the right side is what the hand that is not on the
+        /// mouse reaches without leaving its position.
         public static let all: [Trigger] = [rightCommand, rightOption, rightControl]
 
-        /// Identificador para guardar a escolha. O keyCode é estável entre
-        /// versões do macOS; o rótulo não é, porque é texto de interface.
+        /// Identifier for saving the choice. The keyCode is stable across macOS
+        /// versions; the label is not, because it is interface text.
         public var id: String { String(keyCode) }
 
         public static func named(_ id: String?) -> Trigger? {
@@ -165,12 +164,12 @@ public final class HotkeyMonitor {
         }
     }
 
-    /// Trocável em uso: a escolha vive no menu.
+    /// Switchable in use: the choice lives in the menu.
     ///
-    /// Não precisa reinstalar os monitores — eles escutam `.flagsChanged` de
-    /// qualquer tecla, e o filtro por keyCode acontece na leitura. O que precisa
-    /// zerar é a máquina de estados: trocar a tecla no meio de um hold deixaria
-    /// uma gravação órfã, sem tecla que a encerre.
+    /// No need to reinstall the monitors — they listen to `.flagsChanged` from
+    /// any key, and the keyCode filter happens on read. What does need resetting
+    /// is the state machine: switching keys in the middle of a hold would leave
+    /// an orphan recording, with no key to finish it.
     public var trigger: Trigger {
         didSet {
             guard trigger.keyCode != oldValue.keyCode else { return }
@@ -186,24 +185,24 @@ public final class HotkeyMonitor {
     private var latch = Latch()
     private var tapTimer: Timer?
 
-    /// Verdadeiro enquanto a gravação segue sem a tecla segurada.
+    /// True while the recording continues without the key held.
     public var isLatched: Bool { latch.isLatched }
 
     public init(trigger: Trigger = .rightCommand) {
         self.trigger = trigger
     }
 
-    /// A concessão de Acessibilidade. Sem ela os monitores globais simplesmente
-    /// não recebem eventos — e não avisam. O app pareceria quebrado em silêncio.
+    /// The Accessibility grant. Without it the global monitors simply receive no
+    /// events — and do not say so. The app would look broken in silence.
     public static var hasAccessibilityPermission: Bool {
         AXIsProcessTrusted()
     }
 
     @discardableResult
     public static func requestAccessibilityPermission() -> Bool {
-        // A constante kAXTrustedCheckOptionPrompt é uma `var` global do
-        // ApplicationServices, o que o Swift 6 rejeita por concorrência. O valor
-        // é estável e documentado, então usamos a string diretamente.
+        // The kAXTrustedCheckOptionPrompt constant is a global `var` in
+        // ApplicationServices, which Swift 6 rejects for concurrency. The value
+        // is stable and documented, so we use the string directly.
         let options = ["AXTrustedCheckOptionPrompt": true]
         return AXIsProcessTrustedWithOptions(options as CFDictionary)
     }
@@ -212,22 +211,22 @@ public final class HotkeyMonitor {
         stop()
 
         let mask: NSEvent.EventTypeMask = [.flagsChanged, .keyDown]
-        // `assumeIsolated`, e não `Task { @MainActor in }`, de propósito.
+        // `assumeIsolated`, and not `Task { @MainActor in }`, on purpose.
         //
-        // O AppKit entrega estes eventos na main thread — os monitores são
-        // instalados no run loop principal. E aqui a ordem importa mais que a
-        // pureza: um salto assíncrono poderia processar o `keyDown` depois do
-        // release, transformando um ditado válido em cancelamento. A chamada
-        // síncrona preserva a ordem de chegada.
+        // AppKit delivers these events on the main thread — the monitors are
+        // installed on the main run loop. And here order matters more than
+        // purity: an asynchronous hop could process the `keyDown` after the
+        // release, turning a valid dictation into a cancellation. The synchronous
+        // call preserves arrival order.
         if let m = NSEvent.addGlobalMonitorForEvents(matching: mask, handler: { [weak self] event in
             MainActor.assumeIsolated { self?.handle(event) }
         }) {
             globalMonitors.append(m)
         }
 
-        // O monitor global não dispara quando o próprio app está em foco. Como
-        // NeverType é acessório e quase nunca fica, isto é cinto de segurança —
-        // mas sem ele o trigger morreria com o menu da bandeja aberto.
+        // The global monitor does not fire when the app itself is in focus. Since
+        // NeverType is accessory and almost never is, this is a seat belt — but
+        // without it the trigger would die with the tray menu open.
         localMonitor = NSEvent.addLocalMonitorForEvents(matching: mask) { [weak self] event in
             MainActor.assumeIsolated { self?.handle(event) }
             return event
@@ -251,7 +250,7 @@ public final class HotkeyMonitor {
             let down = (event.modifierFlags.rawValue & trigger.deviceMask) != 0
             apply(latch.handle(down ? .down(event.timestamp) : .up(event.timestamp)))
         case .keyDown:
-            // 53 é Escape. Em mãos-livres ele é a única saída sem transcrever.
+            // 53 is Escape. In hands-free it is the only way out without transcribing.
             apply(latch.handle(event.keyCode == 53 ? .escape : .otherKey))
         default:
             break
@@ -267,8 +266,8 @@ public final class HotkeyMonitor {
             case .latch:  onEvent?(.latched)
             case .armTimeout(let after):
                 tapTimer?.invalidate()
-                // `assumeIsolated` é o caso legítimo: o Timer é agendado no run
-                // loop principal por este método, que já é `@MainActor`.
+                // `assumeIsolated` is the legitimate case: the Timer is scheduled
+                // on the main run loop by this method, which is already `@MainActor`.
                 tapTimer = Timer.scheduledTimer(withTimeInterval: after, repeats: false) { [weak self] _ in
                     MainActor.assumeIsolated {
                         guard let self else { return }
@@ -282,6 +281,6 @@ public final class HotkeyMonitor {
         }
     }
 
-    // Sem `deinit { stop() }`: `deinit` é nonisolated e não pode tocar estado da
-    // main actor. Quem cria o monitor chama `stop()`.
+    // No `deinit { stop() }`: `deinit` is nonisolated and cannot touch main-actor
+    // state. Whoever creates the monitor calls `stop()`.
 }

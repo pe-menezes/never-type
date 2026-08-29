@@ -1,64 +1,64 @@
 import Foundation
 import ServiceManagement
 
-/// Liga e desliga o NeverType como login item do macOS.
+/// Turns NeverType on and off as a macOS login item.
 ///
-/// O `SMAppService` registra **o bundle que está rodando**, e o BTM indexa esse
-/// registro por bundle ID, não por caminho. Medido em 2026-08-28 (macOS 26.2)
-/// com um app-proxy assinado com a mesma identidade e o mesmo hardened runtime:
-/// registrado a partir de `/private/tmp/...`, a cópia em `/Applications` — outro
-/// caminho, mesmo bundle ID — respondeu `status == .enabled`. E o `register()`
-/// do bundle temporário não lançou erro nenhum.
+/// `SMAppService` registers **the bundle that is running**, and BTM indexes that
+/// registration by bundle ID, not by path. Measured on 2026-08-28 (macOS 26.2)
+/// with an app proxy signed with the same identity and the same hardened
+/// runtime: registered from `/private/tmp/...`, the copy in `/Applications` —
+/// another path, same bundle ID — answered `status == .enabled`. And the
+/// temporary bundle's `register()` threw no error at all.
 ///
-/// Ou seja: os dois únicos sinais que a API oferece dizem "tudo certo" sobre um
-/// bundle numa pasta temporária. É por isso que a guarda de caminho roda
-/// **antes** de registrar — depois não existe pergunta que devolva a resposta.
+/// That is: the only two signals the API offers say "all good" about a bundle in
+/// a temporary folder. That is why the path guard runs **before** registering —
+/// afterwards there is no question that returns the answer.
 public enum LoginItem {
 
-    /// O que o sistema responde sobre abrir o app na inicialização.
+    /// What the system answers about opening the app at login.
     public enum State: Equatable, CustomStringConvertible {
-        /// Abre com o sistema.
+        /// Opens at login.
         case on
-        /// Não abre. Colapsa `notRegistered` (nunca registrado) e `notFound`
-        /// (registrado e depois some do BTM): são casos distintos do
-        /// `SMAppService`, mas a interface não tem o que fazer de diferente com
-        /// eles — os dois significam "não abre".
+        /// Does not open. Collapses `notRegistered` (never registered) and
+        /// `notFound` (registered and later gone from BTM): they are distinct
+        /// `SMAppService` cases, but the interface has nothing different to do
+        /// with them — both mean "does not open".
         case off
-        /// Registrado, e desligado pela pessoa nos Ajustes do Sistema. Não
-        /// colapsa em `off` porque a saída é diferente: nenhum clique aqui
-        /// resolve, a ação está fora do app.
+        /// Registered, and turned off by the user in System Settings. Does not
+        /// collapse into `off` because the way out is different: no click here
+        /// fixes it, the action is outside the app.
         case needsApproval
 
         public var description: String {
             switch self {
-            case .on:            return "ligado"
-            case .off:           return "desligado"
-            case .needsApproval: return "desativado nos Ajustes do Sistema"
+            case .on:            return "on"
+            case .off:           return "off"
+            case .needsApproval: return "turned off in System Settings"
             }
         }
     }
 
-    /// O resultado de tentar mudar o estado.
+    /// The result of trying to change the state.
     ///
-    /// `refused` carrega o motivo já redigido para o usuário, com a ação de
-    /// saída dentro — o app é acessório e não tem janela onde explicar depois.
+    /// `refused` carries the reason already worded for the user, with the way
+    /// out inside it — the app is accessory and has no window to explain later.
     public enum Outcome: Equatable {
         case changed(State)
         case refused(String)
     }
 
-    /// Os dois lugares de onde vale registrar.
+    /// The two places from which registering is valid.
     ///
-    /// `~/Applications` não é capricho: o `install.sh` documenta esse fallback
-    /// para máquina gerida ou usuário sem direitos de administrador, onde
-    /// `/Applications` não é gravável. Uma guarda que só aceitasse
-    /// `/Applications` deixaria essa pessoa sem como ligar a opção.
+    /// `~/Applications` is not a whim: `install.sh` documents that fallback for
+    /// managed machines or users without admin rights, where `/Applications` is
+    /// not writable. A guard that only accepted `/Applications` would leave that
+    /// person with no way to turn the option on.
     private static let bundleName = "NeverType.app"
 
-    /// A regra em si, separada de qualquer consulta ao sistema.
+    /// The rule itself, separated from any query to the system.
     ///
-    /// Pura de propósito, como `ModelStore.isValid(magic:size:)`: dá para
-    /// exercitar todos os ramos sem montar bundle nenhum em disco.
+    /// Pure on purpose, like `ModelStore.isValid(magic:size:)`: every branch can
+    /// be exercised without assembling any bundle on disk.
     public static func isInstalledLocation(bundlePath: String, home: String) -> Bool {
         let path = withoutTrailingSlash(bundlePath)
         let home = withoutTrailingSlash(home)
@@ -66,7 +66,7 @@ public enum LoginItem {
             || path == "\(home)/Applications/\(bundleName)"
     }
 
-    /// Traduz a resposta do sistema para o que a interface precisa saber.
+    /// Translates the system's answer into what the interface needs to know.
     public static func state(from status: SMAppService.Status) -> State {
         switch status {
         case .enabled:                  return .on
@@ -76,21 +76,21 @@ public enum LoginItem {
         }
     }
 
-    /// O estado atual, consultado ao sistema.
+    /// The current state, queried from the system.
     ///
-    /// Chamado toda vez que o menu se remonta, nunca guardado: a pessoa desliga
-    /// o app nos Ajustes do Sistema sem avisar ninguém, e um checkmark guardado
-    /// em variável passaria a mentir a partir daí.
+    /// Called every time the menu is rebuilt, never stored: the user turns the
+    /// app off in System Settings without telling anyone, and a checkmark kept
+    /// in a variable would start lying from then on.
     public static func current(status: (() -> SMAppService.Status)? = nil) -> State {
         state(from: (status ?? systemStatus)())
     }
 
-    /// Registra o app para abrir com o sistema.
+    /// Registers the app to open at login.
     ///
-    /// Recusa fora do local instalado. Sem essa recusa, ligar a opção rodando
-    /// `build/NeverType.app` registraria a cópia do repositório — que o
-    /// `build-app.sh` reconstrói do zero a cada compilação — e nem o `status`
-    /// nem o `register()` acusariam nada.
+    /// Refuses outside the installed location. Without that refusal, turning the
+    /// option on while running `build/NeverType.app` would register the
+    /// repository's copy — which `build-app.sh` rebuilds from scratch on every
+    /// build — and neither `status` nor `register()` would complain.
     public static func enable(
         bundlePath: String = Bundle.main.bundlePath,
         home: String = NSHomeDirectory(),
@@ -99,24 +99,24 @@ public enum LoginItem {
     ) -> Outcome {
         guard isInstalledLocation(bundlePath: bundlePath, home: home) else {
             return .refused("""
-                esta cópia está em \(bundlePath), e só a instalada abre com o sistema. \
-                Rode: bash scripts/install.sh
+                this copy is at \(bundlePath), and only the installed one opens at login. \
+                Run: bash scripts/install.sh
                 """)
         }
         do {
             try (register ?? systemRegister)()
         } catch {
-            return .refused("o macOS recusou o registro: \(error.localizedDescription)")
+            return .refused("macOS refused to register: \(error.localizedDescription)")
         }
         return .changed(state(from: (status ?? systemStatus)()))
     }
 
-    /// Tira o app da inicialização.
+    /// Removes the app from login.
     ///
-    /// Sem guarda de caminho, ao contrário de `enable`. Como o BTM indexa por
-    /// bundle ID, a baixa feita de qualquer cópia limpa o registro de todas
-    /// (medido no mesmo spike) — e travar o desligamento porque a pessoa está
-    /// rodando a cópia errada seria prendê-la num estado que ela quer sair.
+    /// No path guard, unlike `enable`. Since BTM indexes by bundle ID,
+    /// unregistering from any copy clears the registration for all of them
+    /// (measured in the same spike) — and blocking the turn-off because the user
+    /// is running the wrong copy would trap them in a state they want out of.
     public static func disable(
         unregister: (() throws -> Void)? = nil,
         status: (() -> SMAppService.Status)? = nil
@@ -124,21 +124,21 @@ public enum LoginItem {
         do {
             try (unregister ?? systemUnregister)()
         } catch {
-            return .refused("o macOS recusou a baixa do registro: \(error.localizedDescription)")
+            return .refused("macOS refused to unregister: \(error.localizedDescription)")
         }
         return .changed(state(from: (status ?? systemStatus)()))
     }
 
-    /// Abre o painel de Itens de Início de Sessão.
+    /// Opens the Login Items pane.
     ///
-    /// Pela API, e não por uma `x-apple.systempreferences:` montada à mão: o
-    /// identificador desse painel já mudou entre versões do macOS, e uma URL
-    /// errada não abre nada nem reclama.
+    /// Through the API, and not a hand-built `x-apple.systempreferences:` URL:
+    /// that pane's identifier has already changed between macOS versions, and a
+    /// wrong URL opens nothing and does not complain.
     public static func openSettings() {
         SMAppService.openSystemSettingsLoginItems()
     }
 
-    // MARK: - As chamadas de sistema, isoladas para o teste poder trocá-las
+    // MARK: - The system calls, isolated so tests can swap them
 
     private static func systemStatus() -> SMAppService.Status {
         SMAppService.mainApp.status

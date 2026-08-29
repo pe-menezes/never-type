@@ -1,28 +1,28 @@
 import Foundation
 
-/// Gera os tons curtos do retorno auditivo.
+/// Generates the short tones of the audible feedback.
 ///
-/// Os sons do sistema (`Tink`, `Pop`, `Glass`) foram desenhados para *serem
-/// notados* — são alertas. Aqui o som é confirmação de uma ação que a pessoa
-/// acabou de fazer de propósito, então ele precisa ser o contrário disso.
+/// The system sounds (`Tink`, `Pop`, `Glass`) were designed to *be noticed* —
+/// they are alerts. Here the sound is confirmation of an action the user just
+/// took on purpose, so it needs to be the opposite of that.
 ///
-/// Gerar em vez de escolher dá controle sobre as duas coisas que fazem um som
-/// ser tranquilo ou irritante: a frequência e, principalmente, o envelope. Um
-/// tom que começa e termina de repente estala; a subida e a descida suaves
-/// abaixo são o que tira o estalo.
+/// Generating instead of choosing gives control over the two things that make a
+/// sound calm or irritating: the frequency and, above all, the envelope. A tone
+/// that starts and ends abruptly clicks; the gentle rise and fall below are what
+/// removes the click.
 public enum Tone {
     public static let sampleRate: Double = 44_100
 
-    /// Sobe e desce em 25 ms.
+    /// Rises and falls over 25 ms.
     ///
-    /// Sem isso, o corte abrupto na borda do buffer vira um clique audível —
-    /// que é exatamente o "tec" seco que se está tentando evitar.
+    /// Without it, the abrupt cut at the buffer's edge becomes an audible click —
+    /// which is exactly the dry "tick" being avoided.
     private static let fade: Double = 0.025
 
-    /// Uma ou mais notas em sequência, como WAV de 16 bits mono.
+    /// One or more notes in sequence, as a 16-bit mono WAV.
     ///
-    /// Devolve WAV, e não amostras, porque quem toca é o `NSSound`, que aceita
-    /// `Data` e dispensa arquivo temporário.
+    /// Returns a WAV, not samples, because the player is `NSSound`, which accepts
+    /// `Data` and needs no temporary file.
     public static func wav(_ frequencies: [Double],
                            seconds: Double = 0.07,
                            amplitude: Double = 0.14) -> Data {
@@ -39,12 +39,12 @@ public enum Tone {
         return riff(samples)
     }
 
-    /// Cabeçalho WAV canônico + as amostras.
+    /// Canonical WAV header + the samples.
     ///
-    /// Escrito à mão porque a alternativa seria carregar o AVFoundation e um
-    /// arquivo em disco para produzir uns poucos KB de áudio: 44 bytes de
-    /// cabeçalho mais 2 bytes por amostra — ~6 KB no padrão de 0,07 s, ~7,5 KB
-    /// e ~11,5 KB nos tons do app (ver `Feedback`, em main.swift).
+    /// Hand-written because the alternative would be loading AVFoundation and a
+    /// file on disk to produce a few KB of audio: 44 bytes of header plus 2 bytes
+    /// per sample — ~6 KB at the default 0.07 s, ~7.5 KB and ~11.5 KB for the
+    /// app's tones (see `Feedback`, in main.swift).
     static func riff(_ samples: [Int16]) -> Data {
         let bytesPerSample = 2
         let dataSize = samples.count * bytesPerSample
@@ -59,13 +59,13 @@ public enum Tone {
         ascii("WAVE")
 
         ascii("fmt ")
-        u32(16)                                     // tamanho do bloco fmt
-        u16(1)                                      // PCM sem compressão
+        u32(16)                                     // fmt chunk size
+        u16(1)                                      // PCM, no compression
         u16(1)                                      // mono
         u32(UInt32(sampleRate))
-        u32(UInt32(sampleRate) * UInt32(bytesPerSample))  // bytes por segundo
-        u16(UInt16(bytesPerSample))                 // alinhamento de bloco
-        u16(16)                                     // bits por amostra
+        u32(UInt32(sampleRate) * UInt32(bytesPerSample))  // bytes per second
+        u16(UInt16(bytesPerSample))                 // block align
+        u16(16)                                     // bits per sample
 
         ascii("data")
         u32(UInt32(dataSize))

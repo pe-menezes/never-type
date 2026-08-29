@@ -2,10 +2,10 @@ import Foundation
 import Testing
 @testable import NeverTypeCore
 
-/// O histórico guarda o que a pessoa falou. Os testes cobrem o teto, a
-/// sobrevivência ao fechar o app, e o apagar — que é a única saída de quem não
-/// quer mais aquilo no disco.
-@Suite("Histórico de transcrições")
+/// The history keeps what the user said. The tests cover the cap, survival
+/// across app restarts, and deletion — which is the only way out for whoever no
+/// longer wants that on disk.
+@Suite("Transcription history")
 struct TranscriptHistoryTests {
 
     private func tempURL() -> URL {
@@ -14,19 +14,19 @@ struct TranscriptHistoryTests {
             .appendingPathComponent("historico.json")
     }
 
-    @Test("a mais recente fica em primeiro")
+    @Test("the most recent comes first")
     func mostRecentFirst() {
         let url = tempURL()
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
         let h = TranscriptHistory(url: url)
 
-        h.add("primeira")
-        h.add("segunda")
-        #expect(h.entries.map(\.text) == ["segunda", "primeira"])
-        #expect(h.last?.text == "segunda")
+        h.add("first")
+        h.add("second")
+        #expect(h.entries.map(\.text) == ["second", "first"])
+        #expect(h.last?.text == "second")
     }
 
-    @Test("texto vazio ou só espaço não entra")
+    @Test("empty or whitespace-only text does not go in")
     func emptyIsRejected() {
         let url = tempURL()
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
@@ -37,72 +37,72 @@ struct TranscriptHistoryTests {
         #expect(h.entries.isEmpty)
     }
 
-    @Test("o texto é guardado sem espaço sobrando nas pontas")
+    @Test("the text is saved without surrounding whitespace")
     func trimsWhitespace() {
         let url = tempURL()
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
         let h = TranscriptHistory(url: url)
 
-        h.add("  texto ditado \n")
-        #expect(h.last?.text == "texto ditado")
+        h.add("  dictated text \n")
+        #expect(h.last?.text == "dictated text")
     }
 
-    /// Não é "guardar tudo": passar do teto derruba a mais antiga.
-    @Test("o teto derruba a mais antiga, não a mais nova")
+    /// It is not "keep everything": going past the cap drops the oldest.
+    @Test("the cap drops the oldest, not the newest")
     func limitDropsOldest() {
         let url = tempURL()
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
         let h = TranscriptHistory(url: url)
 
-        for i in 1...(TranscriptHistory.limit + 5) { h.add("ditado \(i)") }
+        for i in 1...(TranscriptHistory.limit + 5) { h.add("dictation \(i)") }
 
         #expect(h.entries.count == TranscriptHistory.limit)
-        #expect(h.last?.text == "ditado \(TranscriptHistory.limit + 5)")
-        #expect(!h.entries.contains { $0.text == "ditado 1" }, "a mais antiga tem que ter caído")
+        #expect(h.last?.text == "dictation \(TranscriptHistory.limit + 5)")
+        #expect(!h.entries.contains { $0.text == "dictation 1" }, "the oldest has to have dropped")
     }
 
-    /// O motivo de existir arquivo: fechar o app não pode apagar o que foi dito.
-    @Test("sobrevive ao fechar e reabrir o app")
+    /// The reason the file exists: quitting the app cannot erase what was said.
+    @Test("survives quitting and reopening the app")
     func survivesRestart() {
         let url = tempURL()
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
 
         let primeira = TranscriptHistory(url: url)
-        primeira.add("o que eu falei antes de fechar")
+        primeira.add("what I said before quitting")
 
         let depois = TranscriptHistory(url: url)
-        #expect(depois.last?.text == "o que eu falei antes de fechar")
+        #expect(depois.last?.text == "what I said before quitting")
     }
 
-    @Test("limpar apaga o arquivo, não só a memória")
+    @Test("clearing deletes the file, not just the memory")
     func clearRemovesTheFile() {
         let url = tempURL()
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
 
         let h = TranscriptHistory(url: url)
-        h.add("segredo")
+        h.add("secret")
         #expect(FileManager.default.fileExists(atPath: url.path))
 
         h.clear()
         #expect(h.entries.isEmpty)
         #expect(!FileManager.default.fileExists(atPath: url.path),
-                "arquivo vazio com nome de histórico ainda diz que existiu histórico")
-        #expect(TranscriptHistory(url: url).entries.isEmpty, "e não volta ao reabrir")
+                "an empty file named like a history still says a history existed")
+        #expect(TranscriptHistory(url: url).entries.isEmpty, "and it does not come back on reopen")
     }
 
-    /// Arquivo corrompido não pode derrubar o app nem impedir gravar depois.
-    @Test("JSON ilegível começa vazio em vez de quebrar")
+    /// A corrupt file cannot crash the app nor prevent saving afterwards.
+    @Test("unreadable JSON starts empty instead of breaking")
     func corruptFileStartsEmpty() throws {
         let url = tempURL()
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try Data("isto não é json".utf8).write(to: url)
+        try Data("this is not json".utf8).write(to: url)
 
         let h = TranscriptHistory(url: url)
         #expect(h.entries.isEmpty)
-        h.add("depois do arquivo corrompido")
-        #expect(h.last?.text == "depois do arquivo corrompido")
-        #expect(TranscriptHistory(url: url).entries.count == 1, "a gravação nova consertou o arquivo")
+        h.add("after the corrupt file")
+        #expect(h.last?.text == "after the corrupt file")
+        #expect(TranscriptHistory(url: url).entries.count == 1, "the new save fixed the file")
     }
 }

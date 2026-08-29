@@ -2,13 +2,13 @@ import AVFoundation
 import Testing
 @testable import NeverTypeCore
 
-// XCTest vive dentro do Xcode, que esta máquina não tem — a Parte 2 decidiu
-// construir sem ele. swift-testing vem no próprio toolchain do Swift 6 e roda
-// sob `swift test` do mesmo jeito.
-@Suite("Conversão de áudio")
+// XCTest lives inside Xcode, which this machine does not have — Part 2 decided
+// to build without it. swift-testing ships with the Swift 6 toolchain itself and
+// runs under `swift test` all the same.
+@Suite("Audio conversion")
 struct AudioConversionTests {
 
-    /// Gera um tom sintético no formato pedido, sem tocar no hardware.
+    /// Generates a synthetic tone in the requested format, without touching the hardware.
     private func tone(format: AVAudioFormat, seconds: Double, hz: Double = 440) throws -> AVAudioPCMBuffer {
         let frames = AVAudioFrameCount(format.sampleRate * seconds)
         let buffer = try #require(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames))
@@ -34,8 +34,8 @@ struct AudioConversionTests {
                                    interleaved: false))
     }
 
-    /// O caso real: o hardware entrega 48 kHz estéreo, o Whisper quer 16 kHz mono.
-    @Test("48 kHz estéreo vira 16 kHz mono")
+    /// The real case: the hardware delivers 48 kHz stereo, Whisper wants 16 kHz mono.
+    @Test("48 kHz stereo becomes 16 kHz mono")
     func convertsFortyEightStereoToSixteenMono() throws {
         let input = try hardware(48_000, 2)
         let resampler = try Resampler(inputFormat: input)
@@ -48,15 +48,15 @@ struct AudioConversionTests {
         #expect(first.format.sampleRate == 16_000)
         #expect(first.format.channelCount == 1)
 
-        // Um segundo entra, um segundo sai — contando o dreno. Sem ele o filtro
-        // retém o fim da fala, que num ditado é a última palavra.
+        // One second in, one second out — counting the drain. Without it the
+        // filter holds the end of the speech, which in a dictation is the last word.
         let total = frames(output) + frames(try resampler.drain())
-        #expect(abs(total - 16_000) <= 40, "1 s deveria virar ~16000 quadros, veio \(total)")
+        #expect(abs(total - 16_000) <= 40, "1 s should become ~16000 frames, got \(total)")
     }
 
-    /// Se o hardware já entrega 16 kHz mono, a conversão é identidade: não pode
-    /// perder nem inventar amostra.
-    @Test("16 kHz mono passa intacto")
+    /// If the hardware already delivers 16 kHz mono, the conversion is identity:
+    /// it cannot lose or invent a sample.
+    @Test("16 kHz mono passes through intact")
     func passesThroughWhenHardwareAlreadyMatches() throws {
         let input = try hardware(16_000, 1)
         let resampler = try Resampler(inputFormat: input)
@@ -64,32 +64,32 @@ struct AudioConversionTests {
         #expect(frames(output) + frames(try resampler.drain()) == 8_000)
     }
 
-    /// Fone Bluetooth entra em HFP a 8 kHz quando o microfone abre. A Parte 2 não
-    /// conserta a qualidade disso, mas a conversão não pode quebrar.
-    @Test("8 kHz de fone Bluetooth sobe para 16 kHz")
+    /// A Bluetooth headset enters HFP at 8 kHz when the microphone opens. Part 2
+    /// does not fix the quality of that, but the conversion cannot break.
+    @Test("8 kHz from a Bluetooth headset goes up to 16 kHz")
     func upsamplesFromBluetoothHandsFreeRate() throws {
         let input = try hardware(8_000, 1)
         let resampler = try Resampler(inputFormat: input)
         let output = try resampler.convert(try tone(format: input, seconds: 1.0))
         #expect(try #require(output.first).format.sampleRate == 16_000)
         let total = frames(output) + frames(try resampler.drain())
-        #expect(abs(total - 16_000) <= 40, "veio \(total)")
+        #expect(abs(total - 16_000) <= 40, "got \(total)")
     }
 
-    /// Blindagem do bug achado ao escrever estes testes: o dreno não pode devolver
-    /// vazio depois de uma conversão que reteve amostras, senão o fim da fala some.
-    @Test("o dreno devolve o que o filtro reteve")
+    /// Guard against the bug found while writing these tests: the drain cannot
+    /// return empty after a conversion that held samples, or the end of the speech vanishes.
+    @Test("the drain returns what the filter held")
     func drainReturnsTheHeldTail() throws {
         let input = try hardware(48_000, 2)
         let resampler = try Resampler(inputFormat: input)
         let body = try resampler.convert(try tone(format: input, seconds: 1.0))
         let tail = try resampler.drain()
-        #expect(frames(tail) > 0, "o filtro reteve amostras e o dreno não devolveu nada")
-        #expect(frames(body) < 16_000, "se nada foi retido, este teste perdeu o sentido")
+        #expect(frames(tail) > 0, "the filter held samples and the drain returned nothing")
+        #expect(frames(body) < 16_000, "if nothing was held, this test lost its point")
     }
 
-    /// O contrato com o whisper-cli. Se isto mudar, a Parte 3 quebra sem aviso.
-    @Test("formato em disco é o que o Whisper espera")
+    /// The contract with whisper-cli. If this changes, Part 3 breaks without warning.
+    @Test("on-disk format is what Whisper expects")
     func fileSettingsMatchWhatWhisperExpects() {
         let s = AudioSpec.fileSettings
         #expect(s[AVSampleRateKey] as? Double == 16_000)
@@ -99,12 +99,12 @@ struct AudioConversionTests {
     }
 }
 
-@Suite("Trigger da hotkey")
+@Suite("Hotkey trigger")
 struct HotkeyTriggerTests {
-    /// O trigger precisa ser um modificador puro e identificado pelo lado: a
-    /// máscara `.command` liga com qualquer um dos dois ⌘, então só o keyCode
-    /// somado à máscara de dispositivo distingue o direito do esquerdo.
-    @Test("⌘ direito tem keyCode e máscara de dispositivo distintos")
+    /// The trigger needs to be a pure modifier identified by side: the `.command`
+    /// mask is set with either of the two ⌘, so only the keyCode plus the device
+    /// mask tells the right one from the left.
+    @Test("right ⌘ has a distinct keyCode and device mask")
     func rightCommandIsIdentifiedByCodeAndMask() {
         let t = HotkeyMonitor.Trigger.rightCommand
         #expect(t.keyCode == 54)
@@ -113,37 +113,37 @@ struct HotkeyTriggerTests {
         #expect(t.keyCode != HotkeyMonitor.Trigger.rightOption.keyCode)
     }
 
-    /// A escolha é guardada pelo keyCode, e não pelo rótulo: rótulo é texto de
-    /// interface e muda; keyCode é estável entre versões do macOS.
-    @Test("a tecla escolhida sobrevive a ida e volta pelo identificador")
+    /// The choice is saved by keyCode, not by label: a label is interface text
+    /// and changes; the keyCode is stable across macOS versions.
+    @Test("the chosen key survives a round trip through the identifier")
     func triggerRoundTripsThroughID() {
         for option in HotkeyMonitor.Trigger.all {
             #expect(HotkeyMonitor.Trigger.named(option.id)?.keyCode == option.keyCode)
         }
     }
 
-    @Test("identificador desconhecido ou ausente não devolve trigger")
+    @Test("unknown or missing identifier returns no trigger")
     func unknownTriggerIsNil() {
         #expect(HotkeyMonitor.Trigger.named(nil) == nil)
-        #expect(HotkeyMonitor.Trigger.named("999") == nil, "keyCode que não oferecemos")
-        #expect(HotkeyMonitor.Trigger.named("⌘ direito") == nil, "rótulo não é identificador")
+        #expect(HotkeyMonitor.Trigger.named("999") == nil, "keyCode we do not offer")
+        #expect(HotkeyMonitor.Trigger.named("Right ⌘") == nil, "a label is not an identifier")
     }
 
-    /// Só modificador puro: qualquer outra coisa exigiria engolir o evento com
-    /// um CGEventTap, que o projeto recusou.
-    @Test("todas as opções são modificadores puros e distintas entre si")
+    /// Pure modifiers only: anything else would require swallowing the event
+    /// with a CGEventTap, which the project refused.
+    @Test("all options are pure modifiers and distinct from each other")
     func optionsAreDistinctPureModifiers() {
         let codes = HotkeyMonitor.Trigger.all.map(\.keyCode)
         let masks = HotkeyMonitor.Trigger.all.map(\.deviceMask)
-        #expect(Set(codes).count == codes.count, "keyCode repetido faria duas opções virarem uma")
-        #expect(Set(masks).count == masks.count, "máscara repetida não distinguiria o lado")
+        #expect(Set(codes).count == codes.count, "a repeated keyCode would make two options become one")
+        #expect(Set(masks).count == masks.count, "a repeated mask would not tell the side")
     }
 }
 
 
-/// O ciclo de vida do arquivo — a parte que o DoD 4 manda garantir e que, até a
-/// auditoria da Parte 2, só dava para exercitar falando no microfone.
-@Suite("Ciclo do arquivo de gravação")
+/// The file's life cycle — the part DoD 4 says to guarantee and that, until the
+/// Part 2 audit, could only be exercised by speaking into the microphone.
+@Suite("Recording file cycle")
 struct RecordingSinkTests {
 
     private func tempURL() -> URL {
@@ -168,7 +168,7 @@ struct RecordingSinkTests {
         return b
     }
 
-    @Test("gravação concluída deixa o arquivo no formato do Whisper")
+    @Test("a completed recording leaves the file in Whisper's format")
     func finishKeepsFile() throws {
         let url = tempURL()
         let sink = RecordingSink(destination: url)
@@ -182,29 +182,29 @@ struct RecordingSinkTests {
         let written = try AVAudioFile(forReading: url)
         #expect(written.fileFormat.sampleRate == 16_000)
         #expect(written.fileFormat.channelCount == 1)
-        #expect(written.length > 7_000, "0,5 s deveria dar ~8000 quadros, deu \(written.length)")
+        #expect(written.length > 7_000, "0.5 s should give ~8000 frames, gave \(written.length)")
         try? FileManager.default.removeItem(at: url.deletingLastPathComponent())
     }
 
-    /// O check 4 do DoD: tecla comum durante o hold cancela **sem gerar arquivo**.
-    @Test("cancelamento apaga o arquivo e não devolve URL")
+    /// DoD check 4: a regular key during the hold cancels **without producing a file**.
+    @Test("cancelling deletes the file and returns no URL")
     func discardRemovesFile() throws {
         let url = tempURL()
         let sink = RecordingSink(destination: url)
         let fmt = try hardware()
         try sink.begin(inputFormat: fmt)
         try sink.append(try buffer(fmt, seconds: 0.5))
-        #expect(FileManager.default.fileExists(atPath: url.path), "o arquivo existe durante a gravação")
+        #expect(FileManager.default.fileExists(atPath: url.path), "the file exists during the recording")
 
         sink.discard()
         let result = try sink.finish()
 
         #expect(result == nil)
-        #expect(!FileManager.default.fileExists(atPath: url.path), "cancelar tem que apagar o arquivo")
+        #expect(!FileManager.default.fileExists(atPath: url.path), "cancelling has to delete the file")
         try? FileManager.default.removeItem(at: url.deletingLastPathComponent())
     }
 
-    @Test("finish duas vezes não quebra nem ressuscita o arquivo")
+    @Test("finish twice neither breaks nor resurrects the file")
     func finishIsIdempotent() throws {
         let url = tempURL()
         let sink = RecordingSink(destination: url)
@@ -212,11 +212,11 @@ struct RecordingSinkTests {
         try sink.begin(inputFormat: fmt)
         try sink.append(try buffer(fmt, seconds: 0.2))
         #expect(try sink.finish() == url)
-        #expect(try sink.finish() == nil, "a segunda chamada não tem o que fechar")
+        #expect(try sink.finish() == nil, "the second call has nothing to close")
         try? FileManager.default.removeItem(at: url.deletingLastPathComponent())
     }
 
-    @Test("cancelar depois de fechar não apaga o que já foi salvo")
+    @Test("cancelling after closing does not delete what was already saved")
     func discardAfterFinishDoesNotDelete() throws {
         let url = tempURL()
         let sink = RecordingSink(destination: url)
@@ -226,29 +226,29 @@ struct RecordingSinkTests {
         _ = try sink.finish()
         sink.discard()
         _ = try sink.finish()
-        #expect(FileManager.default.fileExists(atPath: url.path), "gravação já concluída não pode ser apagada depois")
+        #expect(FileManager.default.fileExists(atPath: url.path), "an already completed recording cannot be deleted afterwards")
         try? FileManager.default.removeItem(at: url.deletingLastPathComponent())
     }
 
-    /// O áudio do ditado fica em memória para a Parte 3 transcrever. Cancelar
-    /// tem que apagar isso também, não só o arquivo — e nenhum teste cobria,
-    /// então inverter a ordem em `finish()` quebraria a limpeza em silêncio.
-    @Test("cancelar limpa as amostras da memória, não só o arquivo")
+    /// The dictation's audio stays in memory for Part 3 to transcribe. Cancelling
+    /// has to erase that too, not just the file — and no test covered it, so
+    /// swapping the order in `finish()` would silently break the cleanup.
+    @Test("cancelling clears the samples from memory, not just the file")
     func discardClearsSamples() throws {
         let url = tempURL()
         let sink = RecordingSink(destination: url)
         let fmt = try hardware()
         try sink.begin(inputFormat: fmt)
         try sink.append(try buffer(fmt, seconds: 0.5))
-        #expect(sink.samples.count > 0, "durante a gravação as amostras existem")
+        #expect(sink.samples.count > 0, "during the recording the samples exist")
 
         sink.discard()
         _ = try sink.finish()
-        #expect(sink.samples.isEmpty, "cancelar tem que descartar o áudio da memória")
+        #expect(sink.samples.isEmpty, "cancelling has to discard the audio from memory")
         try? FileManager.default.removeItem(at: url.deletingLastPathComponent())
     }
 
-    @Test("gravação concluída preserva as amostras para a transcrição")
+    @Test("a completed recording preserves the samples for transcription")
     func finishKeepsSamples() throws {
         let url = tempURL()
         let sink = RecordingSink(destination: url)
@@ -256,12 +256,12 @@ struct RecordingSinkTests {
         try sink.begin(inputFormat: fmt)
         try sink.append(try buffer(fmt, seconds: 0.5))
         _ = try sink.finish()
-        // 0,5 s a 16 kHz, com o dreno incluído.
-        #expect(abs(sink.samples.count - 8_000) <= 40, "veio \(sink.samples.count)")
+        // 0.5 s at 16 kHz, drain included.
+        #expect(abs(sink.samples.count - 8_000) <= 40, "got \(sink.samples.count)")
         try? FileManager.default.removeItem(at: url.deletingLastPathComponent())
     }
 
-    @Test("append sem begin não escreve nem quebra")
+    @Test("append without begin neither writes nor breaks")
     func appendWithoutBeginIsSafe() throws {
         let url = tempURL()
         let sink = RecordingSink(destination: url)
@@ -270,10 +270,10 @@ struct RecordingSinkTests {
         #expect(!FileManager.default.fileExists(atPath: url.path))
     }
 
-    /// "Limpar histórico" apaga o texto e também este arquivo: o áudio é a
-    /// gravação inteira, e ficar com ele depois de a pessoa mandar limpar seria
-    /// guardar justamente o que ela pediu para apagar.
-    @Test("limpar apaga o WAV do ditado anterior e as amostras")
+    /// "Clear History" deletes the text and also this file: the audio is the
+    /// whole recording, and keeping it after the user asked to clear would be
+    /// keeping precisely what they asked to delete.
+    @Test("clearing deletes the previous dictation's WAV and the samples")
     func removeDestinationDeletesFinishedRecording() throws {
         let url = tempURL()
         let sink = RecordingSink(destination: url)
@@ -285,14 +285,14 @@ struct RecordingSinkTests {
         #expect(!sink.samples.isEmpty)
 
         #expect(sink.removeDestination())
-        #expect(!FileManager.default.fileExists(atPath: url.path), "o WAV tem que sumir")
-        #expect(sink.samples.isEmpty, "as amostras em memória também")
+        #expect(!FileManager.default.fileExists(atPath: url.path), "the WAV has to go")
+        #expect(sink.samples.isEmpty, "the samples in memory too")
         try? FileManager.default.removeItem(at: url.deletingLastPathComponent())
     }
 
-    /// Em mãos-livres o menu abre com gravação em curso, então dá para clicar em
-    /// "Limpar histórico" no meio de um ditado. O arquivo aberto é o desse ditado.
-    @Test("limpar durante a gravação não toca no arquivo aberto")
+    /// In hands-free mode the menu opens with a recording in progress, so
+    /// "Clear History" can be clicked mid-dictation. The open file is that dictation's.
+    @Test("clearing during the recording does not touch the open file")
     func removeDestinationRefusesWhileRecording() throws {
         let url = tempURL()
         let sink = RecordingSink(destination: url)
@@ -300,24 +300,24 @@ struct RecordingSinkTests {
         try sink.begin(inputFormat: fmt)
         try sink.append(try buffer(fmt, seconds: 0.2))
 
-        #expect(!sink.removeDestination(), "com arquivo aberto a remoção é recusada")
-        #expect(FileManager.default.fileExists(atPath: url.path), "a gravação em curso continua no disco")
-        #expect(!sink.samples.isEmpty, "e as amostras dela ficam")
-        #expect(try sink.finish() == url, "a gravação termina normalmente depois da recusa")
+        #expect(!sink.removeDestination(), "with a file open the removal is refused")
+        #expect(FileManager.default.fileExists(atPath: url.path), "the recording in progress stays on disk")
+        #expect(!sink.samples.isEmpty, "and its samples stay")
+        #expect(try sink.finish() == url, "the recording finishes normally after the refusal")
         try? FileManager.default.removeItem(at: url.deletingLastPathComponent())
     }
 
-    @Test("limpar sem arquivo não quebra e responde que não sobrou nada")
+    @Test("clearing without a file does not break and answers that nothing is left")
     func removeDestinationWithoutFileIsSafe() {
         let sink = RecordingSink(destination: tempURL())
         #expect(sink.removeDestination())
     }
 
-    /// O gravador repassa a limpeza ao sink pela fila de E/S e esquece as
-    /// amostras do último ditado. A recusa durante a gravação não é alcançável
-    /// por aqui sem microfone — está coberta no `RecordingSink`, onde a guarda
-    /// de verdade (arquivo aberto) mora.
-    @Test("o gravador apaga o WAV anterior e esquece as amostras")
+    /// The recorder forwards the cleanup to the sink through the I/O queue and
+    /// forgets the last dictation's samples. The refusal during a recording is
+    /// not reachable from here without a microphone — it is covered in
+    /// `RecordingSink`, where the real guard (open file) lives.
+    @Test("the recorder deletes the previous WAV and forgets the samples")
     func recorderDiscardsLastRecording() throws {
         let url = tempURL()
         try FileManager.default.createDirectory(
@@ -326,68 +326,68 @@ struct RecordingSinkTests {
         let recorder = AudioRecorder(destination: url)
 
         #expect(recorder.discardLastRecording())
-        #expect(!FileManager.default.fileExists(atPath: url.path), "o WAV tem que sumir")
+        #expect(!FileManager.default.fileExists(atPath: url.path), "the WAV has to go")
         #expect(recorder.lastSamples.isEmpty)
         try? FileManager.default.removeItem(at: url.deletingLastPathComponent())
     }
 }
 
-/// O medidor existe para responder uma pergunta: está entrando som? Então o que
-/// se testa é justamente a distinção entre silêncio e som — não a aparência.
-@Suite("Nível de entrada do microfone")
+/// The meter exists to answer one question: is sound coming in? So what gets
+/// tested is precisely the distinction between silence and sound — not the looks.
+@Suite("Microphone input level")
 struct AudioLevelTests {
 
-    @Test("silêncio absoluto dá zero")
+    @Test("absolute silence gives zero")
     func silenceIsZero() {
         #expect(AudioLevel.rms([Float](repeating: 0, count: 1024)) == 0)
         #expect(AudioLevel.normalized(rms: 0) == 0)
     }
 
-    /// O caso que motiva o item: microfone mudo entrega amostras quase nulas, e
-    /// isso tem que aparecer como silêncio, não como um tremor de barra.
-    @Test("ruído abaixo do piso de -50 dBFS conta como silêncio")
+    /// The case that motivates the item: a muted microphone delivers near-zero
+    /// samples, and that has to show up as silence, not as a trembling bar.
+    @Test("noise below the -50 dBFS floor counts as silence")
     func noiseFloorIsSilence() {
-        // -60 dBFS: ruído de sala num microfone de laptop.
+        // -60 dBFS: room noise on a laptop microphone.
         let quiet = AudioLevel.normalized(rms: 0.001)
-        #expect(quiet == 0, "veio \(quiet) — abaixo do piso não pode mexer a barra")
+        #expect(quiet == 0, "got \(quiet) — below the floor the bar cannot move")
     }
 
-    @Test("fala normal fica no meio da escala, não colada no chão")
+    @Test("normal speech sits mid-scale, not glued to the floor")
     func speechIsVisible() {
-        // ~0,05 de RMS é fala em volume de conversa.
+        // ~0.05 RMS is speech at conversation volume.
         let level = AudioLevel.normalized(rms: 0.05)
         #expect(level > 0.3 && level < 0.9,
-                "veio \(level) — escala linear deixaria a fala quase invisível")
+                "got \(level) — a linear scale would leave speech nearly invisible")
     }
 
-    @Test("saturação satura em 1, não passa")
+    @Test("clipping saturates at 1, does not go past")
     func clippingClamps() {
         #expect(AudioLevel.normalized(rms: 1.0) == 1)
-        #expect(AudioLevel.normalized(rms: 4.0) == 1, "acima de 0 dBFS continua 1")
+        #expect(AudioLevel.normalized(rms: 4.0) == 1, "above 0 dBFS it stays 1")
     }
 
-    @Test("o RMS acompanha a energia do sinal")
+    @Test("the RMS follows the signal's energy")
     func rmsFollowsEnergy() {
         let baixo = AudioLevel.rms([Float](repeating: 0.1, count: 512))
         let alto = AudioLevel.rms([Float](repeating: 0.5, count: 512))
         #expect(alto > baixo)
-        #expect(abs(baixo - 0.1) < 0.0001, "sinal constante: RMS é o próprio valor")
+        #expect(abs(baixo - 0.1) < 0.0001, "constant signal: the RMS is the value itself")
     }
 
-    @Test("array vazio não quebra")
+    @Test("empty array does not break")
     func emptyIsSafe() {
         #expect(AudioLevel.rms([]) == 0)
     }
 }
 
 
-/// A trava de mãos-livres. Cada caminho aqui é um que, sem a máquina de estados
-/// separada, só daria para exercitar apertando teclas em milissegundos exatos.
-@Suite("Trava de mãos-livres")
+/// The hands-free latch. Every path here is one that, without the separate state
+/// machine, could only be exercised by pressing keys at exact milliseconds.
+@Suite("Hands-free latch")
 struct LatchTests {
     private typealias L = HotkeyMonitor.Latch
 
-    @Test("hold normal continua sendo apertar e soltar")
+    @Test("a normal hold is still press and release")
     func normalHold() {
         var latch = L()
         #expect(latch.handle(.down(0)) == [.start])
@@ -395,38 +395,38 @@ struct LatchTests {
         #expect(!latch.isLatched)
     }
 
-    /// Um toque curto não conclui na hora: ele espera para ver se vem o segundo.
-    @Test("toque curto adia a conclusão e conclui no timeout")
+    /// A short tap does not conclude right away: it waits to see whether the second one comes.
+    @Test("a short tap delays the conclusion and concludes on timeout")
     func shortTapWaitsThenFinishes() {
         var latch = L()
         #expect(latch.handle(.down(0)) == [.start])
         #expect(latch.handle(.up(0.05)) == [.armTimeout(L.tapWindow)],
-                "toque curto não pode concluir antes da janela do segundo toque")
+                "a short tap cannot conclude before the second-tap window")
         #expect(latch.handle(.timeout) == [.finish])
     }
 
-    @Test("duplo toque trava, e a gravação segue sem a tecla")
+    @Test("double tap locks, and the recording goes on without the key")
     func doubleTapLatches() {
         var latch = L()
         _ = latch.handle(.down(0))
         _ = latch.handle(.up(0.05))
         #expect(latch.handle(.down(0.15)) == [.disarmTimeout, .latch])
         #expect(latch.isLatched)
-        // O `up` do segundo toque não pode encerrar nada.
+        // The second tap's `up` cannot finish anything.
         #expect(latch.handle(.up(0.2)) == [])
         #expect(latch.isLatched)
     }
 
-    @Test("travado, um toque encerra e transcreve")
+    @Test("locked, one tap finishes and transcribes")
     func tapStopsLatched() {
         var latch = L()
         _ = latch.handle(.down(0)); _ = latch.handle(.up(0.05)); _ = latch.handle(.down(0.15))
         #expect(latch.handle(.down(5)) == [.finish])
         #expect(!latch.isLatched)
-        #expect(latch.handle(.up(5.05)) == [], "o up seguinte é ignorado")
+        #expect(latch.handle(.up(5.05)) == [], "the following up is ignored")
     }
 
-    @Test("travado, Esc descarta")
+    @Test("locked, Esc discards")
     func escapeCancelsLatched() {
         var latch = L()
         _ = latch.handle(.down(0)); _ = latch.handle(.up(0.05)); _ = latch.handle(.down(0.15))
@@ -434,35 +434,35 @@ struct LatchTests {
         #expect(!latch.isLatched)
     }
 
-    /// A diferença deliberada entre os dois modos: segurando, tecla comum
-    /// significa "isto era um atalho"; em mãos-livres, teclar é só teclar.
-    @Test("travado, tecla comum NÃO cancela")
+    /// The deliberate difference between the two modes: while holding, a regular
+    /// key means "this was a shortcut"; in hands-free, typing is just typing.
+    @Test("locked, a regular key does NOT cancel")
     func otherKeyDoesNotCancelLatched() {
         var latch = L()
         _ = latch.handle(.down(0)); _ = latch.handle(.up(0.05)); _ = latch.handle(.down(0.15))
         #expect(latch.handle(.otherKey) == [])
-        #expect(latch.isLatched, "cancelar um ditado longo por causa de uma tecla mata o modo")
+        #expect(latch.isLatched, "cancelling a long dictation because of a key kills the mode")
     }
 
-    @Test("segurando, tecla comum cancela como antes")
+    @Test("holding, a regular key cancels as before")
     func otherKeyCancelsHold() {
         var latch = L()
         _ = latch.handle(.down(0))
         #expect(latch.handle(.otherKey) == [.cancel])
     }
 
-    @Test("tecla comum na janela do segundo toque também cancela")
+    @Test("a regular key in the second-tap window also cancels")
     func otherKeyCancelsWhileWaiting() {
         var latch = L()
         _ = latch.handle(.down(0)); _ = latch.handle(.up(0.05))
         #expect(latch.handle(.otherKey) == [.disarmTimeout, .cancel])
     }
 
-    @Test("evento fora de ordem não faz nada")
+    @Test("out-of-order event does nothing")
     func strayEventsAreIgnored() {
         var latch = L()
-        #expect(latch.handle(.up(0)) == [], "soltar sem ter apertado")
-        #expect(latch.handle(.timeout) == [], "timeout sem janela armada")
-        #expect(latch.handle(.otherKey) == [], "tecla comum com nada em curso")
+        #expect(latch.handle(.up(0)) == [], "release without having pressed")
+        #expect(latch.handle(.timeout) == [], "timeout with no window armed")
+        #expect(latch.handle(.otherKey) == [], "regular key with nothing in progress")
     }
 }

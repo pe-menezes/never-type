@@ -1,7 +1,7 @@
 import CWhisper
 import Foundation
 
-/// Onde o modelo mora depois de instalado.
+/// Where the model lives once installed.
 public enum ModelStore {
     public static let fileName = "ggml-large-v3-turbo-q5_0.bin"
 
@@ -12,26 +12,26 @@ public enum ModelStore {
 
     public static var modelURL: URL { directory.appendingPathComponent(fileName) }
 
-    /// Piso de tamanho, em bytes: 400 MB para um modelo de 547 MB.
+    /// Size floor, in bytes: 400 MB for a 547 MB model.
     ///
-    /// O magic sozinho não basta, e a lacuna é grave: um arquivo truncado começa
-    /// com os 4 bytes certos, o whisper.cpp aceita como "modelo vazio para
-    /// teste" e devolve um contexto **válido** — e a primeira inferência mata o
-    /// processo com `std::out_of_range`, exceção de C++ que nenhum `try` do
-    /// Swift intercepta. O app não avisa nada: simplesmente não abre.
+    /// The magic alone is not enough, and the gap is serious: a truncated file
+    /// starts with the right 4 bytes, whisper.cpp accepts it as an "empty model
+    /// for testing" and returns a **valid** context — and the first inference
+    /// kills the process with `std::out_of_range`, a C++ exception no Swift `try`
+    /// intercepts. The app warns about nothing: it simply does not open.
     ///
-    /// Proporcional ao artefato real, e não a um mínimo teórico: até 29/08/2026
-    /// o piso era 50 MB, justificado pelo menor candidato da bancada (181 MB) —
-    /// mas o app só carrega `fileName`, que tem 547 MB, e 50 MB aprovava um
-    /// download interrompido em qualquer ponto acima disso. O mesmo 400 vale em
-    /// `install.sh`, `verify-install.sh`, `fetch-model.sh` e, para este
-    /// modelo, em `setup-bench.sh`; mudar aqui exige mudar lá.
+    /// Proportional to the real artifact, not to a theoretical minimum: until
+    /// 2026-08-29 the floor was 50 MB, justified by the smallest candidate on the
+    /// bench (181 MB) — but the app only loads `fileName`, which is 547 MB, and
+    /// 50 MB approved a download interrupted at any point above that. The same
+    /// 400 holds in `install.sh`, `verify-install.sh`, `fetch-model.sh` and, for
+    /// this model, in `setup-bench.sh`; changing it here requires changing it there.
     public static let minimumBytes = 400 * 1024 * 1024
 
-    /// O magic do ggml é gravado como uint32 little-endian, então os bytes no
-    /// arquivo saem invertidos: `6c6d6767`, que lido como texto vira "lmgg", não
-    /// "ggml". Checar o texto direto reprova todo modelo válido — erro já
-    /// cometido neste projeto.
+    /// The ggml magic is written as a little-endian uint32, so the bytes in the
+    /// file come out reversed: `6c6d6767`, which read as text becomes "lmgg",
+    /// not "ggml". Checking the text directly rejects every valid model — a
+    /// mistake already made in this project.
     public static func isValid(_ url: URL) -> Bool {
         let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int) ?? nil
         guard let size else { return false }
@@ -41,11 +41,11 @@ public enum ModelStore {
         return isValid(magic: magic, size: size)
     }
 
-    /// A regra em si, separada da leitura de disco.
+    /// The rule itself, separated from the disk read.
     ///
-    /// Assim dá para testar o piso de tamanho sem escrever 400 MB a cada execução
-    /// da suíte. (O teste do caminho em disco usa um arquivo esparso pelo mesmo
-    /// motivo.)
+    /// That way the size floor can be tested without writing 400 MB on every run
+    /// of the suite. (The test for the on-disk path uses a sparse file for the
+    /// same reason.)
     public static func isValid(magic: Data, size: Int) -> Bool {
         guard size >= minimumBytes else { return false }
         guard magic.count == 4 else { return false }
@@ -62,22 +62,23 @@ public enum TranscriberError: Error, CustomStringConvertible {
     public var description: String {
         switch self {
         case .modelMissing(let u):
-            return "modelo não encontrado em \(u.path). Rode scripts/fetch-model.sh"
+            return "model not found at \(u.path). Run scripts/fetch-model.sh"
         case .modelInvalid(let u):
-            return "o arquivo em \(u.path) não é um modelo ggml completo (truncado ou corrompido). Rode scripts/fetch-model.sh"
+            return "the file at \(u.path) is not a complete ggml model (truncated or corrupt). Run scripts/fetch-model.sh"
         case .contextFailed:
-            return "não consegui carregar o modelo na memória"
+            return "could not load the model into memory"
         case .inferenceFailed(let code):
-            return "a transcrição falhou (código \(code))"
+            return "transcription failed (code \(code))"
         }
     }
 }
 
-/// Transcreve áudio localmente, com o modelo carregado uma vez e mantido quente.
+/// Transcribes audio locally, with the model loaded once and kept warm.
 ///
-/// Não é seguro para uso concorrente: o contexto do whisper.cpp é de uso serial.
-/// Quem usa serializa — no app, o ator `TranscriptionService` (main.swift), que
-/// faz o compilador garantir isso em vez de depender de despachar por uma fila.
+/// Not safe for concurrent use: the whisper.cpp context must be used serially.
+/// The caller serializes — in the app, the `TranscriptionService` actor
+/// (main.swift), which makes the compiler guarantee it instead of relying on
+/// dispatching through a queue.
 public final class Transcriber {
     private let context: OpaquePointer
     public private(set) var backend: String = ""
@@ -90,18 +91,19 @@ public final class Transcriber {
             throw TranscriberError.modelInvalid(modelURL)
         }
 
-        // `ggml_backend_load_all()` foi removido daqui.
+        // `ggml_backend_load_all()` was removed from here.
         //
-        // Ela varre o diretório do executável **e o diretório de trabalho atual**
-        // procurando `libggml-<nome>-*.so` para dar `dlopen`. Com linkagem
-        // dinâmica ela era necessária; com o build estático os três backends já
-        // vêm registrados pelo construtor do registro do ggml — a auditoria
-        // provou com uma sonda que não a chama e mesmo assim lista MTL, BLAS e
-        // CPU. Hoje o hardened runtime bloqueia a carga, mas a chamada só abria
-        // superfície sem entregar nada: uma linha de entitlement a mais e viraria
-        // execução de código arbitrário num processo que detém Acessibilidade.
+        // It scans the executable's directory **and the current working
+        // directory** looking for `libggml-<name>-*.so` to `dlopen`. With dynamic
+        // linking it was necessary; with the static build the three backends
+        // already come registered by the ggml registry's constructor — the audit
+        // proved it with a probe that does not call it and still lists MTL, BLAS
+        // and CPU. Today the hardened runtime blocks the load, but the call only
+        // opened surface without delivering anything: one more entitlement line
+        // and it would become arbitrary code execution in a process that holds
+        // Accessibility.
         //
-        // A verificação abaixo é o que garante que o Metal está mesmo ativo.
+        // The check below is what guarantees Metal is really active.
 
         var params = whisper_context_default_params()
         params.use_gpu = true
@@ -110,10 +112,10 @@ public final class Transcriber {
         }
         context = ctx
 
-        // Enumera os dispositivos que o ggml de fato registrou, em vez de
-        // procurar a palavra "metal" em log — que foi o falso negativo pego na
-        // auditoria da Parte 1: um log de execução em CPU contém dezenas de
-        // linhas com "metal", vindas da enumeração do device.
+        // Enumerates the devices ggml actually registered, instead of looking
+        // for the word "metal" in a log — which was the false negative caught in
+        // the Part 1 audit: a CPU run's log contains dozens of lines with
+        // "metal", coming from the device enumeration.
         var devices: [String] = []
         for i in 0..<ggml_backend_dev_count() {
             guard let dev = ggml_backend_dev_get(i) else { continue }
@@ -124,32 +126,32 @@ public final class Transcriber {
         backend = devices.joined(separator: ", ")
     }
 
-    /// Dispositivos registrados pelo ggml.
+    /// Devices registered by ggml.
     public private(set) var devices: [String] = []
 
-    /// Se o aquecimento rodou com sucesso. Definido por quem chama `warmUp()`.
+    /// Whether the warm-up ran successfully. Set by whoever calls `warmUp()`.
     public var warmedUp = false
 
-    /// Se falso, a inferência roda em CPU — cerca de 11x mais lenta, medido.
-    /// Não é aviso cosmético: é a diferença entre o app servir e não servir.
+    /// If false, inference runs on the CPU — about 11x slower, measured. Not a
+    /// cosmetic warning: it is the difference between the app being useful or not.
     public private(set) var usesMetal = false
 
     deinit { whisper_free(context) }
 
-    /// Roda uma inferência descartável antes do primeiro ditado real.
+    /// Runs a throwaway inference before the first real dictation.
     ///
-    /// **A justificativa original estava errada e vale registrar.** O spike
-    /// mediu 968 ms na primeira transcrição contra 664 ms na segunda e eu
-    /// atribuí a diferença à compilação de pipelines do Metal. Um A/B da
-    /// auditoria, em processos frios, mostrou o ganho real: ~25 ms (sem
-    /// aquecimento 617–655 ms, com aquecimento 619–634 ms). Os 304 ms do spike
-    /// eram outra coisa — o custo de verdade da "primeira vez" é o
-    /// `ggml_metal_library_init`, medido em 6,4 s com o cache de shaders do SO
-    /// frio, e ele acontece dentro do `init`, não aqui.
+    /// **The original justification was wrong and is worth recording.** The
+    /// spike measured 968 ms on the first transcription against 664 ms on the
+    /// second and I attributed the difference to Metal pipeline compilation. An
+    /// A/B from the audit, in cold processes, showed the real gain: ~25 ms
+    /// (without warm-up 617–655 ms, with warm-up 619–634 ms). The spike's 304 ms
+    /// were something else — the true "first time" cost is
+    /// `ggml_metal_library_init`, measured at 6.4 s with the OS shader cache
+    /// cold, and it happens inside `init`, not here.
     ///
-    /// Mantido mesmo assim: custa ~600 ms de prontidão em segundo plano, no
-    /// lançamento, e compra ~25 ms no primeiro ditado. Barato, invisível, e o
-    /// retorno agora diz se funcionou em vez de fingir.
+    /// Kept anyway: it costs ~600 ms of readiness in the background, at launch,
+    /// and buys ~25 ms on the first dictation. Cheap, invisible, and the return
+    /// value now says whether it worked instead of pretending.
     @discardableResult
     public func warmUp() -> Bool {
         let silence = [Float](repeating: 0, count: 16_000)
@@ -161,9 +163,9 @@ public final class Transcriber {
         }
     }
 
-    /// `prompt` é o `initial_prompt` do whisper: termos que o modelo deve
-    /// esperar ouvir. Dica de reconhecimento, não garantia — quem garante é a
-    /// substituição, que roda depois e não passa pelo modelo.
+    /// `prompt` is whisper's `initial_prompt`: terms the model should expect to
+    /// hear. A recognition hint, not a guarantee — the guarantee comes from the
+    /// replacement, which runs afterwards and does not go through the model.
     public func transcribe(_ samples: [Float], prompt: String? = nil) throws -> String {
         var params = whisper_full_default_params(WHISPER_SAMPLING_GREEDY)
         params.print_progress = false
@@ -176,9 +178,9 @@ public final class Transcriber {
         var text = ""
         var failure: Int32 = 0
 
-        // Os ponteiros de C precisam continuar vivos durante `whisper_full`, e é
-        // por isso que a chamada acontece dentro dos `withCString` aninhados em
-        // vez de guardar os ponteiros em variáveis.
+        // The C pointers need to stay alive during `whisper_full`, which is why
+        // the call happens inside the nested `withCString` instead of keeping the
+        // pointers in variables.
         func run(_ params: whisper_full_params) {
             let code = whisper_full(context, params, samples, Int32(samples.count))
             guard code == 0 else { failure = code; return }
@@ -187,6 +189,7 @@ public final class Transcriber {
             }
         }
 
+        // The language is fixed: the app transcribes Portuguese only.
         "pt".withCString { language in
             params.language = language
             if let prompt, !prompt.isEmpty {
