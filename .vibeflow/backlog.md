@@ -98,6 +98,20 @@ o texto e que "Limpar histórico" some com `historico.json` e `last.wav`.
 `lastRecordingURL()`, `clearHistory()`, `log(_:)`) · `AudioRecorder.swift` ·
 `AudioRecorderTests.swift` (suíte "Ciclo do arquivo de gravação")
 
+### D5 · `install.sh` aceita como modelo qualquer arquivo com 400 MB ou mais — P
+`install.sh:78-79` dá o modelo instalado por presente se o arquivo existe em
+`~/Library/Application Support/NeverType/models/` e tem pelo menos 400 MB — e só
+isso: não lê os quatro primeiros bytes. É o único dos cinco lugares que validam
+o modelo (`ModelStore.isValid`, `fetch-model.sh`, `setup-bench.sh`,
+`verify-install.sh` e ele) sem o magic, e a regra de `docs/pitfalls.md` é magic
+**e** piso. O que passa: qualquer arquivo de 400 MB ou mais com esse nome, ggml
+ou não; o `install.sh` imprime `model present (N MB)` e abre o app, que recusa o
+arquivo e abre com o ícone cortado. O `verify-install.sh:95-107` pega depois, se
+alguém rodar. Visto na tradução de 29/08/2026; não consertado.
+*Evidência:* `scripts/install.sh:78-79` · `scripts/verify-install.sh:95-107` (a
+mesma conferência, com magic) · `docs/pitfalls.md` ("The magic alone does not
+validate a file", os cinco lugares)
+
 ---
 
 ## 2. O que muda como o app se sente
@@ -362,6 +376,57 @@ em mãos-livres — e que o app só transcreve português (B1 da auditoria), que
 omissão mais cara para quem chega pelo README.
 *Evidência:* `CLAUDE.md:3-5` · `HotkeyMonitor.swift:150` e `:192` ·
 `Transcriber.swift` (`params.language = "pt"`)
+
+### H7 · Plural fixo no item do vocabulário — P
+`main.swift:569` monta `Vocabulary (\(n) terms, \(n) replacements)…` sem tratar
+o singular: com um termo e uma substituição o menu diz `Vocabulary (1 terms,
+1 replacements)…`. Visto na tradução de 29/08/2026; não consertado.
+*Evidência:* `Sources/NeverType/main.swift:569`
+
+### H8 · Condição morta no aviso de `build/` do `install.sh` — P
+`install.sh:64` faz `[ -d "$SOURCE" ] && warn "the build/ copy is still in the
+repository…"`, mas nesse ponto `$SOURCE` sempre existe: a linha 36 já falhou se
+não existisse, e o `cp -R` da linha 57 não o remove. O aviso sai em toda
+instalação e o teste não decide nada — ou o aviso é incondicional e o `[ -d ]`
+sobra, ou a intenção era outra e ninguém a escreveu. Visto na tradução de
+29/08/2026; não consertado.
+*Evidência:* `scripts/install.sh:36`, `:57`, `:64`
+
+### H9 · `record-fixture.sh` estoura cru com duração não numérica — P
+`record-fixture.sh:44` compara `"$DURATION" -lt 3` com `[`. Um segundo argumento
+que não seja inteiro (`10s`, `abc`) faz o `[` reclamar (`integer expression
+expected`) e o `set -e` derruba o script sem passar pelo `fail` — sem a linha de
+uso e sem dizer qual argumento estava errado. Visto na tradução de 29/08/2026;
+não consertado.
+*Evidência:* `scripts/record-fixture.sh:19`, `:44`
+
+### H10 · Divisão por zero no `bench.sh` se o `afinfo` não imprimir duração — P
+`bench.sh:74-75` extrai `estimated duration` do `afinfo` com `sed` e converte
+com `awk`; se a linha não vier, `d` fica vazio e o `awk` imprime `0`. Em
+`bench.sh:153-154`, `windows=$(( (0 + 29999) / 30000 ))` dá 0 e
+`per_w=$(( hot_ms / windows ))` morre com `division by 0` do bash — depois de já
+ter rodado o whisper naquele fixture, sem `fail` e sem dizer qual arquivo não
+tinha duração. Visto na tradução de 29/08/2026; não consertado.
+*Evidência:* `scripts/bench.sh:74-75`, `:153-154`
+
+### H11 · `verify-install.sh` aceita a cópia de `build/` como processo vivo — P
+`verify-install.sh:79` faz `pgrep -x NeverType`, que casa pelo nome do
+executável: um `build/NeverType.app` aberto do repositório conta como
+`running (pid N)` mesmo com `/Applications/NeverType.app` fechado — e é
+exatamente a cópia que o `install.sh:64` avisa que confunde. A verificação
+reporta o processo certo e o errado do mesmo jeito. Visto na tradução de
+29/08/2026; não consertado.
+*Evidência:* `scripts/verify-install.sh:79-80` · `scripts/install.sh:61-64`
+
+### H12 · `update.sh` não explica a recompilação quando o carimbo é `unknown` — P
+`build-app.sh:293` carimba `unknown` no bundle quando não há git (build de
+tarball). Em `update.sh:56-59`, `installed` vira `unknown` nesse caso — e também
+sem plist ou sem a chave `NeverTypeCommit` —, a comparação de idempotência da
+linha 67 nunca bate, e o script cai em `Repository already at X; only the
+reinstall is missing` (`:79`) e recompila. O motivo real, carimbo ausente, não
+aparece: a saída mostra `installed: unknown` sem dizer o que fazer com isso.
+Visto na tradução de 29/08/2026; não consertado.
+*Evidência:* `scripts/build-app.sh:291-293` · `scripts/update.sh:56-70`, `:79`
 
 ---
 

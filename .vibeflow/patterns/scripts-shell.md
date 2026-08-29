@@ -21,6 +21,11 @@ oito, sem exceção.
 
 ## The Pattern
 
+*Os trechos citados nesta seção são fotografia de antes da tradução de
+29/08/2026 (o `fail` com `erro:`, "sem permissão de escrita em /Applications…",
+"o NeverType não encerrou…"); hoje os scripts imprimem `error:`, "no write
+permission in /Applications…" e "NeverType did not quit…". O esqueleto é o mesmo.*
+
 ```bash
 #!/bin/bash
 # <uma frase do que faz>

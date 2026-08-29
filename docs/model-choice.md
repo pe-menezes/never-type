@@ -1,104 +1,108 @@
-# Por que `large-v3-turbo`
+# Why `large-v3-turbo`
 
-Três candidatos, medidos em gravações reais de fala espontânea em português com
-termos técnicos em inglês no meio — não em áudio de laboratório.
+Three candidates, measured on real recordings of spontaneous Portuguese speech
+with English technical terms in the middle — not on lab audio.
 
-## A regra, aplicada nesta ordem
+## The rule, applied in this order
 
-1. **Descartar** todo modelo que erre vocabulário a ponto de exigir edição
-   manual. Latência não compra qualidade: se dá retrabalho, o ganho do ditado
-   some.
-2. Entre os que sobrarem, vence o mais rápido.
-3. Se nenhum ficar dentro do teto, não escolher no grito — reabrir a discussão de
-   arquitetura.
+1. **Discard** every model that gets vocabulary wrong to the point of requiring
+   manual editing. Latency does not buy quality: if it creates rework, the gain
+   from dictating disappears.
+2. Among those left, the fastest wins.
+3. If none stays within the ceiling, do not pick one by shouting — reopen the
+   architecture discussion.
 
-**Teto: 1500 ms**, do fim da fala ao texto pronto. Acima disso o fluxo quebra e a
-pessoa volta a digitar.
+**Ceiling: 1500 ms**, from the end of the speech to the finished text. Above
+that the flow breaks and the person goes back to typing.
 
-## Latência
+## Latency
 
-O Whisper processa em **janelas de 30 segundos**: um ditado de 5 s custa o mesmo
-que um de 25 s. Não existe custo por segundo de áudio — existe custo por janela.
+Whisper processes in **30-second windows**: a 5 s dictation costs the same as a
+25 s one. There is no cost per second of audio — there is a cost per window.
 
-Os números descontam o carregamento do modelo, porque o app o mantém quente. E
-vêm do cronômetro interno do processo, não do tempo de parede: parede inclui
-spawn de processo e leitura do modelo do disco, que não existem no app.
+The numbers discount the model load, because the app keeps it warm. And they
+come from the process's internal stopwatch, not from wall-clock time: wall-clock
+includes process spawn and reading the model from disk, which do not exist in
+the app.
 
-| Modelo | Ditado até 30 s | Por janela | Teto de 1500 ms |
+| Model | Dictation up to 30 s | Per window | 1500 ms ceiling |
 |---|---|---|---|
-| large-v3-turbo-q5_0 | 782 ms | 820 ms | dentro |
-| medium-q5_0 | 737 ms | 856 ms | dentro |
-| small-q5_1 | 290 ms | 346 ms | dentro |
+| large-v3-turbo-q5_0 | 782 ms | 820 ms | within |
+| medium-q5_0 | 737 ms | 856 ms | within |
+| small-q5_1 | 290 ms | 346 ms | within |
 
-**Latência não discrimina.** Os três passam com folga, e a diferença entre turbo
-e medium está dentro do ruído de uma execução. A decisão é de qualidade.
+**Latency does not discriminate.** All three pass with room to spare, and the
+difference between turbo and medium is within the noise of a single run. The
+decision is about quality.
 
-*(No app real, com o modelo já quente, um ditado curto mediu 599–609 ms.)*
+*(In the real app, with the model already warm, a short dictation measured
+599–609 ms.)*
 
-## Qualidade
+## Quality
 
-O que separou os modelos foi o vocabulário: nome de sistema em inglês no meio de
-frase em português, termo de negócio, e verbo pouco frequente.
+What separated the models was vocabulary: an English system name in the middle
+of a Portuguese sentence, a business term, and an infrequent verb.
 
-| Tipo de erro | turbo | medium | small |
+| Error type | turbo | medium | small |
 |---|---|---|---|
-| Nome de produto em inglês, duas palavras | correto | grafia trocada | correto |
-| Substantivo comum ("investigação") | correto | correto | **outra palavra** |
-| Verbo ("disparar") | correto | correto | **outro verbo** |
-| Termo de negócio | correto | grafia inventada | grafia inventada |
-| Verbo pouco frequente | errado | correto | errado |
-| Alucinação | nenhuma | nenhuma | **inventou legenda** |
+| English product name, two words | correct | spelling swapped | correct |
+| Common noun ("investigação") | correct | correct | **another word** |
+| Verb ("disparar") | correct | correct | **another verb** |
+| Business term | correct | invented spelling | invented spelling |
+| Infrequent verb | wrong | correct | wrong |
+| Hallucination | none | none | **invented a caption** |
 
-## Decisão
+## Decision
 
-**`large-v3-turbo-q5_0`** — 547 MB, quantizado localmente a partir do checkpoint
-da OpenAI.
+**`large-v3-turbo-q5_0`** — 547 MB, quantized locally from OpenAI's checkpoint.
 
-**Justificativa, na ordem da regra:**
+**Justification, in the order of the rule:**
 
-1. **`small-q5_1` está desclassificado**, apesar de ser 2,7× mais rápido. Ele não
-   erra grafia, erra **sentido**: trocou um substantivo por outro e um verbo por
-   outro, mudando o que a frase dizia. E alucinou uma legenda de música no fim de
-   um áudio longo — que, num ditado, seria texto inventado colado no seu
-   documento. A regra 1 é explícita.
-2. **`medium-q5_0` também cai na regra 1.** Ele erra justamente o vocabulário que
-   um ditado técnico precisa preservar: nome de produto e termo de negócio. Quem
-   dita e precisa corrigir nome de sistema toda vez volta a digitar.
-3. **Sobra `large-v3-turbo-q5_0`**, único a passar a regra 1.
+1. **`small-q5_1` is disqualified**, despite being 2.7× faster. It does not get
+   spelling wrong, it gets **meaning** wrong: it swapped one noun for another
+   and one verb for another, changing what the sentence said. And it
+   hallucinated a music caption at the end of a long audio — which, in a
+   dictation, would be invented text pasted into your document. Rule 1 is
+   explicit.
+2. **`medium-q5_0` also falls under rule 1.** It gets wrong precisely the
+   vocabulary a technical dictation needs to preserve: product name and business
+   term. Whoever dictates and has to correct a system name every time goes back
+   to typing.
+3. **`large-v3-turbo-q5_0` is what remains**, the only one to pass rule 1.
 
-## Limite conhecido: o teto só foi medido até duas janelas
+## Known limit: the ceiling was only measured up to two windows
 
-Pela bancada, o teto de 1500 ms **não** sobreviveria a um ditado que ocupe mais
-de uma janela: a partir da segunda o custo dobra, e turbo (820 ms por janela)
-daria 1640 ms. Só `small` aguentaria duas janelas.
+By the bench, the 1500 ms ceiling would **not** survive a dictation that occupies
+more than one window: from the second one on the cost doubles, and turbo (820 ms
+per window) would give 1640 ms. Only `small` would hold two windows.
 
-No app a projeção não se confirmou: um ditado de 31 s, duas janelas, mediu
-**1299 ms** em 2026-08-28 (`.vibeflow/backlog.md`, L1 — cinco ditados lidos do
-log do app, ~614 ms fixos mais ~22 ms por segundo de fala). Dentro do teto. Por
-que a bancada projeta mais do que o app mede não foi investigado, e acima de duas
-janelas ninguém mediu.
+In the app the projection did not hold: a 31 s dictation, two windows, measured
+**1299 ms** on 2026-08-28 (`.vibeflow/backlog.md`, L1 — five dictations read
+from the app's log, ~614 ms fixed plus ~22 ms per second of speech). Within the
+ceiling. Why the bench projects more than the app measures was not investigated,
+and above two windows nobody has measured.
 
-Não é defeito — ditado é fala curta, e abaixo de 30 s todo modelo passa com folga.
-Mas é limite real, e falar mais de meio minuto sem soltar a tecla tem espera
-perceptível.
+It is not a defect — dictation is short speech, and under 30 s every model passes
+with room to spare. But it is a real limit, and speaking for more than half a
+minute without releasing the key has a perceptible wait.
 
-## Achado que continua aberto
+## A finding that remains open
 
-Um verbo pouco frequente do domínio saiu errado de forma **consistente** em turbo
-e small, e certo em medium. Nenhum modelo base acerta vocabulário específico de
-forma confiável — é a evidência concreta a favor de vocabulário customizado
-(prompt inicial), que este projeto passou a ter (`Vocabulary.swift`, commit
-`43d968f`): os termos vão como `initial_prompt`, e substituições determinísticas
-rodam sobre o texto pronto. Se isso resolve este verbo não foi medido
+An infrequent verb from the domain came out wrong **consistently** in turbo and
+small, and right in medium. No base model gets specific vocabulary right
+reliably — it is the concrete evidence in favor of a custom vocabulary (initial
+prompt), which this project now has (`Vocabulary.swift`, commit `43d968f`): the
+terms go in as `initial_prompt`, and deterministic replacements run over the
+finished text. Whether that fixes this verb was not measured
 (`.vibeflow/backlog.md`, A3).
 
-## Como reproduzir
+## How to reproduce
 
 ```bash
-bash scripts/setup-bench.sh                  # monta os três modelos
-bash scripts/record-fixture.sh 01-normal     # grave suas próprias amostras
-bash scripts/bench.sh                        # mede e imprime a tabela
+bash scripts/setup-bench.sh                  # builds the three models
+bash scripts/record-fixture.sh 01-normal     # record your own samples
+bash scripts/bench.sh                        # measures and prints the table
 ```
 
-A bancada aborta se a inferência cair para CPU — um tempo medido assim é ~11×
-maior e não representa o app. Ver `docs/pitfalls.md`.
+The bench aborts if inference falls back to the CPU — a time measured that way
+is ~11× higher and does not represent the app. See `docs/pitfalls.md`.

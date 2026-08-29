@@ -1,93 +1,111 @@
 # NeverType
 
-Ditado por voz com transcrição local no macOS, só em português. Segurar a tecla
-(⌘ direito por padrão; ⌥ ou ⌃ direito pelo menu) grava, soltar transcreve, dois
-toques travam em mãos-livres, e o texto é inserido onde o cursor estiver.
-**Nenhuma chamada de rede em tempo de uso** — é a restrição que justifica o
-projeto existir, e há check de DoD verificando isso no código e no binário.
+Voice dictation with local transcription on macOS, Portuguese only. Holding the
+key (Right ⌘ by default; Right ⌥ or ⌃ from the menu) records, releasing
+transcribes, two taps lock into hands-free, and the text is inserted wherever
+the cursor is. **No network calls at run time** — it is the constraint that
+justifies the project's existence, and there is a DoD check verifying it in the
+code and in the binary.
 
-App de menu bar acessório (sem Dock; as únicas janelas são a pílula flutuante e
-a do vocabulário). macOS 14+, Apple Silicon.
-Swift 6 com concorrência estrita, SwiftPM, **sem Xcode** — só Command Line Tools.
+Accessory menu bar app (no Dock; the only windows are the floating pill and the
+vocabulary one). macOS 14+, Apple Silicon.
+Swift 6 with strict concurrency, SwiftPM, **no Xcode** — Command Line Tools only.
 
-## Antes de escrever código, leia
+## Before writing code, read
 
-1. `.vibeflow/index.md` — estrutura, orçamento por tarefa, dívidas conhecidas
-2. `.vibeflow/conventions.md` — convenções e a seção **Don'ts**
-3. Os pattern docs relevantes em `.vibeflow/patterns/` (são oito)
-4. `docs/pitfalls.md` — os erros já cometidos, com o custo medido
+1. `.vibeflow/index.md` — structure, budget per task, known debts (`.vibeflow/`
+   is in Portuguese; see Language below)
+2. `.vibeflow/conventions.md` — conventions and the **Don'ts** section
+3. The relevant pattern docs in `.vibeflow/patterns/` (there are eight)
+4. `docs/pitfalls.md` — the mistakes already made, with the measured cost
 
-O quarto não é opcional. Vários defeitos deste projeto **passariam em revisão de
-código** e só apareceram rodando — e a maioria fazia o programa relatar que
-estava tudo bem enquanto não estava.
+The fourth is not optional. Several defects in this project **would pass code
+review** and only showed up when running — and most of them had the program
+reporting that everything was fine while it was not.
 
-## Regras que mais pegam quem chega agora
+## The rules that most often catch newcomers
 
-- **Verifique o efeito, não a intenção.** Procurar palavra em log não prova que
-  algo aconteceu: um log de execução em CPU contém 37 linhas com "metal". Enumere
-  o dispositivo, compare os bytes, meça de fora do processo.
-- **Magic number se compara em hex**, e nunca sozinho. `head -c 4` de um modelo
-  ggml é `lmgg`, não `ggml` — e um arquivo truncado tem os bytes certos.
-- **Isolamento de concorrência vai no tipo.** `MainActor.assumeIsolated` só onde
-  a API documenta main thread **e** a ordem dos eventos importa. Closure escrita
-  dentro de método `@MainActor` **herda** o isolamento por inferência — isso
-  derrubou o app duas vezes.
-- **Estado do sistema é consultado, nunca guardado.** Permissão muda por fora.
-- **swift-testing, nunca XCTest.** XCTest exige Xcode completo.
-- **Todo caminho de falha precisa ser exercitável.** Se não dá para exercitar,
-  não conta como implementado — em quatro auditorias, nenhum caminho de falha não
-  exercitado estava correto.
-- **Comentário explica por quê e o que quebrou antes**, com o número medido. Não
-  explica o que o código faz.
+- **Verify the effect, not the intention.** Searching a log for a word does not
+  prove something happened: a CPU run's log contains 37 lines with "metal".
+  Enumerate the device, compare the bytes, measure from outside the process.
+- **A magic number is compared in hex**, and never alone. `head -c 4` of a ggml
+  model is `lmgg`, not `ggml` — and a truncated file has the right bytes.
+- **Concurrency isolation goes in the type.** `MainActor.assumeIsolated` only
+  where the API documents the main thread **and** the order of events matters. A
+  closure written inside a `@MainActor` method **inherits** the isolation by
+  inference — that took the app down twice.
+- **System state is queried, never stored.** Permissions change from outside.
+- **swift-testing, never XCTest.** XCTest requires full Xcode.
+- **Every failure path has to be exercisable.** If it cannot be exercised, it
+  does not count as implemented — in four audits, no unexercised failure path
+  was correct.
+- **A comment explains why, and what broke before**, with the measured number.
+  It does not explain what the code does.
 
-## Comandos
+## Commands
 
-**Primeira coisa, num clone novo:**
-
-```bash
-bash scripts/build-app.sh     # compila o whisper.cpp estático em vendor/
-```
-
-`vendor/` não é versionado (são binários), e sem ele o `swift build` falha com
-`could not build Objective-C module 'CWhisper'` — mensagem que não diz a causa.
-O script clona o whisper.cpp num commit fixo, confere, compila e guarda o
-resultado. Leva alguns minutos na primeira vez, ~1 s nas seguintes.
-
-Depois disso:
+**First thing, on a fresh clone:**
 
 ```bash
-swift build && swift test     # 86 testes
-bash scripts/install.sh       # instala em /Applications
-bash scripts/bench.sh         # mede latência e qualidade por modelo
+bash scripts/build-app.sh     # compiles the static whisper.cpp into vendor/
 ```
 
-Fora do controle de versão e reconstruíveis: `models/` (1,2 GB em disco: os três
-modelos da bancada; o app carrega um, de 547 MB), `vendor/` (whisper.cpp
-estático), `fixtures/` (gravações), `bench-out/`, `.cache/`, `build/`.
+`vendor/` is not versioned (they are binaries), and without it `swift build`
+fails with `could not build Objective-C module 'CWhisper'` — a message that does
+not say the cause. The script clones whisper.cpp at a pinned commit, checks it,
+compiles it and stores the result. It takes a few minutes the first time, ~1 s
+afterwards.
 
-**Nunca apague** `~/Library/Keychains/nevertype-signing.keychain-db` — apagá-lo
-revoga a permissão de Acessibilidade e o usuário precisa reconceder.
+After that:
 
-## Idioma
+```bash
+swift build && swift test     # 86 tests
+bash scripts/install.sh       # installs into /Applications
+bash scripts/bench.sh         # measures latency and quality per model
+```
 
-Código e APIs em inglês. Comentários, mensagens de erro, interface e documentação
-em **português**.
+Outside version control and rebuildable: `models/` (1.2 GB on disk: the three
+bench models; the app loads one, 547 MB), `vendor/` (static whisper.cpp),
+`fixtures/` (recordings), `bench-out/`, `.cache/`, `build/`.
 
-## Estado
+**Never delete** `~/Library/Keychains/nevertype-signing.keychain-db` — deleting
+it revokes the Accessibility permission and the user has to grant it again.
 
-Funciona ponta a ponta: ~600 ms por ditado com o modelo quente, 86 testes. Nunca
-foi instalado por ninguém além do autor.
+## Language
 
-Falta uma coisa: **pacote distribuível sem compilar** — cada instalação ainda
-compila na própria máquina. Abrir no login, histórico de transcrições e
-vocabulário customizado saíram da lista: estão implementados (`LoginItem.swift`,
-`TranscriptHistory.swift`, `Vocabulary.swift`), com teste, e o que falta neles é
-conferência em uso real — está anotado item a item em `.vibeflow/backlog.md`.
+English everywhere: code, APIs, comments, error messages, interface text, log
+lines, test names, scripts, docs, and commit messages from here on (the commits
+already in the log stay as they are). Two exceptions:
 
-## Risco conhecido e aceito
+- `.vibeflow/` stays in Portuguese. It is the working notes of whoever drives
+  the repo; it is read next to the code, not published with it.
+- `README.md` and `docs/INSTALL.md` have Portuguese mirrors, `README.pt-BR.md`
+  and `docs/INSTALL.pt-BR.md`, and a change to one side is a change to both.
+  `INSTALL.pt-BR.md` exists because the four literal speech blocks in it are
+  read aloud to the person installing, so their language is the installer's,
+  not the repository's.
 
-O app é assinado com certificado local, e o macOS amarra Microfone e
-Acessibilidade a esse certificado — quem já executa código na máquina pode
-usá-lo. É inerente a certificado local; a alternativa faz o macOS revogar a
-permissão a cada build. Ver a seção Segurança do README antes de mexer em
-`scripts/build-app.sh`.
+Names on disk keep what they were (`historico.json`, `vocabulario.json`,
+`ultima-transcricao.txt`, the `somDasAcoes` key): renaming them would need a
+migration for a gain no user sees. And the app transcribes Portuguese only
+(`"pt"` in `Transcriber.swift`); that is product behavior, not a language rule.
+
+## State
+
+Works end to end: ~600 ms per dictation with the model warm, 86 tests. Nobody
+besides the author has ever installed it.
+
+One thing is missing: **a distributable package that does not require
+compiling** — every installation still compiles on its own machine. Open at
+login, transcription history and custom vocabulary are off the list: they are
+implemented (`LoginItem.swift`, `TranscriptHistory.swift`, `Vocabulary.swift`),
+with tests, and what they still lack is checking in real use — noted item by
+item in `.vibeflow/backlog.md`.
+
+## Known and accepted risk
+
+The app is signed with a local certificate, and macOS ties Microphone and
+Accessibility to that certificate — whoever already runs code on the machine can
+use it. It is inherent to a local certificate; the alternative makes macOS
+revoke the permission on every build. See the README's Security section before
+touching `scripts/build-app.sh`.

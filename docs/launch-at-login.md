@@ -1,67 +1,69 @@
-# Quanto custa abrir com o sistema
+# What opening at login costs
 
-Medido em 2026-08-28, macOS 26.2, Apple Silicon, modelo
+Measured on 2026-08-28, macOS 26.2, Apple Silicon, model
 `ggml-large-v3-turbo-q5_0.bin` (547 MB).
 
-O app não muda nada no lançamento por causa desta opção: ele carrega o modelo e
-aquece exatamente como sempre fez. O que muda é **quando** essa conta é paga —
-antes você escolhia a hora abrindo o app, agora ela cai junto com o login.
+The app changes nothing at launch because of this option: it loads the model and
+warms up exactly as it always did. What changes is **when** that bill is paid —
+before, you picked the moment by opening the app; now it lands together with the
+login.
 
-## O número
+## The number
 
-Cronômetro de fora do processo: de `open` até a linha aparecer no log do app.
-Não é o log se auto-medindo.
+Stopwatch from outside the process: from `open` until the line appears in the
+app's log. Not the log measuring itself.
 
-| | ícone na barra | pronto para ditar | carga do modelo |
+| | icon in the bar | ready to dictate | model load |
 |---|---|---|---|
-| **page cache frio** | 784 ms | **8303 ms** | 6874 ms |
-| page cache quente | 142 ms | 951 ms | 178 ms |
-| page cache quente (2ª) | 162 ms | 965 ms | 172 ms |
+| **cold page cache** | 784 ms | **8303 ms** | 6874 ms |
+| warm page cache | 142 ms | 951 ms | 178 ms |
+| warm page cache (2nd) | 162 ms | 965 ms | 172 ms |
 
-O aquecimento é constante — 614 a 622 ms nas três execuções. **Toda a diferença
-está em ler 547 MB do disco: 6874 ms contra ~175 ms, quase 39×.**
+The warm-up is constant — 614 to 622 ms across the three runs. **The whole
+difference is in reading 547 MB from disk: 6874 ms against ~175 ms, almost 39×.**
 
-## Por que a linha fria é a que importa aqui
+## Why the cold row is the one that matters here
 
-Logo depois do login o page cache está vazio por definição. Então o custo real de
-abrir com o sistema é a linha de cima, não a de baixo — e as medições que você
-faria testando à mão, com o modelo já lido uma vez, dão o número errado por
-uma ordem de grandeza.
+Right after login the page cache is empty by definition. So the real cost of
+opening at login is the top row, not the bottom one — and the measurements you
+would take by hand, with the model already read once, give the wrong number by
+an order of magnitude.
 
-E 8303 ms é **piso**, não teto: foi medido numa sessão já em regime. No login de
-verdade isso disputa disco e CPU com Spotlight, iCloud e o resto do que sobe
-junto. O número honesto do boot só sai reiniciando a máquina.
+And 8303 ms is a **floor**, not a ceiling: it was measured in a session already
+at steady state. On a real login it competes for disk and CPU with Spotlight,
+iCloud and everything else that comes up along with it. The honest boot number
+only comes out by restarting the machine.
 
-## O que isso significa na prática
+## What this means in practice
 
-O ícone aparece em 784 ms. O que atrasa é ficar **pronto para ditar**: nos
-primeiros ~8 s depois do login, segurar ⌘ direito grava, mas a transcrição
-espera o modelo.
+The icon appears in 784 ms. What lags is being **ready to dictate**: in the
+first ~8 s after login, holding Right ⌘ records, but the transcription waits for
+the model.
 
-A spec decidiu não carregar o modelo sob demanda, deixando para revisitar com o
-número medido na mão. O número está aqui, e ele não muda a decisão: ninguém dita
-oito segundos depois de ligar o computador. Carregar sob demanda só empurraria a
-mesma espera para o primeiro ditado do dia — que é justamente quando a pessoa
-está esperando o texto aparecer.
+The spec decided not to load the model on demand, leaving it to be revisited
+with the measured number in hand. The number is here, and it does not change the
+decision: nobody dictates eight seconds after turning the computer on. Loading on
+demand would only push the same wait to the first dictation of the day — which
+is precisely when the person is waiting for the text to appear.
 
-O que mudaria a decisão seria o ícone demorar, e ele não demora.
+What would change the decision is the icon taking long, and it does not.
 
-## Como refazer a medição
+## How to redo the measurement
 
-**No boot, sem ferramenta nenhuma:** reinicie, abra o menu da bandeja e leia a
-linha `Modelo: Metal · carga N ms · aquecimento N ms`. O app já se mede sozinho, e
-essa é a carga fria de verdade. É a forma certa de refazer este número — as
-outras abaixo servem para medir fora do boot.
+**At boot, with no tooling at all:** restart, open the menu bar menu and read the
+`Model: Metal · load N ms · warm-up N ms` line. The app already measures itself,
+and that is the real cold load. It is the right way to redo this number — the
+others below are for measuring outside of boot.
 
-Para cronometrar um lançamento qualquer, de fora do processo:
+To time any launch, from outside the process:
 
 ```bash
 bash scripts/build-app.sh
 pkill -x NeverType
 rm -f ~/Library/Application\ Support/NeverType/nevertype.log
-# cronometre daqui até a linha "modelo:" aparecer no log
+# time from here until the "model:" line appears in the log
 open build/NeverType.app
 ```
 
-Só não confunda os dois: sem reiniciar, o page cache já está quente da execução
-anterior e você mede 951 ms achando que mediu o boot.
+Just do not confuse the two: without restarting, the page cache is already warm
+from the previous run and you measure 951 ms thinking you measured boot.

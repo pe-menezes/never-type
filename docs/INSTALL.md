@@ -1,68 +1,70 @@
-# Instalar o NeverType
+Português: [INSTALL.pt-BR.md](INSTALL.pt-BR.md)
 
-> **Este documento é para um agente de codificação executar**, não para um humano
-> ler de cabo a rabo. Se você é humano e só quer usar: peça ao seu agente para
-> seguir este arquivo, ou vá para o `README.md`.
+# Installing NeverType
 
-O NeverType é ditado por voz local para macOS. Ele é **compilado na máquina de
-quem instala** — não há binário pré-compilado, e isso é de propósito: cada
-instalação gera o próprio certificado local, e app compilado localmente não entra
-em quarentena, então o Gatekeeper não aparece.
+> **This document is for a coding agent to execute**, and it is not meant for a
+> human to read end to end. If you are human and just want to use the app: ask
+> your agent to follow this file, or go to the `README.md`.
 
-## Antes de começar
+NeverType is local voice dictation for macOS. It is **compiled on the machine of
+whoever installs it**: there is no prebuilt binary, and that is on purpose. Each
+installation generates its own local certificate, and a locally compiled app
+does not go into quarantine, so Gatekeeper never shows up.
 
-**Leia `docs/pitfalls.md`.** São os erros já cometidos neste projeto, com o
-custo medido de cada um. Vários deles são coisas que passariam em revisão de
-código e só apareceram rodando.
+## Before you start
 
-**Quatro coisas neste roteiro exigem a pessoa, e nenhum agente as resolve:**
-instalar as Command Line Tools, conceder Microfone, conceder Acessibilidade e
-ditar a frase que prova a instalação. Elas estão marcadas com **PARE E PEÇA**
-abaixo, com o texto a dizer.
+**Read `docs/pitfalls.md`.** Those are the mistakes already made in this project,
+with the measured cost of each. Several of them would pass code review and only
+showed up when running.
 
-## O que você pode consertar sozinho, e o que não pode
+**Four things in this walkthrough need the person, and no agent solves them:**
+installing the Command Line Tools, granting Microphone, granting Accessibility,
+and dictating the sentence that proves the installation. They are marked
+**STOP AND ASK** below, with the text to say.
 
-| Pode | Pare e pergunte |
+## What you can fix on your own, and what you cannot
+
+| You can | Stop and ask |
 |---|---|
-| `brew install cmake` | Qualquer coisa com `security list-keychains` |
-| Disparar `xcode-select --install` e esperar | Apagar `~/Library/Keychains/nevertype-signing.keychain-db` |
-| Recompilar depois de falha de build | Escrever fora do repositório e de `~/Library/Application Support/NeverType/` |
-| Repetir um download interrompido | Instalar em `/Applications` sem permissão de escrita |
-| Apagar um modelo inválido e rebaixar | Desativar verificação para fazer um passo passar |
+| `brew install cmake` | Anything involving `security list-keychains` |
+| Run `xcode-select --install` and wait | Deleting `~/Library/Keychains/nevertype-signing.keychain-db` |
+| Rebuild after a build failure | Writing outside the repository and `~/Library/Application Support/NeverType/` |
+| Retry an interrupted download | Installing into `/Applications` without write permission |
+| Delete an invalid model and download again | Disabling a check to make a step pass |
 
-A linha do keychain não é excesso de zelo. `security list-keychains -s`
-**substitui a lista inteira** — errar ali tira o keychain de login da pessoa, e
-ela perde senhas de Wi-Fi, Safari e apps. O `build-app.sh` tem um guarda-corpo
-exatamente por isso. Não improvise nesse comando.
+The keychain line is not excess caution. `security list-keychains -s`
+**replaces the whole list**: getting it wrong there removes the person's login
+keychain, and they lose their Wi-Fi, Safari and app passwords. `build-app.sh`
+has a guard rail for exactly that reason. Do not improvise on that command.
 
-E apagar o keychain de assinatura **revoga a permissão de Acessibilidade**: a
-pessoa vai ter que conceder tudo de novo.
+And deleting the signing keychain **revokes the Accessibility permission**: the
+person will have to grant everything again.
 
-## 1. Pré-requisitos
-
-```bash
-uname -s   # precisa ser Darwin
-uname -m   # precisa ser arm64
-sw_vers -productVersion   # precisa ser 14 ou maior
-```
-
-Intel ou macOS antigo: **pare**. Sem Metal a transcrição fica ~11× mais lenta, e
-o projeto recusa de propósito.
-
-### Command Line Tools — PARE E PEÇA
+## 1. Prerequisites
 
 ```bash
-xcode-select -p   # se falhar, não estão instaladas
+uname -s   # must be Darwin
+uname -m   # must be arm64
+sw_vers -productVersion   # must be 14 or higher
 ```
 
-Faltando, rode `xcode-select --install` e diga à pessoa:
+Intel or an old macOS: **stop**. Without Metal, transcription is ~11× slower, and
+the project refuses on purpose.
 
-> Abriu uma janela do macOS pedindo para instalar as Ferramentas de Linha de
-> Comando. Clique em **Instalar** e aceite os termos. São alguns minutos. Me
-> avise quando terminar.
+### Command Line Tools: STOP AND ASK
 
-Xcode completo **não** é necessário. Confirme com `xcode-select -p` antes de
-seguir — não aceite "já instalei" sem conferir.
+```bash
+xcode-select -p   # if it fails, they are not installed
+```
+
+If missing, run `xcode-select --install` and tell the person:
+
+> A macOS window opened asking to install the Command Line Tools. Click
+> **Install** and accept the terms. It takes a few minutes. Let me know when it
+> finishes.
+
+Full Xcode is **not** required. Confirm with `xcode-select -p` before moving on;
+do not accept "I already installed it" without checking.
 
 ### cmake
 
@@ -70,159 +72,167 @@ seguir — não aceite "já instalei" sem conferir.
 command -v cmake || brew install cmake
 ```
 
-Só para compilar. Não é dependência de execução.
+Only to build. It is not a runtime dependency.
 
-## 2. Compilar e instalar
+## 2. Build and install
 
 ```bash
-git clone <url-do-repositório> nevertype && cd nevertype
+git clone <repository-url> nevertype && cd nevertype
 bash scripts/build-app.sh
 bash scripts/install.sh
 ```
 
-`build-app.sh` clona o whisper.cpp num commit fixo, confere, compila estático e
-assina. **Leva alguns minutos na primeira vez** — é normal, não interrompa.
+`build-app.sh` clones whisper.cpp at a pinned commit, checks it, compiles it
+statically and signs. **It takes a few minutes the first time.** That is normal;
+do not interrupt it.
 
-`install.sh` recusa cedo o que não tem conserto depois (não-Darwin, não-arm64,
-`/Applications` sem escrita), instala, verifica a assinatura e confere o modelo.
-Ele só compila se `build/NeverType.app` ainda não existir: depois de mudar código
-— ou de um `git pull` feito à mão —, rode `build-app.sh` antes, senão ele instala
-o `build/` velho sem avisar. O `update.sh` já faz isso na ordem certa.
+`install.sh` refuses early what cannot be fixed later (non-Darwin, non-arm64,
+`/Applications` not writable), installs, verifies the signature and checks the
+model. It only builds if `build/NeverType.app` does not exist yet: after changing
+code, or after a `git pull` done by hand, run `build-app.sh` first, otherwise it
+installs the old `build/` without a word. `update.sh` already does this in the
+right order.
 
-Se ele reclamar de `/Applications` sem permissão de escrita: **pare e pergunte**.
-Existe um caminho alternativo (`~/Applications/`), mas ele é uma decisão da
-pessoa, não sua. E se ela escolher esse caminho, saiba que
-`verify-install.sh` e `update.sh` só conhecem `/Applications` — vão
-dizer que o app não está instalado. A verificação passa a ser só o ditado.
+If it complains about `/Applications` without write permission: **stop and
+ask**. There is an alternative path (`~/Applications/`), but that is the person's
+decision to make. And if they choose that path, be aware that
+`verify-install.sh` and `update.sh` only know `/Applications`: they will say the
+app is not installed. Verification then comes down to dictating.
 
-## 3. O modelo
+## 3. The model
 
-São 547 MB e ele **não vem no app**. O `install.sh` avisa se estiver faltando.
+It is 547 MB and it **does not ship in the app**. `install.sh` warns if it is
+missing.
 
 ```bash
-bash scripts/setup-bench.sh   # baixa três checkpoints do CDN da OpenAI e converte
-bash scripts/fetch-model.sh   # valida e promove para o lugar definitivo
+bash scripts/setup-bench.sh   # downloads and converts three models; requires Homebrew and python3
+bash scripts/fetch-model.sh   # validates and installs it in the right place
 ```
 
-`setup-bench.sh` é a bancada de modelos, não só o instalador: exige **Homebrew**
-(instala `whisper-cpp` por ele) e **python3** (cria um venv com torch em
-`.cache/`), e baixa, converte e quantiza **três** modelos — turbo, medium e
-small —, não um. Demora; o tempo não foi medido. Se `brew` não existir, o script
-para: instalar o Homebrew é decisão da pessoa — **pergunte**.
+`setup-bench.sh` is the model bench, and it does more than install: it requires
+**Homebrew** (it installs `whisper-cpp` through it) and **python3** (it creates a
+venv with torch in `.cache/`), and it downloads, converts and quantizes
+**three** models (turbo, medium and small). It takes a while; the time was not
+measured. If `brew` does not exist, the script stops: installing Homebrew is the
+person's decision. **Ask.**
 
-### Se a rede bloquear o download
+### If the network blocks the download
 
-Acontece em rede corporativa. O sintoma clássico não é erro de conexão: é um
-arquivo do tamanho errado, ou uma **página HTML de erro salva com nome de
-modelo**. Por isso a validação confere o magic em hexadecimal, não a extensão.
+It happens on corporate networks. The classic symptom is a file of the wrong
+size, or an **HTML error page saved under the model's name**, and no connection
+error to go with it. That is why the validation checks the magic, in
+hexadecimal, and ignores the extension.
 
-Copiar de outra máquina que já tenha é um caminho válido — **mas o arquivo
-precisa entrar pelo repositório**, nunca direto no destino:
+Copying from another machine that already has it is a valid path, **but the file
+has to come in through the repository**, never straight into the destination:
 
 ```bash
-cp /caminho/do/ggml-large-v3-turbo-q5_0.bin models/
+cp /wherever/it/came/from/ggml-large-v3-turbo-q5_0.bin models/
 bash scripts/fetch-model.sh
 ```
 
-`fetch-model.sh` valida magic e tamanho (pelo menos 400 MB, para um modelo de
-547 MB) antes de promover, e apaga a cópia se ela não ficar válida. Copiar direto
-para `~/Library/Application Support/` pula essa validação: o app confere de novo
-ao abrir, recusa o arquivo, abre com o ícone cortado e a linha "Modelo:" do menu
-traz a mensagem com o script a rodar — a pessoa descobre o problema no menu, não
-no primeiro ditado.
+`fetch-model.sh` validates magic and size (at least 400 MB, for a 547 MB model)
+before promoting, and deletes the copy if it does not come out valid. Copying
+straight into `~/Library/Application Support/` skips that validation: the app
+checks again when it opens, refuses the file, opens with the slashed icon, and the
+"Model:" line in the menu carries the message with the script to run. The person
+discovers the problem in the menu, before the first dictation.
 
-## 4. Permissões
+## 4. Permissions
 
-Duas, e o app pede as duas ao abrir. **As duas exigem a pessoa.**
+Two, and the app asks for both when it opens. **Both need the person.**
 
-### Microfone — PARE E PEÇA
+### Microphone: STOP AND ASK
 
-> O macOS vai perguntar se o NeverType pode usar o microfone. Clique em
-> **Permitir**. Sem isso não há áudio.
+> macOS is going to ask whether NeverType may use the microphone. Click
+> **Allow**. Without it there is no audio.
 
-### Acessibilidade — PARE E PEÇA
+### Accessibility: STOP AND ASK
 
-Esta é a mais fácil de não notar, e é o modo de falha mais provável de uma
-instalação nova. Sem ela o app abre e **não reage à tecla**. Ele avisa — ícone
-cortado (`mic.slash`), "Acessibilidade: faltando" e "Abrir Ajustes de
-Acessibilidade…" no menu, uma linha em `nevertype.log` e o pedido do próprio
-macOS —, mas nada disso chega a quem não abre o menu nem o log.
+This is the easiest one to miss, and the most likely failure mode of a fresh
+installation. Without it the app opens and **does not react to the key**. It
+warns (the slashed icon, `mic.slash`, "Accessibility: missing" and "Open
+Accessibility Settings…" in the menu, a line in `nevertype.log`, and macOS's own
+prompt), but none of that reaches someone who opens neither the menu nor the
+log.
 
-> Abra **Ajustes do Sistema › Privacidade e Segurança › Acessibilidade** e
-> **ligue o NeverType** na lista. Se ele não estiver lá, clique no **+** e escolha
+> Open **System Settings › Privacy & Security › Accessibility** and **turn on
+> NeverType** in the list. If it is not there, click the **+** and choose
 > `/Applications/NeverType.app`.
 >
-> Isso é o que deixa o app receber a tecla global. Sem isso ele abre e parece
-> funcionar, mas segurar a tecla não faz nada.
+> That is what lets the app receive the global key. Without it, the app opens
+> and looks like it works, but holding the key does nothing.
 >
-> Depois de ligar, **encerre o NeverType pelo menu da bandeja e abra de novo**.
+> After turning it on, **quit NeverType from the menu bar menu and open it
+> again**.
 
-Não continue sem que a pessoa confirme que fez.
+Do not continue until the person confirms they did it.
 
-## 5. Verificar
+## 5. Verify
 
 ```bash
 bash scripts/verify-install.sh
 ```
 
-Confere app instalado, assinatura, processo vivo e modelo válido por bytes. Sai
-com código diferente de zero e lista tudo que está errado de uma vez.
+It checks the installed app, the signature, a live process and a model valid by
+bytes. It exits with a non-zero code and lists everything that is wrong at once.
 
-**Ele não verifica permissão, e não dá para verificar de fora.** O que interessa
-não é o sistema dizer que concedeu, é o ditado inserir texto.
+**It does not verify permissions, and they cannot be verified from the outside.**
+The only proof is the dictation inserting text.
 
-### O teste que fecha a instalação — PARE E PEÇA
+### The test that closes the installation: STOP AND ASK
 
-> Abra um campo de texto qualquer — uma mensagem, um documento, a busca do
-> Spotlight não.
+> Open any text field, like a message or a document. Spotlight's search does not
+> count.
 >
-> Segure o **⌘ da direita**, fale uma frase, e solte.
+> Hold the **Right ⌘**, say a sentence, and release.
 >
-> O texto tem que aparecer onde o cursor está.
+> The text has to appear where the cursor is.
 
-Apareceu: acabou. Não apareceu: volte para a Acessibilidade — é ela em quase
-todos os casos.
+It appeared: done. It did not: go back to Accessibility. It is the cause in
+almost every case.
 
-## 6. Atualizar
+## 6. Update
 
-Quando a pessoa disser *"atualiza pra mim"*, é um comando só:
+When the person says *"update it for me"*, it is a single command:
 
 ```bash
 cd nevertype && bash scripts/update.sh
 ```
 
-Ele confere se há versão nova comparando três coisas — o commit **instalado**
-(carimbado no bundle), o commit **local** e o **remoto** —, e se já estiver tudo
-igual não faz nada. Havendo diferença: traz, compila, instala e roda a
-verificação.
+It checks whether there is a new version by comparing three things: the
+**installed** commit (stamped in the bundle), the **local** commit and the
+**remote** one. If they are all the same, it does nothing. If they differ, it
+pulls, builds, installs and runs the verification.
 
-**Ele para em seis casos. Em dois deles você também para:**
+**It stops in six cases. In two of them you stop as well:**
 
-- **Alterações locais não commitadas.** Ele lista e recusa. **Não rode
-  `git reset --hard` nem `git stash` por conta própria** — commitar, guardar ou
-  descartar é decisão da pessoa, e descartar apaga trabalho dela.
-- **Pull que não é fast-forward.** A branch local divergiu da remota. Resolver
-  isso sozinho pode perder commits dela. Pergunte.
+- **Uncommitted local changes.** It lists them and refuses. **Do not run
+  `git reset --hard` or `git stash` on your own.** Committing, stashing or
+  discarding is the person's decision, and discarding deletes their work.
+- **A pull that is not a fast-forward.** The local branch diverged from the
+  remote. Resolving that on your own can lose their commits. Ask.
 
-Nos outros quatro a mensagem diz o que fazer: o diretório não é um clone git
-(clone e rode `build-app.sh` e `install.sh`); o clone não tem remoto; o `fetch`
-falhou (rede); a branch não acompanha nenhuma remota (ele dá o comando).
+In the other four, the message says what to do: the directory is not a git clone
+(clone it and run `build-app.sh` and `install.sh`); the clone has no remote; the
+`fetch` failed (network); the branch does not track any remote branch (it gives
+you the command).
 
-As permissões sobrevivem à atualização, porque o certificado de assinatura é
-estável entre compilações da mesma máquina. É por isso que
-`~/Library/Keychains/nevertype-signing.keychain-db` **nunca deve ser apagado** —
-apagá-lo revoga a Acessibilidade e a pessoa precisa conceder tudo de novo.
+The permissions survive the update, because the signing certificate is stable
+across builds on the same machine. That is why
+`~/Library/Keychains/nevertype-signing.keychain-db` **must never be deleted**:
+deleting it revokes Accessibility and the person has to grant everything again.
 
-Depois de atualizar, o teste continua sendo o mesmo: **ditar uma frase.**
+After updating, the test is still the same: **dictate a sentence.**
 
-A versão instalada também aparece no menu da bandeja, em "Versão".
+The installed version also shows in the menu bar menu, under "Version:".
 
-## Como usar
+## How to use
 
-- Segure **⌘ direito**, fale, solte. O texto aparece onde o cursor está.
-- **Dois toques rápidos** travam em mãos-livres; um toque encerra; **Esc** descarta.
-- Qualquer tecla comum — ou Esc — durante o hold cancela e descarta o áudio.
-- A pílula flutuante mostra o nível do microfone enquanto grava; se as barras não
-  mexem, não está entrando som.
-- O menu da bandeja tem histórico, escolha da tecla e vocabulário. "Limpar
-  histórico" apaga o texto guardado e o áudio do último ditado.
+- Hold **Right ⌘**, speak, release. The text appears where the cursor is.
+- **Two quick taps** lock into hands-free; one tap finishes; **Esc** discards.
+- Any regular key, or Esc, during the hold cancels and discards the audio.
+- The floating pill shows the microphone level while recording; if the bars do
+  not move, no sound is coming in.
+- The menu bar menu has the history, the key choice and the vocabulary. "Clear
+  History" deletes the stored text and the audio of the last dictation.

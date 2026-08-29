@@ -1,27 +1,27 @@
-# Armadilhas
+# Pitfalls
 
-O que quebrou neste projeto, e o custo medido de cada erro. Quase nenhum destes
-apareceu em revisão de código: a maioria só apareceu rodando, e vários faziam o
-programa **relatar que estava tudo bem** enquanto não estava.
+What broke in this project, and the measured cost of each mistake. Almost none
+of these showed up in code review: most only appeared when running, and several
+had the program **reporting that everything was fine** while it was not.
 
-Está aqui porque nenhum é específico deste app.
+They are here because none of them is specific to this app.
 
 ---
 
-## Verificação que se deixa enganar
+## Verification that lets itself be fooled
 
-### Procurar palavra em log não prova que algo aconteceu
+### Searching a log for a word does not prove anything happened
 
-O `ggml` inicializa o device Metal só para enumerá-lo, mesmo quando a inferência
-roda em CPU. Um log de `whisper-cli -ng` — CPU explícita — contém **37 linhas**
-com a palavra "metal", incluindo `using embedded metal library`.
+`ggml` initializes the Metal device just to enumerate it, even when inference
+runs on the CPU. A log from `whisper-cli -ng` — explicit CPU — contains **37
+lines** with the word "metal", including `using embedded metal library`.
 
-Um `grep -qi metal` aceitava execução em CPU como prova de GPU. Custo, medido no
-mesmo modelo e áudio: **encode 1635 ms em CPU contra 143 ms em Metal**. A bancada
-inteira reportava números de CPU como se fossem do app.
+A `grep -qi metal` accepted a CPU run as proof of GPU. Cost, measured on the
+same model and audio: **a 1635 ms encode on CPU against 143 ms on Metal**. The
+whole bench was reporting CPU numbers as if they were the app's.
 
-O discriminador real é o backend escolhido, e a guarda exige o positivo **e**
-rejeita o negativo:
+The real discriminator is the backend that was chosen, and the guard requires the
+positive **and** rejects the negative:
 
 ```bash
 metal_is_active() {
@@ -31,57 +31,58 @@ metal_is_active() {
 }
 ```
 
-Dentro do processo, a versão correta nem olha log: enumera
-`ggml_backend_dev_count()` e lê `ggml_backend_dev_name()`.
+Inside the process, the correct version does not even look at a log: it
+enumerates `ggml_backend_dev_count()` and reads `ggml_backend_dev_name()`.
 
-**Regra:** logs contêm o vocabulário de coisas que **não** aconteceram.
+**Rule:** logs contain the vocabulary of things that did **not** happen.
 
-### Magic number não se compara como texto
+### A magic number is not compared as text
 
-O magic do ggml é `0x67676d6c`, gravado como uint32 little-endian. Os bytes em
-disco saem invertidos: `6c 6d 67 67`, que lido como texto é **`lmgg`**, não
+The ggml magic is `0x67676d6c`, written as a little-endian uint32. The bytes on
+disk come out reversed: `6c 6d 67 67`, which read as text is **`lmgg`**, not
 `ggml`.
 
-`head -c 4 arquivo` = `"ggml"` reprovava **todo modelo válido**, incluindo o de
-referência distribuído pelo Homebrew. Compare em hexadecimal.
+`head -c 4 file` = `"ggml"` rejected **every valid model**, including the
+reference one distributed by Homebrew. Compare in hexadecimal.
 
-### Magic sozinho não valida arquivo
+### The magic alone does not validate a file
 
-Um download interrompido tem os primeiros bytes certos. Pior, o whisper.cpp
-aceita um modelo truncado como "modelo vazio para teste" e devolve um contexto
-**válido** — e a primeira inferência mata o processo com `std::out_of_range`,
-exceção de C++ que nenhum `try` do Swift intercepta.
+An interrupted download has the right first bytes. Worse, whisper.cpp accepts a
+truncated model as an "empty model for testing" and returns a **valid** context
+— and the first inference kills the process with `std::out_of_range`, a C++
+exception that no Swift `try` intercepts.
 
-Reproduzido: 100 KB do modelo real no caminho de produção → `exit 134`, sem
-aviso, sem ícone, sem menu. O app simplesmente não abria.
+Reproduced: 100 KB of the real model on the production path → `exit 134`, no
+warning, no icon, no menu. The app simply did not open.
 
-**Regra:** magic **e** piso de tamanho proporcional ao artefato real. Um piso de
-50 MB para um modelo de 547 MB aprova download truncado.
+**Rule:** magic **and** a size floor proportional to the real artifact. A 50 MB
+floor for a 547 MB model approves a truncated download.
 
-E regra escrita não é regra aplicada: até 29/08/2026 este parágrafo já existia e
-o piso era 50 MB em três dos cinco lugares que validam o modelo —
-`ModelStore.minimumBytes` no app, `fetch-model.sh` e `setup-bench.sh`; só
-`install.sh` e `verify-install.sh` usavam 400. Hoje são 400 MB nos cinco,
-e na bancada o piso é por modelo (130 MB para o `small` de 181 MB). Custo de
-conferir: um `grep` pelo número.
+And a written rule is not an applied rule: until 2026-08-29 this paragraph
+already existed and the floor was 50 MB in three of the five places that
+validate the model — `ModelStore.minimumBytes` in the app, `fetch-model.sh` and
+`setup-bench.sh`; only `install.sh` and `verify-install.sh` used 400. Today it is
+400 MB in all five, and on the bench the floor is per model (130 MB for the
+181 MB `small`). Cost of checking: one `grep` for the number.
 
 ---
 
-## Concorrência que o compilador não vê
+## Concurrency the compiler does not see
 
-### Closure dentro de método `@MainActor` herda o isolamento
+### A closure inside a `@MainActor` method inherits the isolation
 
-Este derrubou o app duas vezes, e a primeira correção não funcionou.
+This one took the app down twice, and the first fix did not work.
 
-O callback de `AVCaptureDevice.requestAccess` chega numa fila de background.
-Usar `MainActor.assumeIsolated` ali é afirmar algo falso, e o Swift verifica em
-runtime: `EXC_BREAKPOINT` em `_swift_task_checkIsolatedSwift`.
+The `AVCaptureDevice.requestAccess` callback arrives on a background queue.
+Using `MainActor.assumeIsolated` there is asserting something false, and Swift
+checks it at runtime: `EXC_BREAKPOINT` in `_swift_task_checkIsolatedSwift`.
 
-A correção óbvia — trocar o corpo por `Task { @MainActor in }` — **não resolve**.
-Closures escritas dentro de um método `@MainActor` herdam esse isolamento por
-inferência, e a checagem estoura na closure **externa**, antes de chegar no corpo.
+The obvious fix — swapping the body for `Task { @MainActor in }` — **does not
+solve it**. Closures written inside a `@MainActor` method inherit that isolation
+by inference, and the check trips in the **outer** closure, before reaching the
+body.
 
-A saída foi usar a API assíncrona, que não tem closure:
+The way out was the async API, which has no closure:
 
 ```swift
 Task { @MainActor in
@@ -90,31 +91,32 @@ Task { @MainActor in
 }
 ```
 
-**Detalhe cruel:** o caminho só roda quando a permissão está *indefinida*. Em
-qualquer teste com a permissão já concedida, o bug não aparece.
+**Cruel detail:** the path only runs when the permission is *undetermined*. In
+any test with the permission already granted, the bug does not appear.
 
-### `AVAudioNodeTapBlock` não é `Sendable`, e o build sai limpo
+### `AVAudioNodeTapBlock` is not `Sendable`, and the build comes out clean
 
-O tap de áudio roda em thread de tempo real; `stop()` roda na main. Os dois
-tocavam o mesmo `AVAudioFile` e o mesmo conversor sem sincronização — e o Swift 6
-com concorrência estrita **não acusa**, porque o tipo do bloco não é marcado.
+The audio tap runs on a real-time thread; `stop()` runs on main. Both touched the
+same `AVAudioFile` and the same converter with no synchronization — and Swift 6
+with strict concurrency **does not complain**, because the block's type is not
+marked.
 
-A correção: o tap só copia o buffer e despacha para uma fila serial dona do
-estado; `stop()` usa `queue.sync` como barreira — `removeTap` não garante
-ausência de callback em voo.
+The fix: the tap only copies the buffer and dispatches to a serial queue that
+owns the state; `stop()` uses `queue.sync` as a barrier — `removeTap` does not
+guarantee the absence of a callback in flight.
 
-### O SDK anota `@Sendable` por baixo do código, e o build quebra sem ninguém mexer nele
+### The SDK annotates `@Sendable` underneath the code, and the build breaks with nobody touching it
 
-O oposto do item anterior: aqui o compilador passou a ver **mais** — numa outra
-máquina, num código que não mudou.
+The opposite of the previous item: here the compiler started seeing **more** —
+on another machine, in code that did not change.
 
-`Resampler.convert(_:)` entregava ao conversor um bloco que capturava uma `var`
-(`supplied`) e o `AVAudioPCMBuffer` de entrada. Compilava na máquina onde o
-projeto nasceu, só com Command Line Tools — e a versão do compilador de lá **não
-foi registrada**, o que é metade desta armadilha. Num clone limpo do mesmo
-commit (`0d7efbe`), com Apple Swift 6.2.3 (swiftlang-6.2.3.3.21), Xcode completo
-e SDK MacOSX26.2, `swift build --build-tests` e `swift test` saem com 1 e três
-erros, medidos em 29/08/2026:
+`Resampler.convert(_:)` handed the converter a block that captured a `var`
+(`supplied`) and the input `AVAudioPCMBuffer`. It compiled on the machine where
+the project was born, with Command Line Tools only — and the compiler version
+there **was not recorded**, which is half of this pitfall. On a clean clone of
+the same commit (`0d7efbe`), with Apple Swift 6.2.3 (swiftlang-6.2.3.3.21), full
+Xcode and SDK MacOSX26.2, `swift build --build-tests` and `swift test` exit with
+1 and three errors, measured on 2026-08-29:
 
 ```
 AudioRecorder.swift:90:20: error: capture of 'input' with non-Sendable type 'AVAudioPCMBuffer' in a '@Sendable' closure
@@ -122,80 +124,81 @@ AudioRecorder.swift:84:16: error: reference to captured var 'supplied' in concur
 AudioRecorder.swift:88:13: error: mutation of captured var 'supplied' in concurrently-executing code
 ```
 
-A última linha da saída é `error: fatalError`, que não diz nada — a causa está
-acima. E ela é o tipo do bloco. Lido no header,
-`AVFAudio.framework/Headers/AVAudioConverter.h`, linha 154 — a mesma linha no
-`MacOSX26.2.sdk` do Command Line Tools e no `MacOSX.sdk` do Xcode 26.2:
+The last line of the output is `error: fatalError`, which says nothing — the
+cause is above. And it is the block's type. Read in the header,
+`AVFAudio.framework/Headers/AVAudioConverter.h`, line 154 — the same line in the
+Command Line Tools' `MacOSX26.2.sdk` and in Xcode 26.2's `MacOSX.sdk`:
 
 ```objc
 typedef AVAudioBuffer * __nullable (^ NS_SWIFT_SENDABLE AVAudioConverterInputBlock)(AVAudioPacketCount inNumberOfPackets, AVAudioConverterInputStatus* outStatus);
 ```
 
-O `NS_SWIFT_SENDABLE` está no `MacOSX26.sdk` (26.0) e no 26.2, e **não está no
+The `NS_SWIFT_SENDABLE` is in `MacOSX26.sdk` (26.0) and in 26.2, and **is not in
 `MacOSX15.4.sdk`** — `grep -c "NS_SWIFT_SENDABLE AVAudioConverterInputBlock"`
-dá 0 lá. A anotação entrou com o SDK 26.0, e a documentação pública da Apple
-ainda mostra a `typealias` sem ela: a doc não é o SDK. Em Swift 6 com
-concorrência estrita, cada tipo que a Apple passa a marcar vira erro em código
-que ninguém tocou.
+gives 0 there. The annotation came in with SDK 26.0, and Apple's public
+documentation still shows the `typealias` without it: the docs are not the SDK.
+In Swift 6 with strict concurrency, every type Apple starts marking becomes an
+error in code nobody touched.
 
-A máquina de origem media macOS 26.2 em 28/08 e compilava. A única explicação
-consistente com os fatos é o Command Line Tools de lá estar com um SDK 15.x, não
-atualizado — e isso é inferência, não medição: ninguém conferiu lá, e a versão
-do compilador de lá continua desconhecida.
+The origin machine measured macOS 26.2 on 2026-08-28 and compiled. The only
+explanation consistent with the facts is that the Command Line Tools there have
+a 15.x SDK, not updated — and that is inference, not measurement: nobody checked
+there, and the compiler version there is still unknown.
 
-O conserto: o buffer fica num `OSAllocatedUnfairLock<AVAudioPCMBuffer?>`
-(`Sendable`, macOS 13+), que o bloco esvazia na primeira chamada e responde
-`.noDataNow` depois. Nada de `@preconcurrency import`, `-strict-concurrency`
-mais frouxo ou `@unchecked Sendable` — cada um desses apaga o diagnóstico em vez
-de tratar o caso, e vermelho honesto vale mais que verde por afrouxar a régua.
-Em qual thread o conversor chama o bloco a Apple não documenta (só que o
-parâmetro é non-escaping); o lock custa nanossegundos e dispensa a resposta.
+The fix: the buffer sits in an `OSAllocatedUnfairLock<AVAudioPCMBuffer?>`
+(`Sendable`, macOS 13+), which the block empties on the first call and answers
+`.noDataNow` afterwards. No `@preconcurrency import`, no looser
+`-strict-concurrency`, no `@unchecked Sendable` — each of those erases the
+diagnostic instead of handling the case, and an honest red is worth more than a
+green obtained by loosening the ruler. On which thread the converter calls the
+block Apple does not document (only that the parameter is non-escaping); the
+lock costs nanoseconds and makes the answer unnecessary.
 
-Depois, medido em 29/08/2026 sobre a mesma máquina e a mesma árvore:
-`swift build --build-tests` sai 0, **0 erros, 6 warnings — os mesmos 6 da
-rodada quebrada, nenhum novo**; `swift test --disable-xctest
---enable-swift-testing` sai 0, **81 de 81 testes em 12 suítes**, 1,507 s.
+Afterwards, measured on 2026-08-29 on the same machine and the same tree:
+`swift build --build-tests` exits 0, **0 errors, 6 warnings — the same 6 as the
+broken round, none new**; `swift test --disable-xctest
+--enable-swift-testing` exits 0, **81 of 81 tests in 12 suites**, 1.507 s.
 
-**Regra:** "compila aqui" sem `swift --version` e `xcrun --show-sdk-version`
-anotados não é reproduzível. Registre os dois junto com a medição — a Apple move
-a régua de `Sendable` a cada SDK.
+**Rule:** "it compiles here" without `swift --version` and
+`xcrun --show-sdk-version` written down is not reproducible. Record both along
+with the measurement — Apple moves the `Sendable` ruler with every SDK.
 
-### Consultar-e-decidir não é exclusão mútua
+### Query-then-decide is not mutual exclusion
 
-`NSRunningApplication.runningApplications(withBundleIdentifier:)` para garantir
-instância única falha em lançamentos simultâneos: são dois passos, e o registro
-no LaunchServices é assíncrono. **3 de 3** tentativas resultaram em duas
-instâncias.
+`NSRunningApplication.runningApplications(withBundleIdentifier:)` to guarantee a
+single instance fails on simultaneous launches: it is two steps, and the
+LaunchServices registration is asynchronous. **3 out of 3** attempts ended with
+two instances.
 
-Com dois monitores globais de tecla, um ditado vira duas gravações, duas
-transcrições e dois ⌘V. `flock` resolve num passo indivisível.
+With two global key monitors, one dictation becomes two recordings, two
+transcriptions and two ⌘V. `flock` solves it in one indivisible step.
 
 ---
 
-## Áudio
+## Audio
 
-### O conversor retém amostras, e o fim da fala some
+### The converter holds back samples, and the end of the speech disappears
 
-`AVAudioConverter` guarda amostras dentro do filtro de reamostragem entre
-chamadas. Durante a gravação isso não importa — o resíduo sai na chamada
-seguinte. No fim, importa: **982 quadros retidos em 1 s de áudio a 48 kHz**, que
-são 61 ms — e é exatamente onde está o fim da frase.
+`AVAudioConverter` keeps samples inside the resampling filter between calls.
+During the recording that does not matter — the residue comes out on the next
+call. At the end, it matters: **982 frames held back in 1 s of audio at
+48 kHz**, which is 61 ms — and that is exactly where the end of the sentence is.
 
-Sem drenar, a última palavra de cada ditado sumia.
+Without draining, the last word of every dictation vanished.
 
-### Uma chamada não esgota o conversor
+### One call does not drain the converter
 
-O conversor preenche até a capacidade do buffer de saída e guarda o resto.
-Assumir que uma chamada basta funcionava para downsample e truncava no upsample:
-**3744 quadros perdidos** convertendo 8 kHz (fone Bluetooth em modo HFP) para
-16 kHz. É preciso bombear até secar.
+The converter fills up to the capacity of the output buffer and keeps the rest.
+Assuming one call is enough worked for downsampling and truncated on upsampling:
+**3744 frames lost** converting 8 kHz (a Bluetooth headset in HFP mode) to
+16 kHz. It has to be pumped until dry.
 
-### Motor de áudio parado ainda segura o microfone
+### A stopped audio engine still holds the microphone
 
-Um `AVAudioEngine` parado mas vivo mantém o nó de entrada configurado, e o macOS
-continua contando o app como usuário do microfone — o indicador do sistema fica
-aceso o tempo todo. A instância precisa nascer e morrer com cada uso, inclusive
-no caminho de erro:
+An `AVAudioEngine` that is stopped but alive keeps the input node configured, and
+macOS keeps counting the app as a microphone user — the system indicator stays
+lit the whole time. The instance has to be born and die with each use, including
+on the error path:
 
 ```swift
 var started = false
@@ -204,170 +207,174 @@ defer { if !started { self.engine?.reset(); self.engine = nil } }
 
 ---
 
-## macOS: coisas que somem sem erro
+## macOS: things that vanish without an error
 
-### `NSStatusItem` criado antes de `setActivationPolicy` é descartado
+### An `NSStatusItem` created before `setActivationPolicy` is discarded
 
-E o objeto continua respondendo `isVisible = true` e `frame.width = 30`. O log do
-app dizia que estava tudo bem enquanto nada era desenhado na tela.
+And the object keeps answering `isVisible = true` and `frame.width = 30`. The
+app's log said everything was fine while nothing was drawn on screen.
 
-Crie o item dentro de `applicationDidFinishLaunching`, depois da política.
+Create the item inside `applicationDidFinishLaunching`, after the policy.
 
-### Imagem não-template é preta sobre fundo preto
+### A non-template image is black on a black background
 
-Imagem *template* é a que o macOS repinta conforme o fundo da barra. Marcar
-`isTemplate = false` para poder tingir de vermelho fazia o símbolo ser desenhado
-na cor natural — preto — e sumir contra a barra escura.
+A *template* image is the one macOS repaints to match the bar's background.
+Setting `isTemplate = false` to be able to tint it red made the symbol be drawn
+in its natural color — black — and vanish against the dark bar.
 
-E `contentTintColor` **só tinge imagem template**, então o vermelho pretendido
-também não acontecia. O ícone ficava invisível exatamente enquanto gravava.
+And `contentTintColor` **only tints template images**, so the intended red did
+not happen either. The icon was invisible exactly while recording.
 
-### Em tela cheia não existe menu bar
+### In full screen there is no menu bar
 
-Um app cujo único feedback é o ícone da bandeja fica sem feedback nenhum no modo
-em que a maioria dos aplicativos é usada. A saída é um `NSPanel` com
-`level = .screenSaver` e `collectionBehavior` incluindo `.fullScreenAuxiliary`.
+An app whose only feedback is the tray icon has no feedback at all in the mode
+most applications are used in. The way out is an `NSPanel` with
+`level = .screenSaver` and a `collectionBehavior` that includes
+`.fullScreenAuxiliary`.
 
-### `IsSecureEventInputEnabled()` é flag global da sessão
+### `IsSecureEventInputEnabled()` is a session-wide flag
 
-Não é "campo de senha em foco", apesar do nome sugerir. Qualquer processo pode
-ligá-la — inclusive um sem interface, em segundo plano — e há apps que ligam e
-esquecem de desligar. Um app que dependa dela para decidir se cola pode ficar
-mudo indefinidamente por causa de outro programa.
+It is not "password field in focus", despite what the name suggests. Any process
+can turn it on — including one with no interface, in the background — and some
+apps turn it on and forget to turn it off. An app that depends on it to decide
+whether to paste can stay mute indefinitely because of another program.
 
-### `security find-identity -v -p codesigning` filtra por confiança
+### `security find-identity -v -p codesigning` filters by trust
 
-Um certificado self-signed nunca aparece nessa lista, **mesmo funcionando
-perfeitamente** para o `codesign`. Usar esse comando como teste de existência faz
-o script recriar o certificado a cada execução — e no macOS isso revoga a
-permissão de Acessibilidade toda vez, porque o TCC ancora no certificado.
+A self-signed certificate never appears in that list, **even while working
+perfectly** for `codesign`. Using that command as an existence test makes the
+script recreate the certificate on every run — and on macOS that revokes the
+Accessibility permission every time, because TCC anchors on the certificate.
 
-Use `security find-identity <keychain>`, sem os filtros.
+Use `security find-identity <keychain>`, without the filters.
 
-### Hardened runtime é incompatível com dylib de terceiro
+### Hardened runtime is incompatible with third-party dylibs
 
-Ligar `--options runtime` ativa validação de bibliotecas, que recusa carregar
-código assinado por outra equipe. Com dylibs do Homebrew o app morre no dyld:
+Turning on `--options runtime` enables library validation, which refuses to load
+code signed by another team. With Homebrew dylibs the app dies in dyld:
 
 ```
 code signature not valid for use in process:
 mapping process and mapped file (non-platform) have different Team IDs
 ```
 
-Não há meio-termo: ou linkagem estática, ou sem a proteção. Para um processo que
-detém Acessibilidade — capaz de ler e injetar teclas no sistema inteiro — a
-proteção vale o trabalho de compilar estático.
+There is no middle ground: either static linking, or no protection. For a process
+that holds Accessibility — able to read and inject keys across the whole system —
+the protection is worth the work of compiling statically.
 
 ---
 
-## Estado do usuário
+## User state
 
-### Restauração agendada precisa de guardas
+### A scheduled restoration needs guards
 
-Inserir texto via área de transferência exige salvar e devolver o que estava lá.
-Devolver depois de um atraso fixo, incondicionalmente, destrói dado de duas
-formas:
+Inserting text through the clipboard requires saving and giving back what was
+there. Giving it back after a fixed delay, unconditionally, destroys data in two
+ways:
 
-1. **Qualquer escrita nos N ms seguintes é revertida** — um ⌘C do usuário, o
-   Universal Clipboard, um gestor de clipboard.
-2. **Duas inserções dentro da janela** deixam o texto da primeira no lugar do
-   conteúdo original, permanentemente: a segunda fotografa o pasteboard já
-   contaminado pela primeira.
+1. **Any write in the following N ms is reverted** — a ⌘C by the user, Universal
+   Clipboard, a clipboard manager.
+2. **Two insertions inside the window** leave the first one's text in place of
+   the original contents, permanently: the second one snapshots the pasteboard
+   already contaminated by the first.
 
-Três guardas resolvem: uma **geração** por operação (só a restauração mais
-recente vale), o **retrato herdado** de uma restauração pendente (devolve o
-conteúdo original, não o intermediário) e o **`changeCount`** (desiste se alguém
-escreveu no meio).
+Three guards solve it: a **generation** per operation (only the most recent
+restoration counts), the **inherited snapshot** of a pending restoration (it
+gives back the original contents, not the intermediate ones) and the
+**`changeCount`** (it gives up if someone wrote in between).
 
-E marque o item com `org.nspasteboard.ConcealedType`, ou cada inserção entra no
-histórico de gestores de clipboard e sobrevive à restauração.
+And mark the item with `org.nspasteboard.ConcealedType`, or every insertion
+enters the history of clipboard managers and survives the restoration.
 
-### Comentário de privacidade envelhece sem ninguém ver
+### A privacy comment ages with nobody watching
 
-`main.swift` abria com: *"Um arquivo só, sobrescrito… o app não guarda histórico
-de nada que você falou."* Era verdade quando foi escrito. Em 29/08/2026 havia
-três cópias do que a pessoa falou em disco: `historico.json` (30 transcrições),
-`nevertype.log` (o texto de **cada** transcrição da sessão — que nenhum documento
-mencionava e "Limpar histórico" não apagava) e `last.wav` (a gravação inteira,
-que "Limpar histórico" também não apagava).
+`main.swift` opened with: *"A single file, overwritten… the app keeps no history
+of anything you said."* It was true when it was written. On 2026-08-29 there were
+three copies of what the person said on disk: `historico.json` (30
+transcriptions), `nevertype.log` (the text of **every** transcription of the
+session — which no document mentioned and "Clear History" did not delete) and
+`last.wav` (the whole recording, which "Clear History" did not delete either).
 
-Nenhuma delas era defeito de comportamento — o histórico é deliberado e
-documentado. O defeito era a frase: uma negativa categórica dentro da fonte, para
-quem perguntasse "ele guarda o que eu falei?". Hoje o log guarda tempo e tamanho,
-nunca o texto; "Limpar histórico" apaga o JSON e o WAV; e o comentário lista os
-arquivos.
+None of them was a behavior defect — the history is deliberate and documented.
+The defect was the sentence: a categorical negative inside the source, for
+whoever asked "does it keep what I said?". Today the log keeps time and size,
+never the text; "Clear History" deletes the JSON and the WAV; and the comment
+lists the files.
 
-**Regra:** afirmação de privacidade se confere contra o disco — `ls` na pasta do
-app depois de ditar —, não contra a intenção de quem escreveu.
+**Rule:** a privacy claim is checked against the disk — `ls` in the app's folder
+after dictating — not against the intention of whoever wrote it.
 
 ---
 
 ## Shell
 
-### `set -e` mais `pipefail` tornam fallbacks inalcançáveis
+### `set -e` plus `pipefail` make fallbacks unreachable
 
 ```bash
 load_ms=$(grep -i 'load time' "$log" | sed ... )
-[ -n "$load_ms" ] || load_ms=0     # nunca executa
+[ -n "$load_ms" ] || load_ms=0     # never runs
 ```
 
-Se o `grep` não casa, o pipeline retorna não-zero, `set -e` derruba o script na
-atribuição, e a linha seguinte não roda. Envolva em `{ grep ... || true; }`.
+If the `grep` does not match, the pipeline returns non-zero, `set -e` takes the
+script down at the assignment, and the next line does not run. Wrap it in
+`{ grep ... || true; }`.
 
-### `trap ... RETURN` não dispara em `exit`
+### `trap ... RETURN` does not fire on `exit`
 
-Uma função que cria diretório temporário e limpa com `trap ... RETURN` deixa o
-temporário para trás quando o script sai por erro. No nosso caso ficava uma
-chave RSA sem senha em `$TMPDIR`. Some um `trap ... EXIT`.
+A function that creates a temporary directory and cleans up with
+`trap ... RETURN` leaves the temporary behind when the script exits through an
+error. In our case a passwordless RSA key was left in `$TMPDIR`. Add a
+`trap ... EXIT`.
 
-### `osascript` para controlar app pede autorização de Automação
+### `osascript` to control an app asks for Automation authorization
 
-Mandar Apple event para um app novo exige uma concessão do TCC, e o macOS abre um
-diálogo modal — travando o script até alguém responder, sem nenhuma pista do
-motivo. Use `pkill` e espere o processo sumir.
+Sending an Apple event to a new app requires a TCC grant, and macOS opens a
+modal dialog — hanging the script until someone answers, with no hint of why.
+Use `pkill` and wait for the process to disappear.
 
-### `sleep` fixo esperando processo não é espera
+### A fixed `sleep` waiting for a process is not waiting
 
-Se o processo demora mais que o `sleep`, o script segue com premissa falsa. No
-instalador, isso fazia a pessoa continuar rodando o binário antigo achando que
-tinha atualizado. Espere a condição, com limite e falha explícita.
-
----
-
-## Medição
-
-### Tempo de parede mede o cache de disco junto
-
-A bancada media `parede − load_time` para estimar o custo "quente". Com o cache de
-página frio, o mesmo modelo marcou **5087 ms de parede contra 976 ms de
-processamento real** — os ~4 s eram o fault-in dos 547 MB vindos do disco, que o
-contador interno de "load" não cobre.
-
-O veredito contra o teto de latência dependia de o modelo estar em cache ou não.
-A correção: aquecer o cache antes de medir, e usar o cronômetro interno do
-processo.
-
-### Uma amostra não é medição
-
-Latência declarada dentro do alvo com base em **um** ditado, do tamanho mais
-barato possível, lida do log que o próprio app escreve. O número acabou certo, e
-o método não sustentava a conclusão: não media variância, não exercitava o pior
-caso, e o instrumento era o próprio objeto medido.
+If the process takes longer than the `sleep`, the script carries on under a
+false premise. In the installer, that made the person keep running the old
+binary thinking they had updated. Wait for the condition, with a limit and an
+explicit failure.
 
 ---
 
-## O padrão por trás de quase todos
+## Measurement
 
-Os piores defeitos desta lista têm a mesma forma: **o programa relatava saúde
-enquanto a realidade era outra.**
+### Wall-clock time measures the disk cache too
 
-O log dizia que o ícone tinha sido desenhado. O objeto dizia estar visível. O
-`grep` encontrava "metal". O contador dizia quanto tempo levou. O `try?` dizia
-ter protegido. Nenhum estava mentindo — todos respondiam com precisão a uma
-pergunta que não era a que importava.
+The bench measured `wall − load_time` to estimate the "hot" cost. With the page
+cache cold, the same model scored **5087 ms of wall-clock against 976 ms of
+actual processing** — the ~4 s were the fault-in of 547 MB coming from disk,
+which the internal "load" counter does not cover.
 
-A regra que sobrou: **verifique o efeito, não a intenção.** Enumere o dispositivo
-em vez de procurar o nome dele. Compare os bytes em vez do texto. Meça de fora do
-processo. E quando um caminho de falha nunca foi exercitado, trate-o como não
-implementado — porque em quatro auditorias, nenhum caminho de falha não
-exercitado estava correto.
+The verdict against the latency ceiling depended on whether the model was
+cached or not. The fix: warm the cache before measuring, and use the process's
+internal stopwatch.
+
+### One sample is not a measurement
+
+Latency declared within target based on **one** dictation, of the cheapest
+possible size, read from the log the app itself writes. The number turned out
+right, and the method did not support the conclusion: it measured no variance,
+exercised no worst case, and the instrument was the very object being measured.
+
+---
+
+## The pattern behind almost all of them
+
+The worst defects in this list have the same shape: **the program reported
+health while reality was something else.**
+
+The log said the icon had been drawn. The object said it was visible. The `grep`
+found "metal". The counter said how long it took. The `try?` said it had
+protected. None of them was lying — each answered precisely a question that was
+not the one that mattered.
+
+The rule that remained: **verify the effect, not the intention.** Enumerate the
+device instead of searching for its name. Compare the bytes instead of the text.
+Measure from outside the process. And when a failure path has never been
+exercised, treat it as not implemented — because in four audits, no unexercised
+failure path was correct.
