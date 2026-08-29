@@ -212,6 +212,57 @@ public final class RecordingSink {
     }
 }
 
+/// Nível de entrada para o indicador de gravação, de 0 a 1.
+///
+/// Existe porque o overlay desenhava exatamente a mesma coisa — ponto vermelho
+/// parado e "ouvindo…" — com o microfone funcionando, mudo, ou apontado para a
+/// entrada errada. O resultado era uma transcrição vazia sem nenhuma pista do
+/// motivo, que é degradação silenciosa e este projeto trata como erro.
+///
+/// Puro de propósito: silêncio, fala e saturação são exercitáveis sem microfone.
+public enum AudioLevel {
+    /// Abaixo disto é silêncio para efeito de desenho.
+    ///
+    /// -50 dBFS, e não -60: num microfone de laptop o ruído de sala e o
+    /// ventilador ficam por volta de -55 dBFS, e com o piso mais baixo a barra
+    /// mexia sozinha numa sala em silêncio — o que destruiria justamente a
+    /// pergunta que o medidor existe para responder.
+    public static let floorDB: Float = -50
+
+    /// Converte energia em altura de barra, na escala em que o ouvido mede.
+    ///
+    /// Linear não serve: fala normal fica em torno de 0,05 de RMS, e uma barra
+    /// linear mal sairia do chão com alguém falando alto.
+    public static func normalized(rms: Float) -> Float {
+        guard rms > 0 else { return 0 }
+        let db = 20 * log10(rms)
+        guard db > floorDB else { return 0 }
+        let linear = min(1, (db - floorDB) / -floorDB)
+        // Expoente < 1 abre a parte de baixo da escala.
+        //
+        // Só com dB, fala de conversa ficava em 0,48 e o desenho mal saía do
+        // meio: as barras variavam poucos pixels e o medidor parecia morto
+        // mesmo com alguém falando.
+        return pow(linear, 0.65)
+    }
+
+    public static func rms(_ samples: [Float]) -> Float {
+        samples.withUnsafeBufferPointer { buffer in
+            guard let base = buffer.baseAddress else { return 0 }
+            return rms(base, count: buffer.count)
+        }
+    }
+
+    /// A versão sobre ponteiro é a que o tap usa: ele roda na thread de áudio em
+    /// tempo real e não pode alocar um array por buffer.
+    static func rms(_ samples: UnsafePointer<Float>, count: Int) -> Float {
+        guard count > 0 else { return 0 }
+        var sum: Float = 0
+        for i in 0..<count { sum += samples[i] * samples[i] }
+        return (sum / Float(count)).squareRoot()
+    }
+}
+
 /// Grava do microfone e escreve um WAV de 16 kHz mono.
 public final class AudioRecorder {
     public let destination: URL
@@ -244,6 +295,10 @@ public final class AudioRecorder {
     /// Definido uma vez, antes da primeira gravação.
     public var onError: (@MainActor @Sendable (String) -> Void)?
 
+    /// Nível de entrada durante a gravação, de 0 a 1. Mesmo contrato do
+    /// `onError`: definido uma vez, antes da primeira gravação.
+    public var onLevel: (@MainActor @Sendable (Float) -> Void)?
+
     public init(destination: URL) {
         self.destination = destination
         self.sink = RecordingSink(destination: destination)
@@ -275,7 +330,31 @@ public final class AudioRecorder {
         input.installTap(onBus: 0, bufferSize: 4096, format: hardwareFormat) { [weak self] buffer, _ in
             // Na thread de áudio, só copiar e sair. Converter e escrever acontece
             // na fila de E/S.
-            guard let self, let copy = buffer.deepCopy() else { return }
+            guard let self else { return }
+            // O nível sai daqui, antes da cópia: são 4096 multiplicações, e
+            // esperar a fila de E/S atrasaria o indicador em relação à voz.
+            // `Task { @MainActor in }` e não `assumeIsolated` — a thread de
+            // áudio definitivamente não é a main.
+            if let onLevel = self.onLevel, let channel = buffer.floatChannelData?[0] {
+                // Quatro leituras por buffer, e não uma.
+                //
+                // O buffer do tap tem 4096 quadros — a ~48 kHz, 85 ms. Um nível
+                // por buffer dava 12 quadros por segundo, e o medidor ficava
+                // com cara de parado mesmo durante a fala. Fatiar aqui
+                // quadruplica a taxa sem tocar no tamanho do buffer, ou seja,
+                // sem mexer no caminho que grava o áudio.
+                let total = Int(buffer.frameLength)
+                let slices = 4
+                let size = total / slices
+                guard size > 0 else { return }
+                var levels: [Float] = []
+                for i in 0..<slices {
+                    levels.append(AudioLevel.normalized(
+                        rms: AudioLevel.rms(channel + i * size, count: size)))
+                }
+                Task { @MainActor in for level in levels { onLevel(level) } }
+            }
+            guard let copy = buffer.deepCopy() else { return }
             self.io.async { self.append(copy) }
         }
 

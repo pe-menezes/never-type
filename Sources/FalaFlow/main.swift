@@ -129,6 +129,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
     }
 
+    /// Consultado ao sistema toda vez, igual ao microfone.
+    ///
+    /// A pessoa desliga o app em Ajustes do Sistema › Itens de Início de Sessão
+    /// sem o app ficar sabendo. Um checkmark guardado em variável passaria a
+    /// mentir a partir daí — e o menu se remonta a cada abertura justamente para
+    /// nunca mostrar estado velho.
+    private var loginItemState: LoginItem.State { LoginItem.current() }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Uma instância só, com trava atômica.
         //
@@ -159,12 +167,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.menu = menu
 
         monitor.onEvent = { [weak self] event in self?.handle(event) }
+        recorder.onLevel = { [weak self] level in self?.overlay.push(level: level) }
         recorder.onError = { [weak self] message in
             self?.overlay.hide()
             self?.render(.blocked)
             self?.log(message)
         }
         monitor.start()
+        // Sempre na tela: um app acessório que morre não muda nada visualmente,
+        // então a pílula parada é o único sinal de que ele continua vivo.
+        overlay.showIdle()
 
         requestMicrophoneAccess()
         warnIfAccessibilityMissing()
@@ -376,6 +388,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             menu.addItem(fix)
         }
         menu.addItem(.separator())
+        let loginState = loginItemState
+        let login = NSMenuItem(title: "Abrir com o sistema",
+                               action: #selector(toggleLoginItem), keyEquivalent: "")
+        login.target = self
+        login.state = loginState == .on ? .on : .off
+        menu.addItem(login)
+        // O item fala a linguagem daqui; o aviso fala a da Apple, que é a que a
+        // pessoa vai procurar quando for atrás de onde religar.
+        if loginState == .needsApproval {
+            menu.addItem(disabled("  desativado em Itens de Início de Sessão"))
+            let allow = NSMenuItem(title: "Abrir Itens de Início de Sessão…",
+                                   action: #selector(openLoginItemsSettings), keyEquivalent: "")
+            allow.target = self
+            menu.addItem(allow)
+        }
+        menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Sair do FalaFlow", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
     }
 
@@ -388,6 +416,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func openAccessibilitySettings() {
         let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
         NSWorkspace.shared.open(url)
+    }
+
+    @objc private func toggleLoginItem() {
+        let outcome = loginItemState == .on ? LoginItem.disable() : LoginItem.enable()
+        switch outcome {
+        case .changed(let state):
+            log("abrir com o sistema: \(state)")
+        case .refused(let reason):
+            // Sinal visível, e não só log. O menu já fechou quando isto
+            // acontece, o app não tem janela, e o stderr não vai a lugar nenhum
+            // quando ele é aberto pelo Finder: sem o ícone, a recusa não
+            // chegaria à pessoa.
+            log("não consegui mudar 'abrir com o sistema': \(reason)")
+            render(.blocked)
+            flashIdle()
+        }
+    }
+
+    @objc private func openLoginItemsSettings() {
+        LoginItem.openSettings()
     }
 
     /// Diário do app.

@@ -244,3 +244,51 @@ struct RecordingSinkTests {
         #expect(!FileManager.default.fileExists(atPath: url.path))
     }
 }
+
+/// O medidor existe para responder uma pergunta: está entrando som? Então o que
+/// se testa é justamente a distinção entre silêncio e som — não a aparência.
+@Suite("Nível de entrada do microfone")
+struct AudioLevelTests {
+
+    @Test("silêncio absoluto dá zero")
+    func silenceIsZero() {
+        #expect(AudioLevel.rms([Float](repeating: 0, count: 1024)) == 0)
+        #expect(AudioLevel.normalized(rms: 0) == 0)
+    }
+
+    /// O caso que motiva o item: microfone mudo entrega amostras quase nulas, e
+    /// isso tem que aparecer como silêncio, não como um tremor de barra.
+    @Test("ruído abaixo do piso de -50 dBFS conta como silêncio")
+    func noiseFloorIsSilence() {
+        // -60 dBFS: ruído de sala num microfone de laptop.
+        let quiet = AudioLevel.normalized(rms: 0.001)
+        #expect(quiet == 0, "veio \(quiet) — abaixo do piso não pode mexer a barra")
+    }
+
+    @Test("fala normal fica no meio da escala, não colada no chão")
+    func speechIsVisible() {
+        // ~0,05 de RMS é fala em volume de conversa.
+        let level = AudioLevel.normalized(rms: 0.05)
+        #expect(level > 0.3 && level < 0.9,
+                "veio \(level) — escala linear deixaria a fala quase invisível")
+    }
+
+    @Test("saturação satura em 1, não passa")
+    func clippingClamps() {
+        #expect(AudioLevel.normalized(rms: 1.0) == 1)
+        #expect(AudioLevel.normalized(rms: 4.0) == 1, "acima de 0 dBFS continua 1")
+    }
+
+    @Test("o RMS acompanha a energia do sinal")
+    func rmsFollowsEnergy() {
+        let baixo = AudioLevel.rms([Float](repeating: 0.1, count: 512))
+        let alto = AudioLevel.rms([Float](repeating: 0.5, count: 512))
+        #expect(alto > baixo)
+        #expect(abs(baixo - 0.1) < 0.0001, "sinal constante: RMS é o próprio valor")
+    }
+
+    @Test("array vazio não quebra")
+    func emptyIsSafe() {
+        #expect(AudioLevel.rms([]) == 0)
+    }
+}
