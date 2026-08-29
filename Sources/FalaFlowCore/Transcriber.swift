@@ -155,7 +155,10 @@ public final class Transcriber {
         }
     }
 
-    public func transcribe(_ samples: [Float]) throws -> String {
+    /// `prompt` é o `initial_prompt` do whisper: termos que o modelo deve
+    /// esperar ouvir. Dica de reconhecimento, não garantia — quem garante é a
+    /// substituição, que roda depois e não passa pelo modelo.
+    public func transcribe(_ samples: [Float], prompt: String? = nil) throws -> String {
         var params = whisper_full_default_params(WHISPER_SAMPLING_GREEDY)
         params.print_progress = false
         params.print_realtime = false
@@ -166,12 +169,27 @@ public final class Transcriber {
 
         var text = ""
         var failure: Int32 = 0
-        "pt".withCString { language in
-            params.language = language
+
+        // Os ponteiros de C precisam continuar vivos durante `whisper_full`, e é
+        // por isso que a chamada acontece dentro dos `withCString` aninhados em
+        // vez de guardar os ponteiros em variáveis.
+        func run(_ params: whisper_full_params) {
             let code = whisper_full(context, params, samples, Int32(samples.count))
             guard code == 0 else { failure = code; return }
             for i in 0..<whisper_full_n_segments(context) {
                 text += String(cString: whisper_full_get_segment_text(context, i))
+            }
+        }
+
+        "pt".withCString { language in
+            params.language = language
+            if let prompt, !prompt.isEmpty {
+                prompt.withCString { hint in
+                    params.initial_prompt = hint
+                    run(params)
+                }
+            } else {
+                run(params)
             }
         }
         guard failure == 0 else { throw TranscriberError.inferenceFailed(failure) }

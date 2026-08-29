@@ -55,11 +55,11 @@ actor TranscriptionService {
     /// do modelo* como se fosse a causa: com o modelo carregado e o whisper
     /// devolvendo código de erro, o usuário lia "transcrição indisponível:
     /// Metal · carga 168 ms" — uma mensagem que descreve saúde, não falha.
-    func transcribe(_ samples: [Float]) -> Result<(text: String, ms: Int), TranscriptionFailure> {
+    func transcribe(_ samples: [Float], prompt: String? = nil) -> Result<(text: String, ms: Int), TranscriptionFailure> {
         guard let transcriber else { return .failure(TranscriptionFailure(reason: status)) }
         let started = Date()
         do {
-            let text = try transcriber.transcribe(samples)
+            let text = try transcriber.transcribe(samples, prompt: prompt)
             return .success((text, Int(Date().timeIntervalSince(started) * 1000)))
         } catch {
             return .failure(TranscriptionFailure(reason: "\(error)"))
@@ -153,6 +153,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Não é mais uma variável: a última é a primeira do histórico, e ter as
     /// duas coisas criaria duas fontes de verdade para o mesmo texto.
     private var lastTranscript: String? { history.last?.text }
+
+    private let vocabulary = Vocabulary(
+        url: logURL.deletingLastPathComponent().appendingPathComponent("vocabulario.json"))
+    private lazy var vocabularyWindow = VocabularyWindow(vocabulary: vocabulary)
 
     private let history = TranscriptHistory(
         url: logURL.deletingLastPathComponent().appendingPathComponent("historico.json"))
@@ -328,11 +332,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let samples = recorder.lastSamples
             log("gravado: \(samples.count) amostras (\(String(format: "%.1f", Double(samples.count) / 16_000)) s)")
             Task {
-                switch await self.transcription.transcribe(samples) {
+                switch await self.transcription.transcribe(samples, prompt: self.vocabulary.prompt) {
                 case .success(let result):
-                    self.log("transcrito em \(result.ms) ms → \(result.text)")
+                    // As substituições rodam aqui, sobre o texto pronto: elas são
+                    // determinísticas e não passam pelo modelo.
+                    let corrected = self.vocabulary.apply(to: result.text)
+                    if corrected != result.text {
+                        self.log("transcrito em \(result.ms) ms → \(result.text)")
+                        self.log("substituições aplicadas → \(corrected)")
+                    } else {
+                        self.log("transcrito em \(result.ms) ms → \(corrected)")
+                    }
                     self.overlay.hide()
-                    self.deliver(result.text)
+                    self.deliver(corrected)
                 case .failure(let failure):
                     // Sinal visível: sem isto o ditado sumia em silêncio — o
                     // ícone já voltou ao normal, o app não tem janela, e o
@@ -408,6 +420,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private static let triggerKey = "trigger"
+
+    @objc private func openVocabulary() {
+        vocabularyWindow.show()
+    }
 
     @objc private func chooseTrigger(_ sender: NSMenuItem) {
         guard let id = sender.representedObject as? String,
@@ -497,6 +513,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         keyMenu.addItem(soundItem)
         keyItem.submenu = keyMenu
         menu.addItem(keyItem)
+
+        let vocab = NSMenuItem(title: "Vocabulário…", action: #selector(openVocabulary), keyEquivalent: "")
+        vocab.target = self
+        let counts = vocabulary.terms.count + vocabulary.replacements.count
+        if counts > 0 {
+            vocab.title = "Vocabulário (\(vocabulary.terms.count) termos, \(vocabulary.replacements.count) trocas)…"
+        }
+        menu.addItem(vocab)
 
         menu.addItem(.separator())
         menu.addItem(disabled("Microfone: \(micAuthorized ? "ok" : "faltando")"))
