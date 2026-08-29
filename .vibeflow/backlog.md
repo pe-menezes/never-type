@@ -28,7 +28,7 @@ Spec: `.vibeflow/specs/abrir-com-o-sistema.md`
 
 ## 1. Defeitos que podem estragar o trabalho de alguém
 
-Estes três são os únicos itens do backlog que causam **dano ao usuário**, não
+Estes quatro são os únicos itens do backlog que causam **dano ao usuário**, não
 apenas incômodo. Por isso vêm antes de tudo, inclusive do streaming.
 
 ### D1 · A devolução do clipboard é um chute de 0,6 s — P
@@ -67,6 +67,34 @@ liga e esquece de desligar — e a partir daí o NeverType recusa inserir texto 
 motivo, dizendo "campo de senha em foco" quando não há nenhum. Falso positivo
 que faz o app parecer quebrado.
 *Evidência:* `.vibeflow/index.md` (Known Issues) · `TextInjector.swift`
+
+### D4 · O código afirma não guardar o que a pessoa falou, e guarda — P
+O doc comment de `lastRecordingURL()`, em `main.swift:5-6`, diz: *"Um arquivo só,
+sobrescrito: a Parte 3 lê daqui, e o app não guarda histórico de nada que você
+falou."* Era verdade quando foi escrito. Deixou de ser com o `TranscriptHistory`,
+que grava até 30 transcrições em `historico.json` — **no diretório que essa mesma
+função devolve** (`main.swift:161-162`).
+
+Está aqui, e não em Higiene, pelo que a frase promete. É a única alegação de
+privacidade errada do repositório, num projeto cuja tese inteira é que o
+conteúdo não sai da máquina. O modo de falha não é alguém se confundir lendo
+código: é a frase sair daqui e virar resposta. Quem for perguntado "ele guarda o
+que eu falei?" tem, dentro da fonte, uma negativa categórica para citar — e a
+pessoa dita conteúdo sensível acreditando que nada fica. Fica: 30 entradas, em
+texto claro, no disco.
+
+**O comportamento não é o defeito.** Guardar é deliberado e está justificado em
+`TranscriptHistory.swift:20-28` (teto de 30, texto claro porque a chave moraria
+ao lado do arquivo, apagável pelo menu), e o README já descreve isso desde
+29/08. O defeito é só o comentário que contradiz tudo isso três linhas acima da
+função. Conserto de uma frase — a dificuldade é lembrar que ela existe, não
+escrevê-la.
+
+É também o padrão que o `CLAUDE.md` nomeia como o pior deste projeto: fazer o
+programa relatar que está tudo bem enquanto não está.
+*Evidência:* `Sources/NeverType/main.swift:5-6` (o texto, conferido em
+29/08/2026) · `main.swift:161-162` (o `historico.json` no mesmo diretório) ·
+`TranscriptHistory.swift:23-31` (o teto de 30 e o texto claro)
 
 ---
 
@@ -291,6 +319,50 @@ depender de quem revisa notar.
 *Evidência:* `.github/` inexistente em 29/08/2026 · grep sem resultado em
 `Sources/`, `Tests/` e `scripts/` · `.vibeflow/conventions.md:118` (o Don't que
 já existe) · `README.md:15`
+
+### H4 · Link quebrado para as limitações, no README — P
+`README.md:119` aponta para `#limitações`, mas o heading é "## Limitações
+conhecidas" e a âncora dele é `#limitações-conhecidas`. Nunca resolveu: é
+anterior à revisão de 29/08. A forma certa entrou na `README.md:94` nessa
+revisão, então o arquivo hoje carrega as duas — um link que funciona e um que
+não, para a mesma seção. Uma linha.
+*Evidência:* `README.md:119` (âncora sem heading correspondente) · `README.md:94`
+(a forma certa, no mesmo arquivo) · lista de headings conferida em 29/08/2026
+
+### H5 · "Um arquivo por unidade" já não descreve os testes — P
+`conventions.md:44` diz "swift-testing, **um arquivo por unidade**". O
+`AudioRecorderTests.swift` tem **cinco** suítes: "Conversão de áudio" (5 testes,
+L8), "Trigger da hotkey" (4, L102), "Ciclo do arquivo de gravação" (7, L146),
+"Nível de entrada do microfone" (6, L276) e "Trava de mãos-livres" (9, L325). As
+duas da hotkey não são de áudio — são do `HotkeyMonitor`, que não tem arquivo de
+teste próprio.
+
+**A decisão é qual dos dois lados muda, e o item não presume nenhum.** Ou a
+convenção passa a descrever o que o repositório faz de fato, ou trigger e trava
+saem para um `HotkeyMonitorTests.swift` e a convenção continua valendo como
+está. Não é óbvio que seja a segunda: quem escreveu deixou as suítes juntas, e o
+motivo não está registrado em lugar nenhum — pode ter sido conveniência, ou pode
+ser que as suítes compartilhem apoio de teste que eu não conferi.
+
+Custo colateral de mexer: a contagem por arquivo do README e do `index.md` não
+muda (81 continua 81), mas quem procurar teste de hotkey pelo nome do arquivo
+hoje não acha.
+*Evidência:* `.vibeflow/conventions.md:44` ·
+`Tests/NeverTypeCoreTests/AudioRecorderTests.swift` (as cinco suítes, contadas em
+29/08/2026) · ausência de `HotkeyMonitorTests.swift`
+
+### H6 · A linha de abertura do `CLAUDE.md` descreve a tecla como fixa — P
+`CLAUDE.md:3`: *"Segurar ⌘ direito grava, soltar transcreve"*. Continua verdade
+como **padrão** — `HotkeyMonitor.init` recebe `.rightCommand`
+(`HotkeyMonitor.swift:192`) —, mas ficou incompleto depois do I4 e do I1: a tecla
+é escolhida no menu entre ⌘, ⌥ e ⌃ direito (`HotkeyMonitor.swift:150`), e o duplo
+toque que trava em mãos-livres não aparece na frase.
+
+Diferente dos outros três desta seção, **não é falso** — é a linha de abertura
+envelhecendo, e ela é o resumo do app que todo agente lê primeiro. O README já
+foi acertado em 29/08 e serve de texto-fonte.
+*Evidência:* `CLAUDE.md:3` · `HotkeyMonitor.swift:150` e `:192` ·
+`README.md:62-73` (a mesma descrição, já corrigida)
 
 ---
 
