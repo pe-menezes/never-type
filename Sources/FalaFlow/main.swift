@@ -287,6 +287,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.render(.blocked)
                 }
             }
+        case .latched:
+            // A gravação já está rolando desde o primeiro toque; aqui só muda
+            // quem a mantém viva — a máquina de estados, não a tecla.
+            log("mãos-livres travado. Toque no \(monitor.trigger.label) para transcrever, Esc para descartar.")
         case .cancelled:
             recorder.cancel()
             overlay.hide()

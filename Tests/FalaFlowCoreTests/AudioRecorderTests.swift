@@ -292,3 +292,90 @@ struct AudioLevelTests {
         #expect(AudioLevel.rms([]) == 0)
     }
 }
+
+
+/// A trava de mãos-livres. Cada caminho aqui é um que, sem a máquina de estados
+/// separada, só daria para exercitar apertando teclas em milissegundos exatos.
+@Suite("Trava de mãos-livres")
+struct LatchTests {
+    private typealias L = HotkeyMonitor.Latch
+
+    @Test("hold normal continua sendo apertar e soltar")
+    func normalHold() {
+        var latch = L()
+        #expect(latch.handle(.down(0)) == [.start])
+        #expect(latch.handle(.up(L.tapThreshold + 0.1)) == [.finish])
+        #expect(!latch.isLatched)
+    }
+
+    /// Um toque curto não conclui na hora: ele espera para ver se vem o segundo.
+    @Test("toque curto adia a conclusão e conclui no timeout")
+    func shortTapWaitsThenFinishes() {
+        var latch = L()
+        #expect(latch.handle(.down(0)) == [.start])
+        #expect(latch.handle(.up(0.05)) == [.armTimeout(L.tapWindow)],
+                "toque curto não pode concluir antes da janela do segundo toque")
+        #expect(latch.handle(.timeout) == [.finish])
+    }
+
+    @Test("duplo toque trava, e a gravação segue sem a tecla")
+    func doubleTapLatches() {
+        var latch = L()
+        _ = latch.handle(.down(0))
+        _ = latch.handle(.up(0.05))
+        #expect(latch.handle(.down(0.15)) == [.disarmTimeout, .latch])
+        #expect(latch.isLatched)
+        // O `up` do segundo toque não pode encerrar nada.
+        #expect(latch.handle(.up(0.2)) == [])
+        #expect(latch.isLatched)
+    }
+
+    @Test("travado, um toque encerra e transcreve")
+    func tapStopsLatched() {
+        var latch = L()
+        _ = latch.handle(.down(0)); _ = latch.handle(.up(0.05)); _ = latch.handle(.down(0.15))
+        #expect(latch.handle(.down(5)) == [.finish])
+        #expect(!latch.isLatched)
+        #expect(latch.handle(.up(5.05)) == [], "o up seguinte é ignorado")
+    }
+
+    @Test("travado, Esc descarta")
+    func escapeCancelsLatched() {
+        var latch = L()
+        _ = latch.handle(.down(0)); _ = latch.handle(.up(0.05)); _ = latch.handle(.down(0.15))
+        #expect(latch.handle(.escape) == [.cancel])
+        #expect(!latch.isLatched)
+    }
+
+    /// A diferença deliberada entre os dois modos: segurando, tecla comum
+    /// significa "isto era um atalho"; em mãos-livres, teclar é só teclar.
+    @Test("travado, tecla comum NÃO cancela")
+    func otherKeyDoesNotCancelLatched() {
+        var latch = L()
+        _ = latch.handle(.down(0)); _ = latch.handle(.up(0.05)); _ = latch.handle(.down(0.15))
+        #expect(latch.handle(.otherKey) == [])
+        #expect(latch.isLatched, "cancelar um ditado longo por causa de uma tecla mata o modo")
+    }
+
+    @Test("segurando, tecla comum cancela como antes")
+    func otherKeyCancelsHold() {
+        var latch = L()
+        _ = latch.handle(.down(0))
+        #expect(latch.handle(.otherKey) == [.cancel])
+    }
+
+    @Test("tecla comum na janela do segundo toque também cancela")
+    func otherKeyCancelsWhileWaiting() {
+        var latch = L()
+        _ = latch.handle(.down(0)); _ = latch.handle(.up(0.05))
+        #expect(latch.handle(.otherKey) == [.disarmTimeout, .cancel])
+    }
+
+    @Test("evento fora de ordem não faz nada")
+    func strayEventsAreIgnored() {
+        var latch = L()
+        #expect(latch.handle(.up(0)) == [], "soltar sem ter apertado")
+        #expect(latch.handle(.timeout) == [], "timeout sem janela armada")
+        #expect(latch.handle(.otherKey) == [], "tecla comum com nada em curso")
+    }
+}
