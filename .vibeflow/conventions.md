@@ -119,6 +119,18 @@ Sempre por estrutura, nunca por texto de log. Ver `patterns/verificacao-estrutur
   e há check de DoD verificando isso no código e no binário.
 - **NÃO** deixe recurso de privacidade (microfone) adquirido entre usos.
 - **NÃO** versione áudio de `fixtures/`, modelos, `vendor/` ou `bench-out/`.
+- **NÃO** escreva travessão (em dash `—`, en dash `–`) nem aspas curvas em prosa
+  de qualquer arquivo do repositório. Regra do autor, vale pros dois idiomas.
+  Cada travessão vira ponto, vírgula, parênteses ou dois-pontos, conforme a
+  frase pede. Dentro de bloco de código, string literal, saída colada, tabela de
+  dados ou citação de terceiro, fica.
+- **NÃO** troque um travessão por figura de oposição: ponto e vírgula
+  contrastivo, "rather than", "instead of", "not X but Y", "while/whereas" de
+  oposição, privativo espelhado. Se o travessão carregava um contraste, quebre
+  em frases separadas, cada uma afirmativa. Medido em 29/08/2026: o cold-read do
+  README achou 36 antíteses depois de uma rodada que tinha zerado a forma
+  canônica, porque a figura migrou de fivela. Tirar o travessão não é o objetivo,
+  é o meio; o objetivo é prosa sem tique retórico.
 <!-- vibeflow:auto:end -->
 
 ## Observações de operação

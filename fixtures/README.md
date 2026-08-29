@@ -25,13 +25,13 @@ point: Whisper processes in 30-second windows, and only by recording below and
 above that step can you see it. If they all have the same length, the bench
 measures a constant and you never find out.
 
-The rule is to speak the way you really speak — normal pace, with the hesitations
+The rule is to speak the way you really speak: normal pace, with the hesitations
 that exist. A polished announcer's delivery measures a scenario that is not yours.
 
-**01 — normal speech.** A message the way you would send it on Slack. Everyday
+**01, normal speech.** A message the way you would send it on Slack. Everyday
 Portuguese, without heavy jargon.
 
-**02 — technical terms.** The hard case, and the one that decides the model. Mix
+**02, technical terms.** The hard case, and the one that decides the model. Mix
 Portuguese with English terms the way it comes out naturally, and include the
 name of at least one internal system. Something like this (in Portuguese, since
 that is what the app transcribes):
@@ -44,7 +44,7 @@ that is what the app transcribes):
 think it's the health check. I'll look at the Datadog dashboard and then open an
 issue for the platform team.")*
 
-**03 — short sentence.** One or two sentences, the length of most real
+**03, short sentence.** One or two sentences, the length of most real
 dictations. Short sentences are where the model errs most and where latency
 shows most.
 
@@ -54,7 +54,7 @@ No personal or sensitive data: documents, contract numbers, client names,
 credentials. For those, the cost of a slip is not worth anything.
 
 Technical vocabulary and system names, on the other hand, are exactly what the
-bench needs to measure — there is no way to evaluate whether the model gets your
+bench needs to measure: there is no way to evaluate whether the model gets your
 jargon right with made-up sentences. So real speech is acceptable, with one
 consequence:
 
