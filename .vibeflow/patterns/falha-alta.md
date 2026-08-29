@@ -1,6 +1,6 @@
 ---
 tags: [error-handling, observability, fail-fast, degradation, user-feedback]
-modules: [Sources/FalaFlowCore/, Sources/FalaFlow/, scripts/]
+modules: [Sources/NeverTypeCore/, Sources/NeverType/, scripts/]
 applies_to: [services, commands, handlers]
 confidence: inferred
 ---
@@ -37,7 +37,7 @@ escrevia só em stderr — que não vai a lugar nenhum quando o app abre pelo Fi
 Hoje ele sobe até o ícone:
 
 ```swift
-// Sources/FalaFlowCore/AudioRecorder.swift
+// Sources/NeverTypeCore/AudioRecorder.swift
 /// Chamado quando a gravação falha no meio. Sem isto, o erro morria num
 /// stderr que não vai a lugar nenhum quando o app é aberto pelo Finder: o
 /// ícone seguia vermelho e `stop()` devolvia a URL como se tivesse dado certo.
@@ -47,7 +47,7 @@ public var onError: (@MainActor @Sendable (String) -> Void)?
 **A mensagem diz o que fazer, não só o que houve:**
 
 ```swift
-// Sources/FalaFlowCore/Transcriber.swift
+// Sources/NeverTypeCore/Transcriber.swift
 case .modelMissing(let u):
     return "modelo não encontrado em \(u.path). Rode scripts/fetch-model.sh"
 case .modelInvalid(let u):
@@ -67,7 +67,7 @@ case .modelInvalid(let u):
 
 ## Examples from this codebase
 
-File: `Sources/FalaFlow/main.swift` — falha de transcrição deixou de ser `nil`
+File: `Sources/NeverType/main.swift` — falha de transcrição deixou de ser `nil`
 opaco e passou a carregar a causa, com sinal visual:
 ```swift
 case .failure(let failure):

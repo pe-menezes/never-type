@@ -54,12 +54,12 @@ jeito mais certo de a pessoa desistir:
 
 ```bash
 # scripts/install.sh
-pkill -x FalaFlow || true
+pkill -x NeverType || true
 for _ in $(seq 1 30); do
-  pgrep -x FalaFlow >/dev/null || break
+  pgrep -x NeverType >/dev/null || break
   sleep 0.2
 done
-pgrep -x FalaFlow >/dev/null && fail "o FalaFlow não encerrou. ..."
+pgrep -x NeverType >/dev/null && fail "o NeverType não encerrou. ..."
 ```
 
 ## Rules

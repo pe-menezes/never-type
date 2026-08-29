@@ -7,7 +7,7 @@ public enum ModelStore {
 
     public static var directory: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("FalaFlow/models")
+            .appendingPathComponent("NeverType/models")
     }
 
     public static var modelURL: URL { directory.appendingPathComponent(fileName) }

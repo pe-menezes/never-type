@@ -1,4 +1,4 @@
-# Project: FalaFlow
+# Project: NeverType
 > Analyzed: 2026-08-28
 > Stack: Swift 6 (SwiftPM, sem Xcode) + whisper.cpp estático + shell. macOS 14+, Apple Silicon.
 > Type: aplicativo nativo de menu bar (agente, sem janela) com ferramental de build e medição
@@ -9,7 +9,7 @@
 Ditado por voz com transcrição local. Segurar ⌘ direito grava, soltar transcreve
 e o texto é inserido onde o cursor estiver. Nenhuma chamada de rede em uso.
 
-A lógica vive numa biblioteca (`FalaFlowCore`) porque um alvo executável do
+A lógica vive numa biblioteca (`NeverTypeCore`) porque um alvo executável do
 SwiftPM não é importável por um alvo de teste; o executável é só a casca que
 monta a menu bar. O whisper.cpp é compilado estático em `vendor/` pelo próprio
 script de build — linkagem dinâmica é incompatível com o hardened runtime, que é
@@ -20,12 +20,12 @@ Os artefatos pesados (`models/`, `vendor/`, `fixtures/`,
 
 ## Structural Units
 
-- **`Sources/FalaFlowCore/`** — captura e conversão de áudio, tecla global,
+- **`Sources/NeverTypeCore/`** — captura e conversão de áudio, tecla global,
   transcrição e inserção de texto. É o que tem teste.
-- **`Sources/FalaFlow/`** — `NSApplication` acessória, ícone de bandeja, painel
+- **`Sources/NeverType/`** — `NSApplication` acessória, ícone de bandeja, painel
   flutuante de gravação, ator dono do modelo. Orquestra, não decide.
 - **`Sources/CWhisper/`** — module map apontando para `vendor/whisper`.
-- **`Tests/FalaFlowCoreTests/`** — 29 testes em swift-testing.
+- **`Tests/NeverTypeCoreTests/`** — 29 testes em swift-testing.
 - **`scripts/`** — bancada de latência, build e assinatura, instalação.
 - **`docs/`** — armadilhas encontradas e a escolha do modelo, com os números.
 - **`.vibeflow/`** — convenções e padrões extraídos do código.
@@ -36,22 +36,22 @@ Os artefatos pesados (`models/`, `vendor/`, `fixtures/`,
 patterns:
   - file: patterns/nucleo-testavel.md
     tags: [testability, dependency-injection, module-boundaries, swiftpm, system-apis]
-    modules: [Sources/FalaFlowCore/, Sources/FalaFlow/, Tests/FalaFlowCoreTests/]
+    modules: [Sources/NeverTypeCore/, Sources/NeverType/, Tests/NeverTypeCoreTests/]
   - file: patterns/falha-alta.md
     tags: [error-handling, observability, fail-fast, degradation, user-feedback]
-    modules: [Sources/FalaFlowCore/, Sources/FalaFlow/, scripts/]
+    modules: [Sources/NeverTypeCore/, Sources/NeverType/, scripts/]
   - file: patterns/verificacao-estrutural.md
     tags: [verification, integrity, binary-formats, false-negatives, guards]
-    modules: [Sources/FalaFlowCore/, scripts/]
+    modules: [Sources/NeverTypeCore/, scripts/]
   - file: patterns/isolamento-tipado.md
     tags: [concurrency, swift6, main-actor, actors, thread-safety]
-    modules: [Sources/FalaFlowCore/, Sources/FalaFlow/]
+    modules: [Sources/NeverTypeCore/, Sources/NeverType/]
   - file: patterns/estado-consultado.md
     tags: [state-management, permissions, staleness, system-apis, ui-refresh]
-    modules: [Sources/FalaFlow/, Sources/FalaFlowCore/]
+    modules: [Sources/NeverType/, Sources/NeverTypeCore/]
   - file: patterns/estado-do-usuario.md
     tags: [user-data, pasteboard, reversibility, privacy, side-effects]
-    modules: [Sources/FalaFlowCore/, Sources/FalaFlow/]
+    modules: [Sources/NeverTypeCore/, Sources/NeverType/]
   - file: patterns/scripts-shell.md
     tags: [shell, idempotency, build-scripts, cli, developer-experience]
     modules: [scripts/]
@@ -76,12 +76,12 @@ patterns:
 | Arquivo | Papel |
 |---|---|
 | `Package.swift` | Divisão em 4 alvos e as flags de link estático do whisper |
-| `Sources/FalaFlow/main.swift` | Delegate, ciclo do ditado, ator do modelo, trava de instância |
-| `Sources/FalaFlowCore/AudioRecorder.swift` | `Resampler`, `RecordingSink` e o gravador; fila serial dona do estado |
-| `Sources/FalaFlowCore/Transcriber.swift` | `ModelStore` e a ponte com o whisper.cpp; enumeração de backends |
-| `Sources/FalaFlowCore/TextInjector.swift` | Inserção via área de transferência, com retrato e devolução |
-| `Sources/FalaFlowCore/HotkeyMonitor.swift` | ⌘ direito como push-to-talk, cancelamento por tecla comum |
-| `Sources/FalaFlow/RecordingOverlay.swift` | Indicador que sobrevive a apps em tela cheia |
+| `Sources/NeverType/main.swift` | Delegate, ciclo do ditado, ator do modelo, trava de instância |
+| `Sources/NeverTypeCore/AudioRecorder.swift` | `Resampler`, `RecordingSink` e o gravador; fila serial dona do estado |
+| `Sources/NeverTypeCore/Transcriber.swift` | `ModelStore` e a ponte com o whisper.cpp; enumeração de backends |
+| `Sources/NeverTypeCore/TextInjector.swift` | Inserção via área de transferência, com retrato e devolução |
+| `Sources/NeverTypeCore/HotkeyMonitor.swift` | ⌘ direito como push-to-talk, cancelamento por tecla comum |
+| `Sources/NeverType/RecordingOverlay.swift` | Indicador que sobrevive a apps em tela cheia |
 | `scripts/build-app.sh` | Compila o whisper estático, monta o bundle, assina com identidade estável |
 | `scripts/setup-bench.sh` | Constrói os modelos ggml a partir do CDN da OpenAI |
 | `scripts/bench.sh` | Mede latência e qualidade por modelo |

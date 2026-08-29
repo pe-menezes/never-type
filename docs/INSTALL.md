@@ -1,10 +1,10 @@
-# Instalar o FalaFlow
+# Instalar o NeverType
 
 > **Este documento é para um agente de codificação executar**, não para um humano
 > ler de cabo a rabo. Se você é humano e só quer usar: peça ao seu agente para
 > seguir este arquivo, ou vá para o `README.md`.
 
-O FalaFlow é ditado por voz local para macOS. Ele é **compilado na máquina de
+O NeverType é ditado por voz local para macOS. Ele é **compilado na máquina de
 quem instala** — não há binário pré-compilado, e isso é de propósito: cada
 instalação gera o próprio certificado local, e app compilado localmente não entra
 em quarentena, então o Gatekeeper não aparece.
@@ -24,8 +24,8 @@ Elas estão marcadas com **PARE E PEÇA** abaixo, com o texto a dizer.
 | Pode | Pare e pergunte |
 |---|---|
 | `brew install cmake` | Qualquer coisa com `security list-keychains` |
-| Disparar `xcode-select --install` e esperar | Apagar `~/Library/Keychains/falaflow-signing.keychain-db` |
-| Recompilar depois de falha de build | Escrever fora do repositório e de `~/Library/Application Support/FalaFlow/` |
+| Disparar `xcode-select --install` e esperar | Apagar `~/Library/Keychains/nevertype-signing.keychain-db` |
+| Recompilar depois de falha de build | Escrever fora do repositório e de `~/Library/Application Support/NeverType/` |
 | Repetir um download interrompido | Instalar em `/Applications` sem permissão de escrita |
 | Apagar um modelo inválido e rebaixar | Desativar verificação para fazer um passo passar |
 
@@ -74,7 +74,7 @@ Só para compilar. Não é dependência de execução.
 ## 2. Compilar e instalar
 
 ```bash
-git clone <url-do-repositório> falaflow && cd falaflow
+git clone <url-do-repositório> nevertype && cd nevertype
 bash scripts/build-app.sh
 bash scripts/install.sh
 ```
@@ -122,7 +122,7 @@ Duas, e o app pede as duas ao abrir. **As duas exigem a pessoa.**
 
 ### Microfone — PARE E PEÇA
 
-> O macOS vai perguntar se o FalaFlow pode usar o microfone. Clique em
+> O macOS vai perguntar se o NeverType pode usar o microfone. Clique em
 > **Permitir**. Sem isso não há áudio.
 
 ### Acessibilidade — PARE E PEÇA
@@ -132,13 +132,13 @@ nova. Sem ela o app abre, desenha o ícone na barra e **simplesmente não reage 
 tecla** — sem erro, sem alerta, sem nada no log que a pessoa veja.
 
 > Abra **Ajustes do Sistema › Privacidade e Segurança › Acessibilidade** e
-> **ligue o FalaFlow** na lista. Se ele não estiver lá, clique no **+** e escolha
-> `/Applications/FalaFlow.app`.
+> **ligue o NeverType** na lista. Se ele não estiver lá, clique no **+** e escolha
+> `/Applications/NeverType.app`.
 >
 > Isso é o que deixa o app receber a tecla global. Sem isso ele abre e parece
 > funcionar, mas segurar a tecla não faz nada.
 >
-> Depois de ligar, **encerre o FalaFlow pelo menu da bandeja e abra de novo**.
+> Depois de ligar, **encerre o NeverType pelo menu da bandeja e abra de novo**.
 
 Não continue sem que a pessoa confirme que fez.
 
@@ -171,7 +171,7 @@ todos os casos.
 Quando a pessoa disser *"atualiza pra mim"*, é um comando só:
 
 ```bash
-cd falaflow && bash scripts/atualizar.sh
+cd nevertype && bash scripts/atualizar.sh
 ```
 
 Ele confere se há versão nova comparando três coisas — o commit **instalado**
@@ -189,7 +189,7 @@ verificação.
 
 As permissões sobrevivem à atualização, porque o certificado de assinatura é
 estável entre compilações da mesma máquina. É por isso que
-`~/Library/Keychains/falaflow-signing.keychain-db` **nunca deve ser apagado** —
+`~/Library/Keychains/nevertype-signing.keychain-db` **nunca deve ser apagado** —
 apagá-lo revoga a Acessibilidade e a pessoa precisa conceder tudo de novo.
 
 Depois de atualizar, o teste continua sendo o mesmo: **ditar uma frase.**

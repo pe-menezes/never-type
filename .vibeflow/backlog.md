@@ -1,4 +1,4 @@
-# Backlog — FalaFlow
+# Backlog — NeverType
 
 > Montado em 2026-08-28. Fonte de verdade; a versão publicada é só leitura.
 > Cada item tem a evidência de onde saiu. Item sem evidência não entra aqui.
@@ -63,7 +63,7 @@ concedida.
 
 ### D3 · `IsSecureEventInputEnabled` não significa o que o código assume — P
 É flag **global da sessão**, não "campo de senha em foco". Qualquer processo
-liga e esquece de desligar — e a partir daí o FalaFlow recusa inserir texto sem
+liga e esquece de desligar — e a partir daí o NeverType recusa inserir texto sem
 motivo, dizendo "campo de senha em foco" quando não há nenhum. Falso positivo
 que faz o app parecer quebrado.
 *Evidência:* `.vibeflow/index.md` (Known Issues) · `TextInjector.swift`
@@ -180,14 +180,14 @@ coisa e recebe uma transcrição vazia.
 
 Um medidor de nível resolve, e é o mesmo padrão do resto do projeto:
 `falha-alta.md` diz que degradação silenciosa é erro.
-*Evidência:* `Sources/FalaFlow/RecordingOverlay.swift:56`
+*Evidência:* `Sources/NeverType/RecordingOverlay.swift:56`
 
 ### ✅ U2 · A transcrição acontece sem feedback nenhum — FEITO em 29/08
 No `.released` o app faz `overlay.hide()` e `render(.idle)` **antes** de
 transcrever. Entre soltar a tecla e o texto aparecer não há sinal nenhum — o
 ícone já voltou ao normal e o painel já sumiu. Com 600 ms passa; com um ditado
 longo, é uma zona morta em que o app parece não ter feito nada.
-*Evidência:* `Sources/FalaFlow/main.swift`, `handle(.released)`
+*Evidência:* `Sources/NeverType/main.swift`, `handle(.released)`
 
 ### U3 · Mostrar o número no painel — P
 O OpenQuack mostra `2.4s · 0.30x` depois de cada transcrição. O **fator de tempo
@@ -248,7 +248,7 @@ Geração e indexação por pasteboard num bloco só.
   automático transformaria uma pausa normal em ditado truncado. O modo
   mãos-livres é encerrado por toque, e só.
 
-- **O nome continua FalaFlow.** `lazy2type` colide com o
+- **O nome continua NeverType.** `lazy2type` colide com o
   [LazyTyper](https://lazytyper.com/), que é o mesmo produto com nome quase
   idêntico. Além disso o `2` promete conversor em ferramenta de dev, o nome é só
   em inglês num app português, e trocar o bundle ID custaria reconceder

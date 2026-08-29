@@ -1,5 +1,5 @@
 #!/bin/bash
-# Confere o que dá para conferir de fora sobre uma instalação do FalaFlow.
+# Confere o que dá para conferir de fora sobre uma instalação do NeverType.
 #
 # Existe porque a instalação tem um modo de falha silencioso: sem a permissão de
 # Acessibilidade o app abre, desenha o ícone na barra e simplesmente não reage à
@@ -11,8 +11,8 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-APP="/Applications/FalaFlow.app"
-MODEL="$HOME/Library/Application Support/FalaFlow/models/ggml-large-v3-turbo-q5_0.bin"
+APP="/Applications/NeverType.app"
+MODEL="$HOME/Library/Application Support/NeverType/models/ggml-large-v3-turbo-q5_0.bin"
 
 # O magic do ggml é 0x67676d6c gravado como uint32 little-endian, então no
 # arquivo ele sai invertido: 6c6d6767, que lido como texto vira "lmgg". Comparar
@@ -68,10 +68,10 @@ fi
 # --- o processo ---------------------------------------------------------------
 
 info "Processo"
-if pid="$(pgrep -x FalaFlow)"; then
+if pid="$(pgrep -x NeverType)"; then
   ok "rodando (pid $pid)"
 else
-  problem "o FalaFlow não está rodando.
+  problem "o NeverType não está rodando.
       Abra: open $APP"
 fi
 
@@ -119,6 +119,6 @@ cat <<'MSG'
     3. O texto tem que aparecer onde o cursor está.
 
   Não apareceu? Ajustes do Sistema › Privacidade e Segurança › Acessibilidade,
-  e ligue o FalaFlow. Depois disso, encerre e reabra o app.
+  e ligue o NeverType. Depois disso, encerre e reabra o app.
 MSG
 ok "estrutura verificada"

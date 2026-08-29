@@ -12,20 +12,20 @@ projeto inteiro é construído contra esse modo de falha (`falha-alta.md`,
 tem ele.
 
 Hoje o único jeito de voltar a ditar depois de reiniciar é lembrar de abrir o
-FalaFlow à mão — e nada na tela lembra você disso, porque um app acessório sem
+NeverType à mão — e nada na tela lembra você disso, porque um app acessório sem
 janela e sem Dock não deixa rastro de ausência. O `CLAUDE.md` já lista isto como
 o item nº 1 do que falta, na ordem de dor.
 
 ## Público
 
-Quem já tem o FalaFlow instalado e usa como ferramenta de todo dia — hoje, o
+Quem já tem o NeverType instalado e usa como ferramenta de todo dia — hoje, o
 autor. De tabela, a primeira pessoa que instalar isto sem ser ele: o `install.sh`
 conduz microfone e Acessibilidade, e depois o app some no primeiro reboot.
 
 ## Solução proposta
 
 Um item no menu da bandeja, **"Abrir com o sistema"**, com checkmark, que
-registra e desregistra o FalaFlow como login item do macOS. Padrão desligado:
+registra e desregistra o NeverType como login item do macOS. Padrão desligado:
 quem instalou não pediu para o app entrar sozinho na inicialização.
 
 O estado do checkmark é lido do sistema toda vez que o menu abre — nunca guardado
@@ -35,7 +35,7 @@ Sistema sem avisar o app, e o menu tem que contar a verdade.
 ## Critérios de sucesso
 
 Um só, e é de fora do processo: **depois de ligar a opção, reiniciar a máquina e
-fazer login, `pgrep -x FalaFlow` responde um pid, e segurar ⌘ direito dita.**
+fazer login, `pgrep -x NeverType` responde um pid, e segurar ⌘ direito dita.**
 
 Nenhuma outra evidência conta. O spike mostrou que `register()` retorna sem erro
 e `status` responde `enabled` para um bundle que está numa pasta temporária — ou
@@ -48,7 +48,7 @@ instalação que não existe.
 - Estado consultado ao sistema em `menuNeedsUpdate`, junto com microfone e
   Acessibilidade.
 - **Guarda de caminho:** recusa registrar se `Bundle.main.bundlePath` não for
-  `/Applications/FalaFlow.app`, com mensagem dizendo o que fazer
+  `/Applications/NeverType.app`, com mensagem dizendo o que fazer
   (`bash scripts/install.sh`). Ver Contexto técnico para o porquê.
 - Os quatro estados do `SMAppService.Status` refletidos em texto honesto:
   `enabled`, `notRegistered`, `notFound`, e `requiresApproval` — este último
@@ -78,7 +78,7 @@ instalação que não existe.
 ## Contexto técnico
 
 **Medido no spike (2026-08-28, macOS 26.2, app-proxy assinado com a mesma
-identidade `FalaFlow Local Signing` e o mesmo `--options runtime`):**
+identidade `NeverType Local Signing` e o mesmo `--options runtime`):**
 
 1. `SMAppService.mainApp.register()` **funciona com o certificado local.** Sem
    rejeição de assinatura. O risco que podia invalidar a abordagem inteira caiu.
@@ -98,7 +98,7 @@ identidade `FalaFlow Local Signing` e o mesmo `--options runtime`):**
    razão para o critério de sucesso ser o reboot.
 
 **Por que a guarda de caminho importa neste repositório em particular:** o
-`build-app.sh` monta `build/FalaFlow.app` e o `install.sh` copia para
+`build-app.sh` monta `build/NeverType.app` e o `install.sh` copia para
 `/Applications`. As duas cópias têm o mesmo bundle ID e a mesma assinatura.
 Abrir a de `build/` por engano já é um tropeço conhecido — o `install.sh` avisa
 sobre isso na linha do `warn`. Com login item, o tropeço passa a ser permanente e
@@ -108,7 +108,7 @@ silencioso.
 
 - `estado-consultado.md` — o checkmark é propriedade computada consultando
   `SMAppService.mainApp.status`, igual ao `micAuthorized`.
-- `nucleo-testavel.md` — a lógica vai para `FalaFlowCore` com a chamada de
+- `nucleo-testavel.md` — a lógica vai para `NeverTypeCore` com a chamada de
   sistema entrando por parâmetro, para os testes poderem exercitar cada caminho
   de falha. O `CLAUDE.md` é explícito: caminho de falha não exercitável não conta
   como implementado.
@@ -117,7 +117,7 @@ silencioso.
 - `isolamento-tipado.md` — o menu é `@MainActor`; `SMAppService` é chamado de lá.
   Sem `assumeIsolated`.
 
-**Orçamento:** cabe em ≤4 arquivos — `LoginItem.swift` novo em `FalaFlowCore`,
+**Orçamento:** cabe em ≤4 arquivos — `LoginItem.swift` novo em `NeverTypeCore`,
 `main.swift`, o teste, e a nota de medição em `docs/`.
 
 ## Questões em aberto

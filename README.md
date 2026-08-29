@@ -1,4 +1,4 @@
-# FalaFlow
+# NeverType
 
 Ditado por voz que nunca sai da sua máquina. Segure uma tecla em qualquer
 aplicativo, fale, solte — e o texto aparece onde o cursor está.
@@ -11,7 +11,7 @@ Ferramentas de ditado por voz costumam mandar o áudio para um servidor. Isso é
 que as torna rápidas, e também o que as torna inviáveis onde o conteúdo não pode
 sair da máquina.
 
-O FalaFlow roda o modelo localmente. O áudio nasce e morre no seu Mac; o modelo
+O NeverType roda o modelo localmente. O áudio nasce e morre no seu Mac; o modelo
 fica em disco; o app não abre conexão nenhuma em tempo de uso — há teste de CI
 verificando isso no código e no binário.
 
@@ -102,7 +102,7 @@ errados de forma consistente, e nenhum modelo base acerta sozinho.
 flag *secure input* do macOS, que existe para proteger digitação de senha. Só que
 a flag é **global da sessão**, não "campo de senha em foco": qualquer processo
 pode ligá-la, inclusive em segundo plano, e há apps que ligam e esquecem de
-desligar. Enquanto ela estiver ligada o FalaFlow não cola — deixa o texto na área
+desligar. Enquanto ela estiver ligada o NeverType não cola — deixa o texto na área
 de transferência e avisa.
 
 **Gestor de clipboard pode guardar o ditado.** O texto é marcado com
@@ -123,7 +123,7 @@ mão pelos scripts.
 
 **O app roda com hardened runtime**, que liga a validação de bibliotecas: o
 processo recusa carregar código que não venha assinado junto com ele. Isso importa
-porque o FalaFlow detém Acessibilidade — permissão de ler e injetar teclas no
+porque o NeverType detém Acessibilidade — permissão de ler e injetar teclas no
 sistema inteiro. É também por isso que o whisper.cpp entra estático: a validação
 recusa dylibs de terceiros.
 
@@ -131,7 +131,7 @@ recusa dylibs de terceiros.
 permissão de Acessibilidade sobreviva a recompilações, o app é assinado com um
 certificado local estável, e o macOS amarra Microfone e Acessibilidade a esse
 certificado. Consequência: **quem já executa código como você nesta máquina pode
-se assinar como FalaFlow e herdar essas permissões.**
+se assinar como NeverType e herdar essas permissões.**
 
 Isso é inerente a certificado local, não um descuido — a alternativa é assinatura
 ad-hoc, que faz o macOS revogar a permissão a cada build. As mitigações aplicadas
@@ -144,7 +144,7 @@ reduzem a exposição sem eliminar a classe:
 Para distribuição além de uso pessoal, o certo é um Developer ID da Apple.
 
 **Perder o keychain revoga sua permissão.** Ele fica em
-`~/Library/Keychains/falaflow-signing.keychain-db`. Apagá-lo faz o próximo build
+`~/Library/Keychains/nevertype-signing.keychain-db`. Apagá-lo faz o próximo build
 gerar outro certificado, e o macOS pede Acessibilidade de novo.
 
 ## Desenvolvimento
@@ -166,8 +166,8 @@ vários passariam despercebidos em revisão de código.
 
 | | |
 |---|---|
-| `Sources/FalaFlowCore/` | conversão de áudio, tecla, transcrição, inserção — a parte testável |
-| `Sources/FalaFlow/` | app de menu bar |
+| `Sources/NeverTypeCore/` | conversão de áudio, tecla, transcrição, inserção — a parte testável |
+| `Sources/NeverType/` | app de menu bar |
 | `scripts/setup-bench.sh` | monta os modelos ggml a partir do checkpoint da OpenAI |
 | `scripts/bench.sh` | mede latência e qualidade por modelo |
 | `scripts/build-app.sh` | compila o whisper estático, empacota e assina |

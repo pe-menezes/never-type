@@ -1,6 +1,6 @@
 ---
 tags: [user-data, pasteboard, reversibility, privacy, side-effects]
-modules: [Sources/FalaFlowCore/, Sources/FalaFlow/]
+modules: [Sources/NeverTypeCore/, Sources/NeverType/]
 applies_to: [services, handlers]
 confidence: inferred
 ---
@@ -16,16 +16,16 @@ que ela não escolheu.
 
 ## Where
 
-- `Sources/FalaFlowCore/TextInjector.swift` — área de transferência
-- `Sources/FalaFlowCore/AudioRecorder.swift` — microfone
-- `Sources/FalaFlow/main.swift` — última transcrição
+- `Sources/NeverTypeCore/TextInjector.swift` — área de transferência
+- `Sources/NeverTypeCore/AudioRecorder.swift` — microfone
+- `Sources/NeverType/main.swift` — última transcrição
 
 ## The Pattern
 
 **A cópia é completa, não só a parte que interessa:**
 
 ```swift
-// Sources/FalaFlowCore/TextInjector.swift:23
+// Sources/NeverTypeCore/TextInjector.swift:23
 /// Cópia completa do pasteboard: todos os itens, todos os tipos.
 ///
 /// Guardar só a string perderia imagem, arquivo, HTML — tudo que a pessoa
@@ -46,7 +46,7 @@ static let concealed = NSPasteboard.PasteboardType("org.nspasteboard.ConcealedTy
 **O recurso é liberado quando não está em uso:**
 
 ```swift
-// Sources/FalaFlowCore/AudioRecorder.swift
+// Sources/NeverTypeCore/AudioRecorder.swift
 // O motor nasce e morre com cada ditado, em vez de viver junto com o app.
 // Um AVAudioEngine parado mas vivo mantém o nó de entrada configurado, e o
 // macOS continua contando o app como usuário do microfone — o indicador
@@ -74,7 +74,7 @@ defer { if !started { self.engine?.reset(); self.engine = nil } }
 
 ## Examples from this codebase
 
-File: `Sources/FalaFlow/main.swift` — a saída para uma contradição da spec:
+File: `Sources/NeverType/main.swift` — a saída para uma contradição da spec:
 ```swift
 /// Resolve uma tensão da spec: ela manda devolver o pasteboard depois de
 /// colar (educado) e também manda não perder a transcrição se não houver
@@ -89,7 +89,7 @@ private var lastTranscript: String? {
 }
 ```
 
-File: `Sources/FalaFlowCore/TextInjector.swift` — sem colar não há o que
+File: `Sources/NeverTypeCore/TextInjector.swift` — sem colar não há o que
 restaurar, então o texto fica:
 ```swift
 if (secureInput ?? IsSecureEventInputEnabled)() {

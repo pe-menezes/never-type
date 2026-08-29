@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import FalaFlowCore
+@testable import NeverTypeCore
 
 @Suite("Localização e validação do modelo")
 struct ModelStoreTests {
@@ -8,7 +8,7 @@ struct ModelStoreTests {
     @Test("o magic do ggml é validado pelos bytes, não pelo texto")
     func validatesByMagicBytes() throws {
         let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("falaflow-model-\(UUID().uuidString)")
+            .appendingPathComponent("nevertype-model-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
 
@@ -60,7 +60,7 @@ struct ModelStoreTests {
     @Test("o modelo é procurado em Application Support, fora do repositório")
     func modelLivesOutsideTheRepo() {
         let path = ModelStore.modelURL.path
-        #expect(path.contains("Application Support/FalaFlow/models"))
+        #expect(path.contains("Application Support/NeverType/models"))
         #expect(path.hasSuffix("ggml-large-v3-turbo-q5_0.bin"))
     }
 

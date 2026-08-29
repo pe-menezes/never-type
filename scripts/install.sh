@@ -1,5 +1,5 @@
 #!/bin/bash
-# Instala o FalaFlow em /Applications.
+# Instala o NeverType em /Applications.
 #
 # Caminho fixo de propósito: junto com a identidade de assinatura estável, é o
 # que faz a permissão de Acessibilidade sobreviver. Mover o app depois quebra a
@@ -7,9 +7,9 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SOURCE="$REPO_ROOT/build/FalaFlow.app"
-DEST="/Applications/FalaFlow.app"
-MODEL_DIR="$HOME/Library/Application Support/FalaFlow/models"
+SOURCE="$REPO_ROOT/build/NeverType.app"
+DEST="/Applications/NeverType.app"
+MODEL_DIR="$HOME/Library/Application Support/NeverType/models"
 MODEL="ggml-large-v3-turbo-q5_0.bin"
 
 info() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
@@ -25,7 +25,7 @@ fail() { printf '\033[1;31merro:\033[0m %s\n' "$*" >&2; exit 1; }
 # jeito mais certo de a pessoa desistir.
 [ -w /Applications ] || fail "sem permissão de escrita em /Applications.
       Peça a alguém com direitos de administrador, ou instale em outro lugar:
-        cp -R build/FalaFlow.app ~/Applications/"
+        cp -R build/NeverType.app ~/Applications/"
 
 # --- o app -------------------------------------------------------------------
 
@@ -44,14 +44,14 @@ info "Instalando em $DEST"
 # morrer de fato: com `sleep` fixo, um app que demora a sair sobrevive, a guarda
 # de instância única barra o novo, e a pessoa segue rodando o binário velho
 # achando que atualizou.
-if pgrep -x FalaFlow >/dev/null; then
+if pgrep -x NeverType >/dev/null; then
   info "Encerrando a instância em execução"
-  pkill -x FalaFlow || true
+  pkill -x NeverType || true
   for _ in $(seq 1 30); do
-    pgrep -x FalaFlow >/dev/null || break
+    pgrep -x NeverType >/dev/null || break
     sleep 0.2
   done
-  pgrep -x FalaFlow >/dev/null && fail "o FalaFlow não encerrou. Encerre pelo menu da bandeja e rode de novo."
+  pgrep -x NeverType >/dev/null && fail "o NeverType não encerrou. Encerre pelo menu da bandeja e rode de novo."
 fi
 rm -rf "$DEST"
 cp -R "$SOURCE" "$DEST"
@@ -101,7 +101,7 @@ cat <<'MSG'
                     sem erro nenhum, parecendo quebrado
 
   Se a janela de Acessibilidade não aparecer, vá em
-  Ajustes do Sistema › Privacidade e Segurança › Acessibilidade e ligue o FalaFlow.
+  Ajustes do Sistema › Privacidade e Segurança › Acessibilidade e ligue o NeverType.
 
 ==> Como usar
 

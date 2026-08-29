@@ -1,6 +1,6 @@
 import AVFoundation
 import Testing
-@testable import FalaFlowCore
+@testable import NeverTypeCore
 
 // XCTest vive dentro do Xcode, que esta máquina não tem — a Parte 2 decidiu
 // construir sem ele. swift-testing vem no próprio toolchain do Swift 6 e roda
@@ -148,7 +148,7 @@ struct RecordingSinkTests {
 
     private func tempURL() -> URL {
         FileManager.default.temporaryDirectory
-            .appendingPathComponent("falaflow-test-\(UUID().uuidString)")
+            .appendingPathComponent("nevertype-test-\(UUID().uuidString)")
             .appendingPathComponent("last.wav")
     }
 

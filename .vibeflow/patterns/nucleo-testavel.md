@@ -1,6 +1,6 @@
 ---
 tags: [testability, dependency-injection, module-boundaries, swiftpm, system-apis]
-modules: [Sources/FalaFlowCore/, Sources/FalaFlow/, Tests/FalaFlowCoreTests/]
+modules: [Sources/NeverTypeCore/, Sources/NeverType/, Tests/NeverTypeCoreTests/]
 applies_to: [services, models, tests]
 confidence: inferred
 ---
@@ -9,16 +9,16 @@ confidence: inferred
 <!-- vibeflow:auto:start -->
 ## What
 
-A lógica vive em `FalaFlowCore`, uma biblioteca; o executável `FalaFlow` é só a
+A lógica vive em `NeverTypeCore`, uma biblioteca; o executável `NeverType` é só a
 casca que monta a menu bar e liga os pedaços. E toda chamada de sistema que
 impediria um teste — colar no cursor, ler uma flag global, abrir o microfone — é
 recebida como parâmetro com valor padrão, para o teste poder trocá-la.
 
 ## Where
 
-- `Sources/FalaFlowCore/` — tudo que tem teste
-- `Sources/FalaFlow/` — `NSApplication`, menu, painel flutuante; sem lógica
-- `Tests/FalaFlowCoreTests/` — importa `FalaFlowCore`, nunca o executável
+- `Sources/NeverTypeCore/` — tudo que tem teste
+- `Sources/NeverType/` — `NSApplication`, menu, painel flutuante; sem lógica
+- `Tests/NeverTypeCoreTests/` — importa `NeverTypeCore`, nunca o executável
 
 ## The Pattern
 
@@ -28,15 +28,15 @@ alvo de teste.** Sem a biblioteca, nada seria testável.
 ```swift
 // Package.swift
 .systemLibrary(name: "CWhisper", path: "Sources/CWhisper"),
-.target(name: "FalaFlowCore", dependencies: ["CWhisper"], linkerSettings: [...]),
-.executableTarget(name: "FalaFlow", dependencies: ["FalaFlowCore"]),
-.testTarget(name: "FalaFlowCoreTests", dependencies: ["FalaFlowCore"]),
+.target(name: "NeverTypeCore", dependencies: ["CWhisper"], linkerSettings: [...]),
+.executableTarget(name: "NeverType", dependencies: ["NeverTypeCore"]),
+.testTarget(name: "NeverTypeCoreTests", dependencies: ["NeverTypeCore"]),
 ```
 
 Dentro do núcleo, o que depende do sistema entra por parâmetro:
 
 ```swift
-// Sources/FalaFlowCore/TextInjector.swift:88
+// Sources/NeverTypeCore/TextInjector.swift:88
 public static func insert(_ text: String,
                           pasteboard: NSPasteboard = .general,
                           paste: (() -> Bool)? = nil,
@@ -56,7 +56,7 @@ Quando o obstáculo não é uma chamada e sim o custo, a **regra** é separada d
 leitura de disco:
 
 ```swift
-// Sources/FalaFlowCore/Transcriber.swift:44
+// Sources/NeverTypeCore/Transcriber.swift:44
 /// A regra em si, separada da leitura de disco.
 ///
 /// Assim dá para testar o piso de tamanho sem escrever 50 MB a cada execução
@@ -70,7 +70,7 @@ public static func isValid(magic: Data, size: Int) -> Bool {
 
 ## Rules
 
-- Lógica nova entra em `FalaFlowCore`. `Sources/FalaFlow/` só orquestra.
+- Lógica nova entra em `NeverTypeCore`. `Sources/NeverType/` só orquestra.
 - Chamada de sistema que impeça teste vira parâmetro com padrão — nunca uma
   variável global de configuração nem um `#if DEBUG`.
 - Regra pura e leitura de I/O são funções diferentes, com a pura sendo pública.
@@ -81,7 +81,7 @@ public static func isValid(magic: Data, size: Int) -> Bool {
 
 ## Examples from this codebase
 
-File: `Sources/FalaFlowCore/AudioRecorder.swift:155`
+File: `Sources/NeverTypeCore/AudioRecorder.swift:155`
 ```swift
 /// Escreve o WAV: conversão, dreno e descarte.
 ///
@@ -91,7 +91,7 @@ File: `Sources/FalaFlowCore/AudioRecorder.swift:155`
 public final class RecordingSink {
 ```
 
-File: `Tests/FalaFlowCoreTests/TextInjectorTests.swift`
+File: `Tests/NeverTypeCoreTests/TextInjectorTests.swift`
 ```swift
 let outcome = TextInjector.insert("texto ditado", pasteboard: pb,
                                   paste: { pasted = true; return true },
@@ -100,11 +100,11 @@ let outcome = TextInjector.insert("texto ditado", pasteboard: pb,
 #expect(!pasted, "com entrada segura não se tenta colar")
 ```
 
-File: `Tests/FalaFlowCoreTests/TextInjectorTests.swift` — o pasteboard também é
+File: `Tests/NeverTypeCoreTests/TextInjectorTests.swift` — o pasteboard também é
 injetado, e é sempre um nomeado próprio:
 ```swift
 private func scratchPasteboard() -> NSPasteboard {
-    NSPasteboard(name: NSPasteboard.Name("com.falaflow.tests.\(UUID().uuidString)"))
+    NSPasteboard(name: NSPasteboard.Name("com.nevertype.tests.\(UUID().uuidString)"))
 }
 ```
 <!-- vibeflow:auto:end -->

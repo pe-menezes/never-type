@@ -1,5 +1,5 @@
 #!/bin/bash
-# Compila o FalaFlow e monta o bundle .app assinado.
+# Compila o NeverType e monta o bundle .app assinado.
 #
 # Sem Xcode: esta máquina só tem Command Line Tools, então `xcodebuild` e
 # `.xcodeproj` estão fora. O executável sai do SwiftPM e o bundle é montado aqui.
@@ -13,14 +13,14 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-APP="$REPO_ROOT/build/FalaFlow.app"
-BUNDLE_ID="com.falaflow.app"
+APP="$REPO_ROOT/build/NeverType.app"
+BUNDLE_ID="com.nevertype.app"
 
 # O keychain fica em ~/Library/Keychains, e não em .cache/, de propósito: apagar
 # o .cache é seguro e documentado como tal, mas perder este certificado faria o
 # macOS pedir Acessibilidade de novo.
-KEYCHAIN="$HOME/Library/Keychains/falaflow-signing.keychain-db"
-IDENTITY="FalaFlow Local Signing"
+KEYCHAIN="$HOME/Library/Keychains/nevertype-signing.keychain-db"
+IDENTITY="NeverType Local Signing"
 
 # A senha do keychain é derivada do UUID de hardware da máquina, não guardada.
 #
@@ -39,7 +39,7 @@ machine_password() {
   uuid="$(ioreg -rd1 -c IOPlatformExpertDevice \
     | awk -F\" '/IOPlatformUUID/{print $4}')"
   [ -n "$uuid" ] || fail "não consegui ler o identificador da máquina."
-  printf 'falaflow-signing-%s' "$uuid" | shasum -a 256 | cut -d" " -f1
+  printf 'nevertype-signing-%s' "$uuid" | shasum -a 256 | cut -d" " -f1
 }
 
 info() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
@@ -54,7 +54,7 @@ command -v swift >/dev/null || fail "toolchain Swift não encontrado."
 
 # Sem `-v` e sem `-p codesigning` de propósito. Esses filtros só listam
 # identidades *confiáveis*, e um certificado self-signed nunca é — mas o codesign
-# usa ele do mesmo jeito (verificado: Authority=FalaFlow Local Signing, requisito
+# usa ele do mesmo jeito (verificado: Authority=NeverType Local Signing, requisito
 # designado com `certificate leaf`). Com o filtro, este teste falharia sempre, o
 # certificado seria recriado a cada build e a permissão de Acessibilidade seria
 # revogada toda vez: exatamente o problema que a assinatura estável existe para
@@ -270,8 +270,8 @@ fi
 
 info "Compilando (release)"
 cd "$REPO_ROOT"
-swift build -c release --product FalaFlow
-BIN="$(swift build -c release --product FalaFlow --show-bin-path)/FalaFlow"
+swift build -c release --product NeverType
+BIN="$(swift build -c release --product NeverType --show-bin-path)/NeverType"
 [ -x "$BIN" ] || fail "binário não encontrado em $BIN"
 ok "$(basename "$BIN")"
 
@@ -290,7 +290,7 @@ COMMIT="$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || echo desconh
 info "Montando $APP"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$BIN" "$APP/Contents/MacOS/FalaFlow"
+cp "$BIN" "$APP/Contents/MacOS/NeverType"
 
 # LSUIElement mantém o app fora do Dock: ele vive só na menu bar.
 # NSMicrophoneUsageDescription é obrigatório — sem ele o macOS mata o processo
@@ -300,18 +300,18 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleName</key><string>FalaFlow</string>
-  <key>CFBundleDisplayName</key><string>FalaFlow</string>
+  <key>CFBundleName</key><string>NeverType</string>
+  <key>CFBundleDisplayName</key><string>NeverType</string>
   <key>CFBundleIdentifier</key><string>$BUNDLE_ID</string>
-  <key>CFBundleExecutable</key><string>FalaFlow</string>
+  <key>CFBundleExecutable</key><string>NeverType</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>0.1.0</string>
   <key>CFBundleVersion</key><string>1</string>
-  <key>FalaFlowCommit</key><string>$COMMIT</string>
+  <key>NeverTypeCommit</key><string>$COMMIT</string>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>LSUIElement</key><true/>
   <key>NSMicrophoneUsageDescription</key>
-  <string>O FalaFlow grava sua voz para transcrever localmente. Nenhum áudio sai da sua máquina.</string>
+  <string>O NeverType grava sua voz para transcrever localmente. Nenhum áudio sai da sua máquina.</string>
 </dict>
 </plist>
 PLIST
@@ -324,7 +324,7 @@ info "Assinando"
 # detém Acessibilidade — ou seja, que pode ler e injetar teclas no sistema todo —
 # aceita injeção de código de terceiros. É o segundo caminho para o mesmo prêmio,
 # e este dá para fechar.
-ENTITLEMENTS="$REPO_ROOT/build/FalaFlow.entitlements"
+ENTITLEMENTS="$REPO_ROOT/build/NeverType.entitlements"
 cat > "$ENTITLEMENTS" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

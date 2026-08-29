@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import FalaFlowCore
+@testable import NeverTypeCore
 
 /// O WAV é conferido por bytes e campos, não por "o NSSound aceitou".
 ///

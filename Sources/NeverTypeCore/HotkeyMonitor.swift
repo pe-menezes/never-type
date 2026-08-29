@@ -226,7 +226,7 @@ public final class HotkeyMonitor {
         }
 
         // O monitor global não dispara quando o próprio app está em foco. Como
-        // FalaFlow é acessório e quase nunca fica, isto é cinto de segurança —
+        // NeverType é acessório e quase nunca fica, isto é cinto de segurança —
         // mas sem ele o trigger morreria com o menu da bandeja aberto.
         localMonitor = NSEvent.addLocalMonitorForEvents(matching: mask) { [weak self] event in
             MainActor.assumeIsolated { self?.handle(event) }

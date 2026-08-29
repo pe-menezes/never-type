@@ -1,6 +1,6 @@
 ---
 tags: [verification, integrity, binary-formats, false-negatives, guards]
-modules: [Sources/FalaFlowCore/, scripts/]
+modules: [Sources/NeverTypeCore/, scripts/]
 applies_to: [services, commands, configs]
 confidence: inferred
 ---
@@ -17,7 +17,7 @@ negativo e falso positivo, e as duas variantes já custaram caro aqui.
 ## Where
 
 - `scripts/bench.sh` e `scripts/setup-bench.sh` — `metal_is_active()`
-- `Sources/FalaFlowCore/Transcriber.swift` — `ModelStore.isValid`, enumeração de backends
+- `Sources/NeverTypeCore/Transcriber.swift` — `ModelStore.isValid`, enumeração de backends
 - `scripts/build-app.sh` — verificação de commit e manifesto de checksums
 
 ## The Pattern
@@ -43,7 +43,7 @@ função é não se deixar enganar não confia num só sinal.
 **Dentro do app, a mesma regra vira enumeração em vez de log:**
 
 ```swift
-// Sources/FalaFlowCore/Transcriber.swift
+// Sources/NeverTypeCore/Transcriber.swift
 // Enumera os dispositivos que o ggml de fato registrou, em vez de
 // procurar a palavra "metal" em log — que foi o falso negativo pego na
 // auditoria da Parte 1.
@@ -57,7 +57,7 @@ self.usesMetal = devices.contains { $0.uppercased().contains("MTL") }
 **Formato binário se confere pelos bytes, na ordem em que estão no arquivo:**
 
 ```swift
-// Sources/FalaFlowCore/Transcriber.swift:27
+// Sources/NeverTypeCore/Transcriber.swift:27
 /// O magic do ggml é gravado como uint32 little-endian, então os bytes no
 /// arquivo saem invertidos: `6c6d6767`, que lido como texto vira "lmgg", não
 /// "ggml". Checar o texto direto reprova todo modelo válido — erro já

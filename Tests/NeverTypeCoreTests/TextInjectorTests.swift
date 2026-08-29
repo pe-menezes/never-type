@@ -1,7 +1,7 @@
 import AppKit
 import Carbon.HIToolbox
 import Testing
-@testable import FalaFlowCore
+@testable import NeverTypeCore
 
 /// O contrato central: mexemos no pasteboard da pessoa, então devolvemos o que
 /// estava lá — inclusive quando a inserção falha no meio.
@@ -13,7 +13,7 @@ import Testing
 struct TextInjectorTests {
 
     private func scratchPasteboard() -> NSPasteboard {
-        NSPasteboard(name: NSPasteboard.Name("com.falaflow.tests.\(UUID().uuidString)"))
+        NSPasteboard(name: NSPasteboard.Name("com.nevertype.tests.\(UUID().uuidString)"))
     }
 
     @Test("o conteúdo anterior volta depois da inserção")

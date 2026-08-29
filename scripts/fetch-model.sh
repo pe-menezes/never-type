@@ -9,7 +9,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MODEL="ggml-large-v3-turbo-q5_0.bin"
 SOURCE="$REPO_ROOT/models/$MODEL"
-DEST_DIR="$HOME/Library/Application Support/FalaFlow/models"
+DEST_DIR="$HOME/Library/Application Support/NeverType/models"
 DEST="$DEST_DIR/$MODEL"
 GGML_MAGIC_HEX=6c6d6767
 

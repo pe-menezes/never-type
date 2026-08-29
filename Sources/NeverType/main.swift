@@ -1,12 +1,12 @@
 import AppKit
 import AVFoundation
-import FalaFlowCore
+import NeverTypeCore
 
 /// Onde o áudio da última gravação fica. Um arquivo só, sobrescrito: a Parte 3
 /// lê daqui, e o app não guarda histórico de nada que você falou.
 private func lastRecordingURL() -> URL {
     let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-    return base.appendingPathComponent("FalaFlow/last.wav")
+    return base.appendingPathComponent("NeverType/last.wav")
 }
 
 /// Dono do modelo, carregado uma vez e mantido quente.
@@ -204,7 +204,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // `flock` resolve num passo indivisível: quem pega, roda.
         guard Self.acquireInstanceLock() else {
             NSRunningApplication
-                .runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "com.falaflow.app")
+                .runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "com.nevertype.app")
                 .first { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }?
                 .activate()
             NSApp.terminate(nil)
@@ -279,7 +279,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .recording: symbol = "mic.fill"
         case .blocked:   symbol = "mic.slash"
         }
-        let image = NSImage(systemSymbolName: symbol, accessibilityDescription: "FalaFlow")
+        let image = NSImage(systemSymbolName: symbol, accessibilityDescription: "NeverType")
         if image == nil { log("símbolo '\(symbol)' não carregou") }
         // Sempre template.
         //
@@ -427,7 +427,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// terminal — e é o mesmo valor que o `atualizar.sh` compara para decidir se
     /// há trabalho a fazer.
     private static var buildCommit: String {
-        Bundle.main.object(forInfoDictionaryKey: "FalaFlowCommit") as? String ?? "desconhecida"
+        Bundle.main.object(forInfoDictionaryKey: "NeverTypeCommit") as? String ?? "desconhecida"
     }
 
     @objc private func openVocabulary() {
@@ -588,7 +588,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             menu.addItem(allow)
         }
         menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "Sair do FalaFlow", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        menu.addItem(NSMenuItem(title: "Sair do NeverType", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
     }
 
     private func disabled(_ title: String) -> NSMenuItem {
@@ -630,7 +630,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// tiveram que ser diagnosticados olhando a tela em vez de lendo log.
     /// Truncado a cada lançamento: é diagnóstico da sessão atual, não histórico.
     private func log(_ message: String) {
-        let line = "falaflow: \(message)\n"
+        let line = "nevertype: \(message)\n"
         FileHandle.standardError.write(Data(line.utf8))
         guard let handle = try? FileHandle(forWritingTo: Self.logURL) else { return }
         defer { try? handle.close() }
@@ -659,7 +659,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     static let logURL = lastRecordingURL()
         .deletingLastPathComponent()
-        .appendingPathComponent("falaflow.log")
+        .appendingPathComponent("nevertype.log")
 
     private func startLog() {
         try? FileManager.default.createDirectory(

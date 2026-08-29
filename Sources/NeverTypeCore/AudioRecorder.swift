@@ -281,7 +281,7 @@ public final class AudioRecorder {
     /// sincronização — e o compilador não acusava, porque `AVAudioNodeTapBlock`
     /// não é marcado como `Sendable`. Concentrar toda mutação nesta fila resolve
     /// a corrida sem travar a thread de áudio: o tap só copia e despacha.
-    private let io = DispatchQueue(label: "com.falaflow.audio-io")
+    private let io = DispatchQueue(label: "com.nevertype.audio-io")
     private let sink: RecordingSink
 
     public private(set) var isRecording = false
@@ -370,7 +370,7 @@ public final class AudioRecorder {
     }
 
     private func report(_ message: String) {
-        FileHandle.standardError.write(Data("falaflow: \(message)\n".utf8))
+        FileHandle.standardError.write(Data("nevertype: \(message)\n".utf8))
         // `Task { @MainActor in }` em vez de assumir isolamento: o salto é
         // verificado pelo compilador, não afirmado por mim.
         if let onError { Task { @MainActor in onError(message) } }

@@ -5,7 +5,7 @@
 
 ## Objetivo
 
-Um item no menu da bandeja liga e desliga o FalaFlow como login item do macOS,
+Um item no menu da bandeja liga e desliga o NeverType como login item do macOS,
 para o ditado continuar funcionando depois de reiniciar a máquina.
 
 ## Contexto
@@ -17,7 +17,7 @@ projeto inteiro foi construído, sobrevivendo dentro do ciclo de vida do própri
 app. É o item nº 1 da lista de dor no `CLAUDE.md`.
 
 O spike do discovery (2026-08-28, macOS 26.2, app-proxy assinado com a mesma
-identidade `FalaFlow Local Signing` e o mesmo `--options runtime`) mediu quatro
+identidade `NeverType Local Signing` e o mesmo `--options runtime`) mediu quatro
 coisas que definem esta spec:
 
 1. `SMAppService.mainApp.register()` **funciona com o certificado local.** Sem
@@ -43,23 +43,23 @@ registrar, porque depois não existe pergunta que devolva a resposta.
    abriu. `register()` sem erro e `status == .enabled` **não contam como
    evidência**: o spike mostrou os dois respondendo "ok" para um bundle em
    `/private/tmp`. (A forma checável por máquina, para a auditoria, é
-   `pgrep -x FalaFlow`.)
+   `pgrep -x NeverType`.)
 
 2. **A guarda de caminho é exercitada de verdade.** Rodando
-   `build/FalaFlow.app`, acionar o item não registra nada: o menu diz o motivo e
+   `build/NeverType.app`, acionar o item não registra nada: o menu diz o motivo e
    nomeia `bash scripts/install.sh`. Confirmado abrindo em seguida o menu da
    cópia de `/Applications` e vendo que o estado não mudou.
 
-3. **`swift test` verde**, com `Tests/FalaFlowCoreTests/LoginItemTests.swift`
+3. **`swift test` verde**, com `Tests/NeverTypeCoreTests/LoginItemTests.swift`
    novo cobrindo, cada um com seu `@Test`:
    - os quatro casos de `SMAppService.Status` mapeados para `LoginItem.State`;
-   - `isInstalledLocation` aceitando `/Applications/FalaFlow.app` **e**
-     `$HOME/Applications/FalaFlow.app`, recusando qualquer outro;
+   - `isInstalledLocation` aceitando `/Applications/NeverType.app` **e**
+     `$HOME/Applications/NeverType.app`, recusando qualquer outro;
    - `enable` fora do local instalado devolvendo `.refused` **sem chamar o
      registrador** (verificado por flag na closure injetada);
    - `register()` e `unregister()` que lançam virando `.refused` com a razão.
 
-4. **O menu não guarda estado.** Desligar o FalaFlow em Ajustes do Sistema ›
+4. **O menu não guarda estado.** Desligar o NeverType em Ajustes do Sistema ›
    Itens de Início de Sessão e reabrir o menu, **sem reiniciar o app**, mostra o
    checkmark limpo.
 
@@ -77,11 +77,11 @@ registrar, porque depois não existe pergunta que devolva a resposta.
 
 ## Escopo
 
-- `Sources/FalaFlowCore/LoginItem.swift` (novo) — a regra e a ponte com o
+- `Sources/NeverTypeCore/LoginItem.swift` (novo) — a regra e a ponte com o
   `SMAppService`, com a chamada de sistema entrando por parâmetro.
-- `Sources/FalaFlow/main.swift` — o item de menu com checkmark, o caminho de
+- `Sources/NeverType/main.swift` — o item de menu com checkmark, o caminho de
   `requiresApproval`, e o log de erro.
-- `Tests/FalaFlowCoreTests/LoginItemTests.swift` (novo).
+- `Tests/NeverTypeCoreTests/LoginItemTests.swift` (novo).
 - `docs/inicializacao-com-o-sistema.md` (novo) — a medição.
 
 Quatro arquivos. No orçamento de `index.md`.
@@ -123,7 +123,7 @@ Em produção os padrões valem e ninguém precisa saber que existem.
 
 ### 2. O caminho instalado aceita dois lugares, não um
 
-`/Applications/FalaFlow.app` **e** `$HOME/Applications/FalaFlow.app`. O segundo
+`/Applications/NeverType.app` **e** `$HOME/Applications/NeverType.app`. O segundo
 não é capricho: o `install.sh` documenta explicitamente esse fallback para máquina
 gerida ou usuário não-admin, onde `/Applications` não é gravável. Uma guarda que
 só aceitasse `/Applications` deixaria essa pessoa sem como ligar a opção.
@@ -174,7 +174,7 @@ metades da questão em aberto do PRD sem escolher entre elas.
 
 ## Padrões aplicáveis
 
-- **`nucleo-testavel.md`** — a lógica vai para `FalaFlowCore`; `main.swift` só
+- **`nucleo-testavel.md`** — a lógica vai para `NeverTypeCore`; `main.swift` só
   orquestra. Chamada de sistema entra por parâmetro com padrão, nunca `#if DEBUG`
   nem global de configuração.
 - **`estado-consultado.md`** — o checkmark é propriedade computada consultando o
@@ -194,7 +194,7 @@ metades da questão em aberto do PRD sem escolher entre elas.
 | Risco | Mitigação |
 |---|---|
 | `register()` passa, `status` diz `enabled`, e o app não abre no login. Os dois sinais já mentiram no spike. | DoD 1 é reboot real com `pgrep`. Nenhum outro sinal é aceito. |
-| A pessoa liga a opção rodando `build/FalaFlow.app`, e o login item aponta para a cópia do repositório. | Guarda de caminho antes de registrar (Decisão 2), com o motivo no comentário. DoD 2 exercita. |
+| A pessoa liga a opção rodando `build/NeverType.app`, e o login item aponta para a cópia do repositório. | Guarda de caminho antes de registrar (Decisão 2), com o motivo no comentário. DoD 2 exercita. |
 | `Status(rawValue:)` não construir no teste, deixando o mapeamento sem cobertura. | Decisão 3 já define o plano B e manda registrar a lacuna, não escondê-la. |
 | Fantasma no BTM durante o desenvolvimento — registro de bundle que deixou de existir. | `unregister()` de qualquer cópia limpa todas (medido no spike). Desregistre antes de apagar bundle de teste. |
 | `requiresApproval` não foi reproduzido no spike; o tratamento pode estar errado. | Exercitar de verdade: desligar nos Ajustes do Sistema e conferir DoD 4. Não aceitar por leitura de documentação. |
@@ -203,6 +203,6 @@ metades da questão em aberto do PRD sem escolher entre elas.
 ## References
 
 - `.vibeflow/prds/abrir-com-o-sistema.md` — o PRD, com o problema e o anti-escopo
-- `Sources/FalaFlowCore/TextInjector.swift` — a forma de injeção a copiar (`secureInput:`)
-- `Sources/FalaFlowCore/Transcriber.swift` — `isValid(magic:size:)`, a forma da regra pura
+- `Sources/NeverTypeCore/TextInjector.swift` — a forma de injeção a copiar (`secureInput:`)
+- `Sources/NeverTypeCore/Transcriber.swift` — `isValid(magic:size:)`, a forma da regra pura
 - `scripts/install.sh` — o fallback `~/Applications/` que a Decisão 2 preserva

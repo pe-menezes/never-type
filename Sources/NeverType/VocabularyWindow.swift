@@ -1,5 +1,5 @@
 import AppKit
-import FalaFlowCore
+import NeverTypeCore
 
 /// A janela de vocabulário.
 ///
@@ -48,7 +48,7 @@ final class VocabularyWindow: NSObject, NSWindowDelegate, NSTableViewDataSource,
             contentRect: NSRect(x: 0, y: 0, width: 460, height: 380),
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered, defer: false)
-        window.title = "FalaFlow · Vocabulário"
+        window.title = "NeverType · Vocabulário"
         window.delegate = self
         window.isReleasedWhenClosed = false
 

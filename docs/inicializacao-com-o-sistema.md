@@ -57,10 +57,10 @@ Para cronometrar um lançamento qualquer, de fora do processo:
 
 ```bash
 bash scripts/build-app.sh
-pkill -x FalaFlow
-rm -f ~/Library/Application\ Support/FalaFlow/falaflow.log
+pkill -x NeverType
+rm -f ~/Library/Application\ Support/NeverType/nevertype.log
 # cronometre daqui até a linha "modelo:" aparecer no log
-open build/FalaFlow.app
+open build/NeverType.app
 ```
 
 Só não confunda os dois: sem reiniciar, o page cache já está quente da execução

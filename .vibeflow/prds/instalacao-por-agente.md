@@ -4,7 +4,7 @@
 
 ## Problema
 
-Ninguém além do autor instalou o FalaFlow. O caminho existe — clonar,
+Ninguém além do autor instalou o NeverType. O caminho existe — clonar,
 `build-app.sh`, `install.sh`, conceder permissões, buscar o modelo — mas nunca
 foi percorrido por outra pessoa, então cada suposição dele é um abandono em
 potencial na primeira tentativa.

@@ -1,16 +1,16 @@
 // swift-tools-version: 6.0
 import PackageDescription
 
-// A lógica vive em FalaFlowCore para poder ser testada: um alvo executável não
+// A lógica vive em NeverTypeCore para poder ser testada: um alvo executável não
 // é importável por um alvo de teste. O executável fica sendo só a casca que
 // monta a menu bar e liga os pedaços.
 let package = Package(
-    name: "FalaFlow",
+    name: "NeverType",
     platforms: [.macOS(.v14)],
     targets: [
         .systemLibrary(name: "CWhisper", path: "Sources/CWhisper"),
         .target(
-            name: "FalaFlowCore",
+            name: "NeverTypeCore",
             dependencies: ["CWhisper"],
             linkerSettings: [
                 // Estático, e não as dylibs do Homebrew.
@@ -36,7 +36,7 @@ let package = Package(
                     "-framework", "Accelerate",
                 ])
             ]),
-        .executableTarget(name: "FalaFlow", dependencies: ["FalaFlowCore"]),
-        .testTarget(name: "FalaFlowCoreTests", dependencies: ["FalaFlowCore"]),
+        .executableTarget(name: "NeverType", dependencies: ["NeverTypeCore"]),
+        .testTarget(name: "NeverTypeCoreTests", dependencies: ["NeverTypeCore"]),
     ]
 )

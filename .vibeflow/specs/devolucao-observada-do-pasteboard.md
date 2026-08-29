@@ -40,14 +40,14 @@ se troca entre janela de sequestro do clipboard e segurança. Direção nova exi
 
 ## Objetivo
 
-O FalaFlow devolve a área de transferência quando a colagem é de fato consumida,
+O NeverType devolve a área de transferência quando a colagem é de fato consumida,
 em vez de esperar 0,6 s e torcer.
 
 ## Contexto
 
 `TextInjector.restoreDelay = 0.6` nunca foi medido — o comentário no código
 admite: *"generoso de propósito"*. Se o app de destino ler o pasteboard depois
-disso, o FalaFlow devolve o conteúdo antigo antes da leitura e a pessoa **cola o
+disso, o NeverType devolve o conteúdo antigo antes da leitura e a pessoa **cola o
 que tinha copiado antes, dentro do documento dela**. É o único defeito do backlog
 que causa dano em vez de incômodo.
 
@@ -69,7 +69,7 @@ Decisão 2 abaixo.
 ## Definition of Done
 
 1. **Leitura dispara a devolução antes do teto.** Teste novo em
-   `Tests/FalaFlowCoreTests/TextInjectorTests.swift`: insere num pasteboard
+   `Tests/NeverTypeCoreTests/TextInjectorTests.swift`: insere num pasteboard
    nomeado de teste, **lê a string** (o que chama o provider, igual a uma
    colagem real), e verifica que o conteúdo anterior voltou **em menos que o
    teto** — não em `teto + margem`.
@@ -97,10 +97,10 @@ Decisão 2 abaixo.
 
 ## Escopo
 
-- `Sources/FalaFlowCore/TextInjector.swift` — `.string` passa a ser dado
+- `Sources/NeverTypeCore/TextInjector.swift` — `.string` passa a ser dado
   prometido no caminho de inserção; a devolução é disparada pelo provider, com o
   tempo como teto.
-- `Tests/FalaFlowCoreTests/TextInjectorTests.swift` — os dois testes novos e o
+- `Tests/NeverTypeCoreTests/TextInjectorTests.swift` — os dois testes novos e o
   ajuste dos existentes que citam `restoreDelay`.
 
 Dois arquivos. Bem dentro do orçamento.
@@ -213,9 +213,9 @@ inserção, morre na devolução ou no teto.
 
 ## References
 
-- `Sources/FalaFlowCore/TextInjector.swift` — o arquivo a mudar; `insert` na
+- `Sources/NeverTypeCore/TextInjector.swift` — o arquivo a mudar; `insert` na
   linha 88 e o bloco `pending` acima dela definem o contrato a preservar
-- `Tests/FalaFlowCoreTests/TextInjectorTests.swift` — a suíte que define o
+- `Tests/NeverTypeCoreTests/TextInjectorTests.swift` — a suíte que define o
   comportamento atual e não pode regredir
 - `scratchpad/medir-leitura/main.swift` — a ferramenta que mediu o disparo do
   provider; o controle dela (leitura por `pbpaste`) é o modelo do teste do DoD 1

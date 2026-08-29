@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import FalaFlowCore
+@testable import NeverTypeCore
 
 /// As duas listas resolvem problemas diferentes, e os testes tratam disso: o
 /// prompt é dica, a substituição é garantia.
@@ -9,7 +9,7 @@ struct VocabularyTests {
 
     private func tempURL() -> URL {
         FileManager.default.temporaryDirectory
-            .appendingPathComponent("falaflow-vocab-\(UUID().uuidString)")
+            .appendingPathComponent("nevertype-vocab-\(UUID().uuidString)")
             .appendingPathComponent("vocabulario.json")
     }
 
@@ -31,16 +31,16 @@ struct VocabularyTests {
     func promptReadsAsLanguage() {
         let (v, url) = fresh()
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
-        v.setTerms(["FalaFlow", "whisper.cpp"])
-        #expect(v.prompt == "FalaFlow, whisper.cpp.")
+        v.setTerms(["NeverType", "whisper.cpp"])
+        #expect(v.prompt == "NeverType, whisper.cpp.")
     }
 
     @Test("termo vazio ou só espaço não entra na lista")
     func blankTermsAreDropped() {
         let (v, url) = fresh()
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
-        v.setTerms(["FalaFlow", "", "   ", "  Pix  "])
-        #expect(v.terms == ["FalaFlow", "Pix"], "e o que sobra vem sem espaço nas pontas")
+        v.setTerms(["NeverType", "", "   ", "  Pix  "])
+        #expect(v.terms == ["NeverType", "Pix"], "e o que sobra vem sem espaço nas pontas")
     }
 
     // MARK: - Substituições
@@ -99,9 +99,9 @@ struct VocabularyTests {
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
         v.setReplacements([
             Replacement(from: "vibe flow", to: "vibeflow"),
-            Replacement(from: "fala flow", to: "FalaFlow"),
+            Replacement(from: "fala flow", to: "NeverType"),
         ])
-        #expect(v.apply(to: "o vibe flow e o fala flow") == "o vibeflow e o FalaFlow")
+        #expect(v.apply(to: "o vibe flow e o fala flow") == "o vibeflow e o NeverType")
     }
 
     @Test("texto sem nada para trocar sai idêntico")
@@ -118,11 +118,11 @@ struct VocabularyTests {
     func survivesRestart() {
         let (v, url) = fresh()
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
-        v.setTerms(["FalaFlow"])
+        v.setTerms(["NeverType"])
         v.setReplacements([Replacement(from: "pix", to: "Pix")])
 
         let depois = Vocabulary(url: url)
-        #expect(depois.terms == ["FalaFlow"])
+        #expect(depois.terms == ["NeverType"])
         #expect(depois.replacements == [Replacement(from: "pix", to: "Pix")])
     }
 

@@ -1,4 +1,4 @@
-# Convenções — FalaFlow
+# Convenções — NeverType
 
 <!-- vibeflow:auto:start -->
 
@@ -33,15 +33,15 @@ image?.isTemplate = true
 
 Quando uma decisão é revertida, o comentário registra a reversão **e por que a
 decisão original estava certa com a informação da época**. Ver
-`Sources/FalaFlowCore/Transcriber.swift` (`warmUp`) e
-`.vibeflow/specs/falaflow-part-3.md` (linkagem estática).
+`Sources/NeverTypeCore/Transcriber.swift` (`warmUp`) e o comentário de linkagem
+estática em `Package.swift`.
 
 ## Estrutura
 
-- `Sources/FalaFlowCore/` — lógica, testável, sem AppKit de interface
-- `Sources/FalaFlow/` — `NSApplication`, menu bar, painel; orquestra, não decide
+- `Sources/NeverTypeCore/` — lógica, testável, sem AppKit de interface
+- `Sources/NeverType/` — `NSApplication`, menu bar, painel; orquestra, não decide
 - `Sources/CWhisper/` — module map para o whisper.cpp estático
-- `Tests/FalaFlowCoreTests/` — swift-testing, um arquivo por unidade
+- `Tests/NeverTypeCoreTests/` — swift-testing, um arquivo por unidade
 - `scripts/` — shell, contrato comum (ver `patterns/scripts-shell.md`)
 - `docs/` — decisões e mapas para humanos
 - `.vibeflow/` — convenções e padrões

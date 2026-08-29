@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import FalaFlowCore
+@testable import NeverTypeCore
 
 /// O histórico guarda o que a pessoa falou. Os testes cobrem o teto, a
 /// sobrevivência ao fechar o app, e o apagar — que é a única saída de quem não
@@ -10,7 +10,7 @@ struct TranscriptHistoryTests {
 
     private func tempURL() -> URL {
         FileManager.default.temporaryDirectory
-            .appendingPathComponent("falaflow-hist-\(UUID().uuidString)")
+            .appendingPathComponent("nevertype-hist-\(UUID().uuidString)")
             .appendingPathComponent("historico.json")
     }
 

@@ -34,13 +34,13 @@ mãos para clicar nos Ajustes do Sistema.
 
 2. **A fronteira do que o agente conserta sozinho está escrita**, com pelo menos
    estes três do lado proibido: `security list-keychains`, apagar
-   `~/Library/Keychains/falaflow-signing.keychain-db`, e qualquer coisa fora do
-   repositório e de `~/Library/Application Support/FalaFlow/`.
+   `~/Library/Keychains/nevertype-signing.keychain-db`, e qualquer coisa fora do
+   repositório e de `~/Library/Application Support/NeverType/`.
 
 3. **`scripts/verificar-instalacao.sh` verifica por estrutura**, e cada
    verificação falha nomeando a ação de saída:
-   - `/Applications/FalaFlow.app` existe e `codesign --verify --strict` passa;
-   - o processo está vivo (`pgrep -x FalaFlow`);
+   - `/Applications/NeverType.app` existe e `codesign --verify --strict` passa;
+   - o processo está vivo (`pgrep -x NeverType`);
    - o modelo está no destino e é válido pelo **magic em hexadecimal**
      (`6c6d6767`) somado ao piso de tamanho — a mesma regra de
      `fetch-model.sh`, que existe porque proxy de filtragem devolve página HTML
@@ -97,7 +97,7 @@ esperar.
 ### 2. O modelo copiado entra por `models/`, nunca direto no destino
 
 Quando a rede bloqueia o download, o `install.sh` já sugere copiar de alguém que
-tenha. Mas copiar direto para `~/Library/Application Support/FalaFlow/models/`
+tenha. Mas copiar direto para `~/Library/Application Support/NeverType/models/`
 pula toda validação.
 
 O documento manda copiar para `models/` do repositório e rodar

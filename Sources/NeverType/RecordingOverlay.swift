@@ -1,5 +1,5 @@
 import AppKit
-import FalaFlowCore
+import NeverTypeCore
 
 /// Os três estados que a pílula precisa distinguir.
 ///

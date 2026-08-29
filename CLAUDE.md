@@ -1,4 +1,4 @@
-# FalaFlow
+# NeverType
 
 Ditado por voz com transcrição local no macOS. Segurar ⌘ direito grava, soltar
 transcreve, e o texto é inserido onde o cursor estiver. **Nenhuma chamada de rede
@@ -62,7 +62,7 @@ bash scripts/bench.sh         # mede latência e qualidade por modelo
 Fora do controle de versão e reconstruíveis: `models/` (1,2 GB), `vendor/`
 (whisper.cpp estático), `fixtures/` (gravações), `bench-out/`, `.cache/`, `build/`.
 
-**Nunca apague** `~/Library/Keychains/falaflow-signing.keychain-db` — apagá-lo
+**Nunca apague** `~/Library/Keychains/nevertype-signing.keychain-db` — apagá-lo
 revoga a permissão de Acessibilidade e o usuário precisa reconceder.
 
 ## Idioma

@@ -1,7 +1,7 @@
 import Foundation
 import ServiceManagement
 
-/// Liga e desliga o FalaFlow como login item do macOS.
+/// Liga e desliga o NeverType como login item do macOS.
 ///
 /// O `SMAppService` registra **o bundle que está rodando**, e o BTM indexa esse
 /// registro por bundle ID, não por caminho. Medido em 2026-08-28 (macOS 26.2)
@@ -53,7 +53,7 @@ public enum LoginItem {
     /// para máquina gerida ou usuário sem direitos de administrador, onde
     /// `/Applications` não é gravável. Uma guarda que só aceitasse
     /// `/Applications` deixaria essa pessoa sem como ligar a opção.
-    private static let bundleName = "FalaFlow.app"
+    private static let bundleName = "NeverType.app"
 
     /// A regra em si, separada de qualquer consulta ao sistema.
     ///
@@ -88,7 +88,7 @@ public enum LoginItem {
     /// Registra o app para abrir com o sistema.
     ///
     /// Recusa fora do local instalado. Sem essa recusa, ligar a opção rodando
-    /// `build/FalaFlow.app` registraria a cópia do repositório — que o
+    /// `build/NeverType.app` registraria a cópia do repositório — que o
     /// `build-app.sh` reconstrói do zero a cada compilação — e nem o `status`
     /// nem o `register()` acusariam nada.
     public static func enable(

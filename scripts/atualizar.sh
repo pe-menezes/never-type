@@ -1,5 +1,5 @@
 #!/bin/bash
-# Atualiza o FalaFlow instalado para o que está no repositório remoto.
+# Atualiza o NeverType instalado para o que está no repositório remoto.
 #
 # Escrito para ser executado por um agente quando alguém diz "atualiza pra mim".
 # Ele recusa em vez de improvisar nos dois casos em que improvisar destrói
@@ -11,7 +11,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-APP="/Applications/FalaFlow.app"
+APP="/Applications/NeverType.app"
 PLIST="$APP/Contents/Info.plist"
 
 info() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
@@ -53,7 +53,7 @@ remote_sha="$(git -C "$REPO_ROOT" rev-parse --short "@{u}" 2>/dev/null)" \
 
 installed="desconhecido"
 if [ -f "$PLIST" ]; then
-  installed="$(defaults read "$PLIST" FalaFlowCommit 2>/dev/null || echo desconhecido)"
+  installed="$(defaults read "$PLIST" NeverTypeCommit 2>/dev/null || echo desconhecido)"
 fi
 
 echo "      instalado: $installed"
@@ -85,6 +85,6 @@ info "Conferindo"
 bash "$REPO_ROOT/scripts/verificar-instalacao.sh"
 
 echo
-ok "atualizado para $(defaults read "$PLIST" FalaFlowCommit 2>/dev/null || echo '?')"
+ok "atualizado para $(defaults read "$PLIST" NeverTypeCommit 2>/dev/null || echo '?')"
 warn "as permissões continuam valendo, mas o ditado só está provado depois que
       você ditar uma frase e o texto aparecer."

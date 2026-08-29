@@ -1,7 +1,7 @@
 import Foundation
 import ServiceManagement
 import Testing
-@testable import FalaFlowCore
+@testable import NeverTypeCore
 
 /// A guarda que impede registrar a cópia errada, e os caminhos de falha do
 /// registro.
@@ -14,7 +14,7 @@ import Testing
 struct LoginItemTests {
 
     private func erroFalso(_ mensagem: String) -> NSError {
-        NSError(domain: "com.falaflow.tests", code: 1,
+        NSError(domain: "com.nevertype.tests", code: 1,
                 userInfo: [NSLocalizedDescriptionKey: mensagem])
     }
 
@@ -46,17 +46,17 @@ struct LoginItemTests {
     func reconheceOLocalInstalado() {
         let home = "/Users/alguem"
 
-        #expect(LoginItem.isInstalledLocation(bundlePath: "/Applications/FalaFlow.app", home: home))
-        #expect(LoginItem.isInstalledLocation(bundlePath: "/Users/alguem/Applications/FalaFlow.app", home: home),
+        #expect(LoginItem.isInstalledLocation(bundlePath: "/Applications/NeverType.app", home: home))
+        #expect(LoginItem.isInstalledLocation(bundlePath: "/Users/alguem/Applications/NeverType.app", home: home),
                 "o install.sh documenta ~/Applications como fallback para máquina gerida")
-        #expect(LoginItem.isInstalledLocation(bundlePath: "/Applications/FalaFlow.app/", home: home),
+        #expect(LoginItem.isInstalledLocation(bundlePath: "/Applications/NeverType.app/", home: home),
                 "barra no fim é o mesmo lugar")
 
-        #expect(!LoginItem.isInstalledLocation(bundlePath: "/Users/alguem/repo/build/FalaFlow.app", home: home),
+        #expect(!LoginItem.isInstalledLocation(bundlePath: "/Users/alguem/repo/build/NeverType.app", home: home),
                 "a cópia de build/ é apagada a cada compilação")
-        #expect(!LoginItem.isInstalledLocation(bundlePath: "/private/tmp/FalaFlow.app", home: home))
+        #expect(!LoginItem.isInstalledLocation(bundlePath: "/private/tmp/NeverType.app", home: home))
         #expect(!LoginItem.isInstalledLocation(bundlePath: "/Applications/Outro.app", home: home))
-        #expect(!LoginItem.isInstalledLocation(bundlePath: "/Users/outra-pessoa/Applications/FalaFlow.app", home: home),
+        #expect(!LoginItem.isInstalledLocation(bundlePath: "/Users/outra-pessoa/Applications/NeverType.app", home: home),
                 "o ~/Applications que vale é o de quem está rodando")
     }
 
@@ -66,7 +66,7 @@ struct LoginItemTests {
     func recusaSemRegistrar() {
         var chamou = false
         let outcome = LoginItem.enable(
-            bundlePath: "/Users/alguem/repo/build/FalaFlow.app",
+            bundlePath: "/Users/alguem/repo/build/NeverType.app",
             home: "/Users/alguem",
             register: { chamou = true })
 
@@ -75,7 +75,7 @@ struct LoginItemTests {
             Issue.record("esperava recusa, veio \(outcome)")
             return
         }
-        #expect(razao.contains("build/FalaFlow.app"), "a mensagem diz onde a cópia está")
+        #expect(razao.contains("build/NeverType.app"), "a mensagem diz onde a cópia está")
         #expect(razao.contains("scripts/install.sh"), "a mensagem nomeia a ação de saída")
     }
 
@@ -83,7 +83,7 @@ struct LoginItemTests {
     func registraNoLocalCerto() {
         var chamou = false
         let outcome = LoginItem.enable(
-            bundlePath: "/Applications/FalaFlow.app",
+            bundlePath: "/Applications/NeverType.app",
             home: "/Users/alguem",
             register: { chamou = true },
             status: { .enabled })
@@ -96,7 +96,7 @@ struct LoginItemTests {
     @Test("register que passa mas não liga devolve o estado real")
     func naoAssumeQueRegistrouLigou() {
         let outcome = LoginItem.enable(
-            bundlePath: "/Applications/FalaFlow.app",
+            bundlePath: "/Applications/NeverType.app",
             home: "/Users/alguem",
             register: {},
             status: { .requiresApproval })
@@ -110,7 +110,7 @@ struct LoginItemTests {
     @Test("register que lança vira recusa com a razão do sistema")
     func registroQueLanca() {
         let outcome = LoginItem.enable(
-            bundlePath: "/Applications/FalaFlow.app",
+            bundlePath: "/Applications/NeverType.app",
             home: "/Users/alguem",
             register: { throw self.erroFalso("Operation not permitted") })
 

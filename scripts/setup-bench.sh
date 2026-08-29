@@ -72,7 +72,7 @@ metal_is_active() {
   grep -Eq 'whisper_backend_init_gpu:.*MTL' "$log"
 }
 
-SMOKE_LOG="$(mktemp -t falaflow-smoke)"
+SMOKE_LOG="$(mktemp -t nevertype-smoke)"
 trap 'rm -f "$SMOKE_LOG"' EXIT
 whisper-cli -m "$SHARE_DIR/for-tests-ggml-tiny.bin" -f "$SHARE_DIR/jfk.wav" -nt \
   >/dev/null 2>"$SMOKE_LOG" || { cat "$SMOKE_LOG" >&2; fail "whisper-cli falhou no smoke test."; }

@@ -1,6 +1,6 @@
 ---
 tags: [concurrency, swift6, main-actor, actors, thread-safety]
-modules: [Sources/FalaFlowCore/, Sources/FalaFlow/]
+modules: [Sources/NeverTypeCore/, Sources/NeverType/]
 applies_to: [services, handlers, models]
 confidence: inferred
 ---
@@ -16,9 +16,9 @@ importa mais que a pureza.
 
 ## Where
 
-- `Sources/FalaFlowCore/HotkeyMonitor.swift` — `@MainActor`, e `onEvent` também
-- `Sources/FalaFlow/main.swift` — `actor TranscriptionService`, `@MainActor AppDelegate`
-- `Sources/FalaFlowCore/AudioRecorder.swift` — fila serial dona do estado
+- `Sources/NeverTypeCore/HotkeyMonitor.swift` — `@MainActor`, e `onEvent` também
+- `Sources/NeverType/main.swift` — `actor TranscriptionService`, `@MainActor AppDelegate`
+- `Sources/NeverTypeCore/AudioRecorder.swift` — fila serial dona do estado
 
 ## The Pattern
 
@@ -26,7 +26,7 @@ importa mais que a pureza.
 do whisper.cpp é de uso serial e mora dentro de um ator:
 
 ```swift
-// Sources/FalaFlow/main.swift:20
+// Sources/NeverType/main.swift:20
 /// É um `actor` e não uma fila serial de propósito: o contexto do whisper.cpp é
 /// de uso serial, e um ator faz o compilador garantir isso. Fila serial
 /// dependeria de eu lembrar de sempre despachar por ela.
@@ -37,7 +37,7 @@ actor TranscriptionService {
 o callback:
 
 ```swift
-// Sources/FalaFlowCore/HotkeyMonitor.swift:11
+// Sources/NeverTypeCore/HotkeyMonitor.swift:11
 /// Vive na main actor. Os monitores do `NSEvent` são API do AppKit ligada ao
 /// run loop principal, e o tipo passa a dizer isso em vez de deixar implícito.
 @MainActor
@@ -49,12 +49,12 @@ public final class HotkeyMonitor {
 barreira no encerramento:
 
 ```swift
-// Sources/FalaFlowCore/AudioRecorder.swift
+// Sources/NeverTypeCore/AudioRecorder.swift
 /// O tap roda na thread de áudio em tempo real e o encerramento roda na main.
 /// Antes, os dois tocavam o mesmo arquivo e o mesmo conversor sem
 /// sincronização — e o compilador não acusava, porque `AVAudioNodeTapBlock`
 /// não é marcado como `Sendable`.
-private let io = DispatchQueue(label: "com.falaflow.audio-io")
+private let io = DispatchQueue(label: "com.nevertype.audio-io")
 ```
 
 ## Rules
@@ -73,7 +73,7 @@ private let io = DispatchQueue(label: "com.falaflow.audio-io")
 
 ## Examples from this codebase
 
-File: `Sources/FalaFlowCore/HotkeyMonitor.swift` — a exceção, justificada:
+File: `Sources/NeverTypeCore/HotkeyMonitor.swift` — a exceção, justificada:
 ```swift
 // `assumeIsolated`, e não `Task { @MainActor in }`, de propósito.
 //
@@ -84,7 +84,7 @@ File: `Sources/FalaFlowCore/HotkeyMonitor.swift` — a exceção, justificada:
 MainActor.assumeIsolated { self?.handle(event) }
 ```
 
-File: `Sources/FalaFlow/main.swift` — exclusão entre processos, atômica:
+File: `Sources/NeverType/main.swift` — exclusão entre processos, atômica:
 ```swift
 guard flock(fd, LOCK_EX | LOCK_NB) == 0 else {
     close(fd)
