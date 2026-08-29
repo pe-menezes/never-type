@@ -137,7 +137,7 @@ não dói, mas é dívida real e some junto com L1.
 
 ## 3. Interação
 
-### I1 · Hands-free com trava — P
+### ✅ I1 · Hands-free com trava — FEITO em 29/08
 Segurar continua sendo push-to-talk. **Duplo toque no ⌘ direito trava** em
 mãos-livres; um toque para.
 
@@ -149,17 +149,31 @@ sistema inteiro.
 
 Cabe inteiro dentro do `HotkeyMonitor`.
 
-### I2 · Parada automática por silêncio — P
-Termina o ditado sozinho depois de N segundos sem voz. Faz mais sentido depois
-de I1: numa gravação travada em mãos-livres, esquecer de parar é o modo de falha
-óbvio.
-*Evidência:* [openquack README](https://github.com/larryxiao/openquack)
+### I3 · Retorno auditivo ao armar e desarmar — P
+Um som curto e discreto ao travar em mãos-livres e ao encerrar. Hoje o único
+sinal é visual, e a pílula pode estar fora do canto que você está olhando —
+principalmente porque ela é arrastável.
+
+Referência: o Wispr Flow faz isso ao acionar. Vale olhar como soa antes de
+escolher o som.
+*Evidência:* pedido do autor em uso, 2026-08-29
+
+### I4 · Escolher a tecla do gatilho — P
+Hoje é ⌘ direito, fixo. O `HotkeyMonitor.Trigger` **já tem** `rightCommand`,
+`rightOption` e `rightControl` prontos — falta só expor no menu e guardar a
+escolha.
+
+Atenção: isto **não** contradiz a decisão fechada de não adotar o
+`KeyboardShortcuts`. Aquela decisão é sobre gravar atalho arbitrário, que exige
+dependência externa; escolher entre três triggers que já existem no código não
+exige nada.
+*Evidência:* pedido do autor em uso, 2026-08-29
 
 ---
 
 ## 4. UI — o que dá para ver
 
-### U1 · O overlay não prova que o microfone está pegando som — P
+### ✅ U1 · O overlay não prova que o microfone está pegando som — FEITO em 28/08
 Hoje é um ponto vermelho estático e a palavra "ouvindo…", num painel de
 148×40. Com o microfone mudo ou na entrada errada, você vê exatamente a mesma
 coisa e recebe uma transcrição vazia.
@@ -168,7 +182,7 @@ Um medidor de nível resolve, e é o mesmo padrão do resto do projeto:
 `falha-alta.md` diz que degradação silenciosa é erro.
 *Evidência:* `Sources/FalaFlow/RecordingOverlay.swift:56`
 
-### U2 · A transcrição acontece sem feedback nenhum — P
+### ✅ U2 · A transcrição acontece sem feedback nenhum — FEITO em 29/08
 No `.released` o app faz `overlay.hide()` e `render(.idle)` **antes** de
 transcrever. Entre soltar a tecla e o texto aparecer não há sinal nenhum — o
 ícone já voltou ao normal e o painel já sumiu. Com 600 ms passa; com um ditado
@@ -228,6 +242,11 @@ Geração e indexação por pasteboard num bloco só.
 ---
 
 ## Decidido e fechado
+
+- **Não fazer parada automática por silêncio.** Pausa não significa fim: é comum
+  ficar em silêncio no meio do ditado enquanto se lê alguma coisa, e um corte
+  automático transformaria uma pausa normal em ditado truncado. O modo
+  mãos-livres é encerrado por toque, e só.
 
 - **O nome continua FalaFlow.** `lazy2type` colide com o
   [LazyTyper](https://lazytyper.com/), que é o mesmo produto com nome quase

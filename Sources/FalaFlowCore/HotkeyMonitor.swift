@@ -141,6 +141,23 @@ public final class HotkeyMonitor {
         public static let rightOption  = Trigger(keyCode: 61, deviceMask: 0x0040, label: "⌥ direito")
         public static let rightControl = Trigger(keyCode: 62, deviceMask: 0x2000, label: "⌃ direito")
 
+        /// As opções oferecidas no menu.
+        ///
+        /// Só modificadores puros do lado direito. Um modificador sozinho não
+        /// digita caractere nem dispara ação do sistema, que é o que dispensa o
+        /// `CGEventTap` interceptador — e o lado direito é o que a mão que não
+        /// está no mouse alcança sem sair da posição.
+        public static let all: [Trigger] = [rightCommand, rightOption, rightControl]
+
+        /// Identificador para guardar a escolha. O keyCode é estável entre
+        /// versões do macOS; o rótulo não é, porque é texto de interface.
+        public var id: String { String(keyCode) }
+
+        public static func named(_ id: String?) -> Trigger? {
+            guard let id else { return nil }
+            return all.first { $0.id == id }
+        }
+
         public init(keyCode: UInt16, deviceMask: UInt, label: String) {
             self.keyCode = keyCode
             self.deviceMask = deviceMask
@@ -148,7 +165,20 @@ public final class HotkeyMonitor {
         }
     }
 
-    public let trigger: Trigger
+    /// Trocável em uso: a escolha vive no menu.
+    ///
+    /// Não precisa reinstalar os monitores — eles escutam `.flagsChanged` de
+    /// qualquer tecla, e o filtro por keyCode acontece na leitura. O que precisa
+    /// zerar é a máquina de estados: trocar a tecla no meio de um hold deixaria
+    /// uma gravação órfã, sem tecla que a encerre.
+    public var trigger: Trigger {
+        didSet {
+            guard trigger.keyCode != oldValue.keyCode else { return }
+            tapTimer?.invalidate()
+            tapTimer = nil
+            latch = Latch()
+        }
+    }
     public var onEvent: (@MainActor (Event) -> Void)?
 
     private var globalMonitors: [Any] = []

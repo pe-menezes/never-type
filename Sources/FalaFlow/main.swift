@@ -69,6 +69,61 @@ actor TranscriptionService {
     func currentStatus() -> String { status }
 }
 
+/// Retorno auditivo das ações do ditado.
+///
+/// A pílula é arrastável e pode estar num canto que você não está olhando — e
+/// mesmo olhando, confirmar pelo som é mais rápido que conferir pela cor.
+///
+/// Os tons são gerados, e não escolhidos entre os do sistema: `Tink` e `Pop` são
+/// alertas, desenhados para serem notados. Aqui o som confirma uma ação que a
+/// pessoa acabou de fazer de propósito, então precisa ser o contrário disso.
+///
+/// As notas descem quando algo termina e sobem quando algo começa ou trava —
+/// a direção carrega o significado, então dá para saber o que aconteceu sem
+/// aprender qual som é qual.
+@MainActor
+enum Feedback {
+    private static let key = "somDasAcoes"
+
+    /// Ligado por padrão, e desligável pelo menu. Som que não se pode desligar é
+    /// defeito para quem trabalha em sala compartilhada.
+    static var isEnabled: Bool {
+        get { UserDefaults.standard.object(forKey: key) as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: key) }
+    }
+
+    /// Gerados uma vez. Recriar o WAV a cada ditado seria refazer 3 KB de
+    /// aritmética para nada.
+    private static let start   = sound(Tone.wav([330], seconds: 0.085))
+    private static let stop    = sound(Tone.wav([262], seconds: 0.085))
+    private static let latch   = sound(Tone.wav([294, 392], seconds: 0.065))
+    private static let discard = sound(Tone.wav([262, 196], seconds: 0.065))
+
+    /// Começou a gravar.
+    ///
+    /// O tom entra no áudio pelo alto-falante e volta pelo microfone, nos
+    /// primeiros ~60 ms da gravação. É um seno curto, não fala, e o Whisper o
+    /// ignora — mas é por isso que ele é curto e baixo.
+    static func started()   { play(start) }
+    static func stopped()   { play(stop) }
+    static func latched()   { play(latch) }
+    static func discarded() { play(discard) }
+
+    private static func sound(_ data: Data) -> NSSound? {
+        let sound = NSSound(data: data)
+        sound?.volume = 0.18
+        return sound
+    }
+
+    private static func play(_ sound: NSSound?) {
+        guard isEnabled, let sound else { return }
+        // Rebobina: `play()` num som que ainda está tocando não reinicia, e dois
+        // ditados seguidos ficariam sem o segundo som.
+        sound.stop()
+        sound.play()
+    }
+}
+
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     // Criado em applicationDidFinishLaunching, não aqui.
@@ -95,27 +150,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ///
     /// Então: devolve o pasteboard sempre, e o texto continua alcançável por
     /// aqui. Nada se perde, e o clipboard de ninguém é sequestrado.
-    private var lastTranscript: String? {
-        didSet { persistTranscript() }
-    }
+    /// Não é mais uma variável: a última é a primeira do histórico, e ter as
+    /// duas coisas criaria duas fontes de verdade para o mesmo texto.
+    private var lastTranscript: String? { history.last?.text }
 
-    private static var transcriptURL: URL {
+    private let history = TranscriptHistory(
+        url: logURL.deletingLastPathComponent().appendingPathComponent("historico.json"))
+
+    private static var legacyTranscriptURL: URL {
         logURL.deletingLastPathComponent().appendingPathComponent("ultima-transcricao.txt")
     }
 
-    /// Grava a última transcrição em disco.
-    ///
-    /// Guardar só em memória perdia o texto ao fechar o app — e o único caminho
-    /// para recuperá-lo, quando a colagem não chega em lugar nenhum, é o menu.
-    private func persistTranscript() {
-        guard let lastTranscript else { return }
-        try? lastTranscript.write(to: Self.transcriptURL, atomically: true, encoding: .utf8)
-    }
-
-    private func loadPersistedTranscript() {
-        guard let text = try? String(contentsOf: Self.transcriptURL, encoding: .utf8),
-              !text.isEmpty else { return }
-        lastTranscript = text
+    /// O arquivo da versão anterior guardava a última transcrição e agora nunca
+    /// mais seria atualizado. Deixá-lo no disco seria abandonar uma cópia do que
+    /// a pessoa falou num arquivo que o app não usa e ela não sabe que existe.
+    private func removeLegacyTranscriptFile() {
+        try? FileManager.default.removeItem(at: Self.legacyTranscriptURL)
     }
 
     /// Consultado ao sistema toda vez, em vez de guardado numa variável.
@@ -158,7 +208,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         startLog()
-        loadPersistedTranscript()
+        removeLegacyTranscriptFile()
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         render(.idle)
         // O menu se remonta ao ser aberto (menuNeedsUpdate), então nunca mostra
@@ -166,6 +216,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.delegate = self
         statusItem.menu = menu
 
+        if let saved = HotkeyMonitor.Trigger.named(UserDefaults.standard.string(forKey: Self.triggerKey)) {
+            monitor.trigger = saved
+        }
         monitor.onEvent = { [weak self] event in self?.handle(event) }
         recorder.onLevel = { [weak self] level in self?.overlay.push(level: level) }
         recorder.onError = { [weak self] message in
@@ -253,6 +306,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             do {
                 try recorder.start()
+                Feedback.started()
                 render(.recording)
                 overlay.show()
             } catch {
@@ -260,6 +314,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 log("falha ao iniciar gravação: \(error)")
             }
         case .released:
+            Feedback.stopped()
             let url = recorder.stop()
             render(.idle)
             guard url != nil else {
@@ -290,8 +345,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .latched:
             // A gravação já está rolando desde o primeiro toque; aqui só muda
             // quem a mantém viva — a máquina de estados, não a tecla.
+            Feedback.latched()
             log("mãos-livres travado. Toque no \(monitor.trigger.label) para transcrever, Esc para descartar.")
         case .cancelled:
+            Feedback.discarded()
             recorder.cancel()
             overlay.hide()
             render(.idle)
@@ -305,7 +362,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             log("transcrição vazia — nada a inserir")
             return
         }
-        lastTranscript = text
+        history.add(text)
 
         switch TextInjector.insert(text) {
         case .inserted:
@@ -332,10 +389,52 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private static let clock: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm"
+        return f
+    }()
+
+    /// Uma linha de menu não comporta um ditado inteiro; o texto completo fica
+    /// no tooltip e chega ao pasteboard pelo clique.
+    private func preview(of text: String) -> String {
+        let flat = text.replacingOccurrences(of: "\n", with: " ")
+        return flat.count > 44 ? String(flat.prefix(44)) + "…" : flat
+    }
+
+    @objc private func copyFromHistory(_ sender: NSMenuItem) {
+        guard history.entries.indices.contains(sender.tag) else { return }
+        copy(history.entries[sender.tag].text)
+    }
+
+    private static let triggerKey = "trigger"
+
+    @objc private func chooseTrigger(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String,
+              let option = HotkeyMonitor.Trigger.named(id) else { return }
+        monitor.trigger = option
+        UserDefaults.standard.set(id, forKey: Self.triggerKey)
+        log("trigger agora é \(option.label)")
+    }
+
+    @objc private func toggleSound() {
+        Feedback.isEnabled.toggle()
+        log("sons: \(Feedback.isEnabled ? "ligados" : "desligados")")
+    }
+
+    @objc private func clearHistory() {
+        history.clear()
+        log("histórico apagado")
+    }
+
+    private func copy(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+    }
+
     @objc private func copyLastTranscript() {
         guard let lastTranscript else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(lastTranscript, forType: .string)
+        copy(lastTranscript)
         log("última transcrição copiada")
     }
 
@@ -378,20 +477,59 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.removeAllItems()
         let acc = HotkeyMonitor.hasAccessibilityPermission
         menu.addItem(disabled("Trigger: \(monitor.trigger.label) (segure e fale)"))
+        menu.addItem(disabled("  dois toques travam · toque para encerrar · Esc descarta"))
+
+        let keyItem = NSMenuItem(title: "Tecla", action: nil, keyEquivalent: "")
+        let keyMenu = NSMenu()
+        for option in HotkeyMonitor.Trigger.all {
+            let line = NSMenuItem(title: option.label,
+                                  action: #selector(chooseTrigger(_:)), keyEquivalent: "")
+            line.target = self
+            line.state = option.keyCode == monitor.trigger.keyCode ? .on : .off
+            line.representedObject = option.id
+            keyMenu.addItem(line)
+        }
+        keyMenu.addItem(.separator())
+        let soundItem = NSMenuItem(title: "Sons",
+                                   action: #selector(toggleSound), keyEquivalent: "")
+        soundItem.target = self
+        soundItem.state = Feedback.isEnabled ? .on : .off
+        keyMenu.addItem(soundItem)
+        keyItem.submenu = keyMenu
+        menu.addItem(keyItem)
+
         menu.addItem(.separator())
         menu.addItem(disabled("Microfone: \(micAuthorized ? "ok" : "faltando")"))
         menu.addItem(disabled("Acessibilidade: \(acc ? "ok" : "faltando")"))
         menu.addItem(disabled("Modelo: \(modelStatus)"))
         if let lastTranscript {
             menu.addItem(.separator())
-            let preview = lastTranscript.count > 40
-                ? String(lastTranscript.prefix(40)) + "…"
-                : lastTranscript
             let copy = NSMenuItem(title: "Copiar última transcrição",
                                   action: #selector(copyLastTranscript), keyEquivalent: "")
             copy.target = self
-            copy.toolTip = preview
+            copy.toolTip = preview(of: lastTranscript)
             menu.addItem(copy)
+
+            if history.entries.count > 1 {
+                let item = NSMenuItem(title: "Histórico (\(history.entries.count))",
+                                      action: nil, keyEquivalent: "")
+                let submenu = NSMenu()
+                for (index, entry) in history.entries.enumerated() {
+                    let line = NSMenuItem(title: "\(Self.clock.string(from: entry.date))  \(preview(of: entry.text))",
+                                          action: #selector(copyFromHistory(_:)), keyEquivalent: "")
+                    line.target = self
+                    line.tag = index
+                    line.toolTip = entry.text
+                    submenu.addItem(line)
+                }
+                submenu.addItem(.separator())
+                let clear = NSMenuItem(title: "Limpar histórico",
+                                       action: #selector(clearHistory), keyEquivalent: "")
+                clear.target = self
+                submenu.addItem(clear)
+                item.submenu = submenu
+                menu.addItem(item)
+            }
         }
         if !acc {
             let fix = NSMenuItem(title: "Abrir Ajustes de Acessibilidade…",

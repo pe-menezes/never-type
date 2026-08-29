@@ -112,6 +112,32 @@ struct HotkeyTriggerTests {
         #expect(t.deviceMask != HotkeyMonitor.Trigger.rightOption.deviceMask)
         #expect(t.keyCode != HotkeyMonitor.Trigger.rightOption.keyCode)
     }
+
+    /// A escolha é guardada pelo keyCode, e não pelo rótulo: rótulo é texto de
+    /// interface e muda; keyCode é estável entre versões do macOS.
+    @Test("a tecla escolhida sobrevive a ida e volta pelo identificador")
+    func triggerRoundTripsThroughID() {
+        for option in HotkeyMonitor.Trigger.all {
+            #expect(HotkeyMonitor.Trigger.named(option.id)?.keyCode == option.keyCode)
+        }
+    }
+
+    @Test("identificador desconhecido ou ausente não devolve trigger")
+    func unknownTriggerIsNil() {
+        #expect(HotkeyMonitor.Trigger.named(nil) == nil)
+        #expect(HotkeyMonitor.Trigger.named("999") == nil, "keyCode que não oferecemos")
+        #expect(HotkeyMonitor.Trigger.named("⌘ direito") == nil, "rótulo não é identificador")
+    }
+
+    /// Só modificador puro: qualquer outra coisa exigiria engolir o evento com
+    /// um CGEventTap, que o projeto recusou.
+    @Test("todas as opções são modificadores puros e distintas entre si")
+    func optionsAreDistinctPureModifiers() {
+        let codes = HotkeyMonitor.Trigger.all.map(\.keyCode)
+        let masks = HotkeyMonitor.Trigger.all.map(\.deviceMask)
+        #expect(Set(codes).count == codes.count, "keyCode repetido faria duas opções virarem uma")
+        #expect(Set(masks).count == masks.count, "máscara repetida não distinguiria o lado")
+    }
 }
 
 
