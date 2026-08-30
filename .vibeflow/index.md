@@ -28,7 +28,7 @@ Os artefatos pesados (`models/`, `vendor/`, `fixtures/`,
   flutuante de gravação, janela do vocabulário, ator dono do modelo. Orquestra,
   não decide.
 - **`Sources/CWhisper/`** — module map apontando para `vendor/whisper`.
-- **`Tests/NeverTypeCoreTests/`** — 106 testes em swift-testing.
+- **`Tests/NeverTypeCoreTests/`**: 109 testes em swift-testing.
 - **`scripts/`** — bancada de latência, build e assinatura, instalação,
   verificação e atualização.
 - **`docs/`** — armadilhas encontradas e a escolha do modelo, com os números.

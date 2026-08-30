@@ -109,10 +109,9 @@ cat <<'MSG'
   Open the app and macOS will ask for both. Both are required:
 
     Microphone      without it there is no audio
-    Accessibility   without it the app does not receive the global key. It warns
-                    — slashed icon (mic.slash), "Accessibility: missing" and
-                    "Open Accessibility Settings…" in the menu, a line in the
-                    log and macOS's own prompt —, but the key does nothing
+    Accessibility   without it the app cannot paste at the cursor. If you try to
+                    dictate, recording is blocked before audio is captured and
+                    an alert offers to open the right System Settings page
 
   If the Accessibility window does not show up, go to
   System Settings › Privacy & Security › Accessibility and turn on NeverType.

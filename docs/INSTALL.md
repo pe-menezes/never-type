@@ -152,21 +152,20 @@ Two, and the app asks for both when it opens. **Both need the person.**
 ### Accessibility: STOP AND ASK
 
 This is the easiest one to miss, and the most likely failure mode of a fresh
-installation. Without it the app opens and **does not react to the key**. It
-warns (the slashed icon, `mic.slash`, "Accessibility: missing" and "Open
-Accessibility Settings…" in the menu, a line in `nevertype.log`, and macOS's own
-prompt), but none of that reaches someone who opens neither the menu nor the
-log.
+installation. Without it the app cannot insert text. If the person tries to
+dictate anyway, recording is blocked before audio is captured and an alert
+offers to open the right System Settings page. The slashed icon, the menu line
+"Accessibility: missing" and `nevertype.log` carry the same diagnosis.
 
 > Open **System Settings › Privacy & Security › Accessibility** and **turn on
 > NeverType** in the list. If it is not there, click the **+** and choose
 > `/Applications/NeverType.app`.
 >
-> That is what lets the app receive the global key. Without it, the app opens
-> and looks like it works, but holding the key does nothing.
+> That is what lets the app post the paste at the cursor. Without it, attempting
+> a dictation opens a warning instead of recording audio that cannot be inserted.
 >
-> After turning it on, **quit NeverType from the menu bar menu and open it
-> again**.
+> After turning it on, try the key again. If macOS still reports the permission
+> as missing, **quit NeverType from the menu bar menu and open it again**.
 
 Do not continue until the person confirms they did it.
 

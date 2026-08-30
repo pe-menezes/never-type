@@ -41,8 +41,8 @@ bash scripts/install.sh
 ```
 
 Na primeira execução o macOS pede Microfone e Acessibilidade. O app precisa das
-duas, e enquanto a Acessibilidade não for concedida, segurar a tecla não faz
-nada.
+duas. Enquanto a Acessibilidade não for concedida, a tentativa de ditado é
+bloqueada antes da gravação, e um aviso oferece abrir a página certa dos Ajustes.
 
 O [`docs/INSTALL.pt-BR.md`](docs/INSTALL.pt-BR.md) tem o roteiro inteiro, o
 modelo incluído, e foi escrito para um agente de codificação executar: mande o
@@ -81,7 +81,7 @@ binário e o que ninguém rodou.
 
 ```bash
 bash scripts/build-app.sh     # compila o whisper.cpp em vendor/
-swift build && swift test     # 106 testes, em swift-testing
+swift build && swift test     # 109 testes, em swift-testing
 ```
 
 O `vendor/` não é versionado. Sem ele o build falha com `could not build

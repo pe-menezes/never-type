@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build and test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-26]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      # Parallel Swift builds may repeat diagnostics. Gate unique source warnings.
+      MAX_WARNING_DIAGNOSTICS: 4
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Test warning fingerprint counter
+        run: python3 scripts/test-count-swift-warnings.py
+
+      - name: Bootstrap whisper.cpp and build the app
+        run: |
+          set -o pipefail
+          swift package clean
+          bash scripts/build-app.sh 2>&1 | tee "$RUNNER_TEMP/release-build.log"
+          warnings="$(python3 scripts/count-swift-warnings.py "$RUNNER_TEMP/release-build.log")"
+          echo "Unique release warnings: $warnings/$MAX_WARNING_DIAGNOSTICS"
+          (( warnings <= MAX_WARNING_DIAGNOSTICS ))
+
+      - name: Run Swift Testing suite
+        run: |
+          set -o pipefail
+          swift package clean
+          swift test --disable-xctest --enable-swift-testing 2>&1 | tee "$RUNNER_TEMP/debug-build.log"
+          warnings="$(python3 scripts/count-swift-warnings.py "$RUNNER_TEMP/debug-build.log")"
+          echo "Unique debug warnings: $warnings/$MAX_WARNING_DIAGNOSTICS"
+          (( warnings <= MAX_WARNING_DIAGNOSTICS ))
+
+      - name: Check patch hygiene
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BASE_SHA: ${{ github.event.before }}
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            git diff --check "$PR_BASE_SHA...$PR_HEAD_SHA"
+          else
+            git diff --check "$PUSH_BASE_SHA...$GITHUB_SHA"
+          fi

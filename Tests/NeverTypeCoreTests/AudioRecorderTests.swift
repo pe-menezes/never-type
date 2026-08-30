@@ -395,6 +395,21 @@ struct LatchTests {
         #expect(!latch.isLatched)
     }
 
+    /// A modal permission alert keeps pumping events. Unless a refused start
+    /// resets the gesture first, its release arms the double-tap window and a
+    /// second attempt becomes hands-free without ever starting a recording.
+    @Test("a rejected start resets the gesture before its release arrives")
+    func rejectedStartResetsGesture() {
+        var latch = L()
+        #expect(latch.handle(.down(0)) == [.start])
+
+        latch.resolveStart(accepted: false)
+
+        #expect(latch.handle(.up(0.08)) == [])
+        #expect(latch.handle(.down(0.12)) == [.start],
+                "the next press is a fresh attempt, not a hands-free latch")
+    }
+
     /// A short tap does not conclude right away: it waits to see whether the second one comes.
     @Test("a short tap delays the conclusion and concludes on timeout")
     func shortTapWaitsThenFinishes() {
