@@ -2,11 +2,9 @@
 # Checks what can be checked from the outside about a NeverType installation.
 #
 # Exists because the installation has a failure mode that is easy to miss:
-# without the Accessibility permission the app opens and does not react to the
-# key. It warns — slashed icon (mic.slash), "Accessibility: missing" and "Open
-# Accessibility Settings…" in the menu, a line in nevertype.log and macOS's own
-# prompt —, but whoever opens neither the menu nor the log concludes it is
-# installed.
+# without Accessibility the app cannot insert text. A trigger is now blocked
+# before recording and opens an alert with the repair path; the slashed icon,
+# menu and log repeat the same diagnosis.
 #
 # This script does NOT verify permissions, and says so out loud at the end. It
 # is not an implementation limitation: what matters is not TCC saying it
@@ -117,10 +115,9 @@ fi
 info "The part only you can verify"
 cat <<'MSG'
   Microphone and Accessibility were NOT verified here, and cannot be verified
-  from the outside. Without Accessibility the app opens and does not react to
-  the key; what it shows is the slashed icon (mic.slash) and, in the menu,
-  "Accessibility: missing" with the item "Open Accessibility Settings…". It is
-  the most likely failure mode of a fresh installation.
+  from the outside. Without Accessibility, a trigger is blocked before recording
+  and an alert offers to open the right System Settings page. The menu also says
+  "Accessibility: missing" and offers "Open Accessibility Settings…".
 
   Prove it by dictating:
 
@@ -129,6 +126,7 @@ cat <<'MSG'
     3. The text has to appear where the cursor is.
 
   Did it not appear? System Settings › Privacy & Security › Accessibility, and
-  turn on NeverType. After that, quit and reopen the app.
+  turn on NeverType. Try again; if macOS still reports it missing, quit and reopen
+  the app.
 MSG
 ok "structure verified"

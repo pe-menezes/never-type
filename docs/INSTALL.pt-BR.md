@@ -147,19 +147,21 @@ Duas, e o app pede as duas ao abrir. **As duas exigem a pessoa.**
 ### Acessibilidade: PARE E PEÇA
 
 Esta é a mais fácil de não notar, e é o modo de falha mais provável de uma
-instalação nova. Sem ela o app abre e **não reage à tecla**. Ele avisa (ícone
-cortado, `mic.slash`, "Accessibility: missing" e "Open Accessibility
-Settings…" no menu, uma linha em `nevertype.log` e o pedido do próprio
-macOS), mas nada disso chega a quem não abre o menu nem o log.
+instalação nova. Sem ela o app não consegue inserir texto. Se a pessoa tentar
+ditar mesmo assim, a gravação é bloqueada antes de capturar áudio, e um aviso
+oferece abrir a página certa dos Ajustes. O ícone cortado, a linha
+"Accessibility: missing" no menu e o `nevertype.log` repetem o diagnóstico.
 
 > Abra **Ajustes do Sistema › Privacidade e Segurança › Acessibilidade** e
 > **ligue o NeverType** na lista. Se ele não estiver lá, clique no **+** e escolha
 > `/Applications/NeverType.app`.
 >
-> Isso é o que deixa o app receber a tecla global. Sem isso ele abre e parece
-> funcionar, mas segurar a tecla não faz nada.
+> Isso é o que deixa o app enviar o comando de colar no cursor. Sem isso, tentar
+> ditar abre um aviso em vez de gravar um áudio que não poderá ser inserido.
 >
-> Depois de ligar, **encerre o NeverType pelo menu da bandeja e abra de novo**.
+> Depois de ligar, tente a tecla outra vez. Se o macOS ainda disser que a
+> permissão está ausente, **encerre o NeverType pelo menu da bandeja e abra de
+> novo**.
 
 Não continue sem que a pessoa confirme que fez.
 

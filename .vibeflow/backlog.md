@@ -461,21 +461,17 @@ medindo qualidade. Comparar os números vale mais que a impressão de que está 
 Geração e indexação por pasteboard num bloco só.
 *Evidência:* `.vibeflow/index.md` (Known Issues)
 
-### H3 · Não há CI; a alegação de isolamento de rede é verificada à mão — P
-Não existe `.github/` no repositório e nenhum teste toca rede: `grep -rn
-"URLSession\|CFNetwork\|otool" Sources/ Tests/ scripts/` volta vazio. O que
-sustenta "nada sai da máquina" hoje é o item de Definition of Done conferido a
-cada tarefa, mais a ausência de import de rede nas fontes — verificação humana,
-que vale enquanto alguém lembrar de fazer.
+### ✅ H3 · CI para build e testes no macOS, IMPLEMENTADO em 30/08
+`.github/workflows/ci.yml` roda em pull requests e em pushes para `main`. O job
+usa um runner macOS, compila o whisper.cpp no commit fixado pelo próprio
+`build-app.sh`, monta o app, executa a suíte Swift e confere o patch com
+`git diff --check`. Permissões do workflow são somente de leitura.
 
-O README afirmava "há teste de CI verificando isso no código e no binário".
-**Corrigido em 29/08/2026 por não ter lastro** — a frase de hoje (`README.md:15`)
-descreve a conferência manual, que é o que de fato existe. O item aqui é fechar a
-distância: um check que falhe sozinho quando alguém adicionar rede, em vez de
-depender de quem revisa notar.
-*Evidência:* `.github/` inexistente em 29/08/2026 · grep sem resultado em
-`Sources/`, `Tests/` e `scripts/` · `.vibeflow/conventions.md:118` (o Don't que
-já existe) · `README.md:15`
+A ausência de chamadas de rede no runtime continua sendo uma conferência do DoD,
+porque a suíte não prova isolamento de rede por si só. O CI fecha outra lacuna:
+build e testes deixam de depender de alguém lembrar de executá-los antes do
+merge.
+*Evidência:* `.github/workflows/ci.yml` · `scripts/build-app.sh` · `CLAUDE.md`
 
 ### ✅ H4 · Link quebrado para as limitações, no README — FEITO em 29/08
 `README.md` apontava para `#limitações`, mas o heading é "## Limitações

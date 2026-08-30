@@ -71,6 +71,22 @@ public final class HotkeyMonitor {
 
         public var isLatched: Bool { state == .latched }
 
+        /// Resolves whether the app accepted the `.start` action.
+        ///
+        /// A rejected start has already moved the state to `.holding`. Leaving it
+        /// there lets the following release arm the hands-free double-tap path for
+        /// a recording that never existed.
+        public mutating func resolveStart(accepted: Bool) {
+            guard !accepted else { return }
+            reset()
+        }
+
+        /// Abandons a gesture whose `.start` action was refused by the app.
+        /// The following key-up must land in idle, not arm the double-tap window.
+        public mutating func reset() {
+            state = .idle
+        }
+
         public mutating func handle(_ input: Input) -> [Action] {
             switch (state, input) {
 
@@ -178,7 +194,10 @@ public final class HotkeyMonitor {
             latch = Latch()
         }
     }
-    public var onEvent: (@MainActor (Event) -> Void)?
+    /// Returns whether `.pressed` actually started a recording. Other event
+    /// return values are ignored. A refusal resets the gesture in the monitor,
+    /// so every failure path gets the same state-machine cleanup.
+    public var onEvent: (@MainActor (Event) -> Bool)?
 
     private var globalMonitors: [Any] = []
     private var localMonitor: Any?
@@ -192,8 +211,11 @@ public final class HotkeyMonitor {
         self.trigger = trigger
     }
 
-    /// The Accessibility grant. Without it the global monitors simply receive no
-    /// events — and do not say so. The app would look broken in silence.
+    /// The Accessibility grant required for synthetic input.
+    ///
+    /// Do not infer it from the global monitor: macOS can still deliver the
+    /// modifier event while this is false, then refuse the ⌘V at the end. The
+    /// app queries the real permission before every recording attempt.
     public static var hasAccessibilityPermission: Bool {
         AXIsProcessTrusted()
     }
@@ -243,6 +265,7 @@ public final class HotkeyMonitor {
         latch = Latch()
     }
 
+
     private func handle(_ event: NSEvent) {
         switch event.type {
         case .flagsChanged:
@@ -260,10 +283,12 @@ public final class HotkeyMonitor {
     private func apply(_ actions: [Latch.Action]) {
         for action in actions {
             switch action {
-            case .start:  onEvent?(.pressed)
-            case .finish: onEvent?(.released)
-            case .cancel: onEvent?(.cancelled)
-            case .latch:  onEvent?(.latched)
+            case .start:
+                let accepted = onEvent?(.pressed) ?? false
+                latch.resolveStart(accepted: accepted)
+            case .finish: _ = onEvent?(.released)
+            case .cancel: _ = onEvent?(.cancelled)
+            case .latch:  _ = onEvent?(.latched)
             case .armTimeout(let after):
                 tapTimer?.invalidate()
                 // `assumeIsolated` is the legitimate case: the Timer is scheduled

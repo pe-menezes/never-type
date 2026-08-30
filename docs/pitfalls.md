@@ -209,6 +209,22 @@ defer { if !started { self.engine?.reset(); self.engine = nil } }
 
 ## macOS: things that vanish without an error
 
+### A global key event does not prove Accessibility is available
+
+The app checked Accessibility at launch and assumed the global modifier monitor
+would receive nothing without it. On a real installation, macOS still delivered
+the trigger: the app recorded the whole dictation, transcribed it and only then
+failed to post the synthetic ⌘V. The person saw every sign of success until no
+text appeared.
+
+The permission is now queried on every trigger. If it is missing, recording is
+blocked before audio is captured and a modal warning offers the exact System
+Settings page. A slashed menu icon and a log line are diagnostics, not feedback
+for an action the person just attempted.
+
+**Rule:** validate the permission at the operation it protects, and make a
+refusal reach the person without requiring them to open a menu or read a log.
+
 ### An `NSStatusItem` created before `setActivationPolicy` is discarded
 
 And the object keeps answering `isVisible = true` and `frame.width = 30`. The

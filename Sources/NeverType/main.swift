@@ -155,6 +155,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // `isVisible = true` and `frame.width = 30`, and still nothing is drawn.
     private var statusItem: NSStatusItem!
     private let monitor = HotkeyMonitor()
+    private var accessibilityAlertGate = PresentationGate()
     private let recorder = AudioRecorder(destination: lastRecordingURL())
     private let menu = NSMenu()
     private let overlay = RecordingOverlay()
@@ -245,7 +246,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let saved = HotkeyMonitor.Trigger.named(UserDefaults.standard.string(forKey: Self.triggerKey)) {
             monitor.trigger = saved
         }
-        monitor.onEvent = { [weak self] event in self?.handle(event) }
+        monitor.onEvent = { [weak self] event in self?.handle(event) ?? false }
         recorder.onLevel = { [weak self] level in self?.overlay.push(level: level) }
         recorder.onError = { [weak self] message in
             self?.overlay.hide()
@@ -326,30 +327,52 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Dictation cycle
 
-    private func handle(_ event: HotkeyMonitor.Event) {
+    /// Returns whether a `.pressed` event started recording. The monitor uses a
+    /// refusal to reset its own latch before the release can arm hands-free.
+    @discardableResult
+    private func handle(_ event: HotkeyMonitor.Event) -> Bool {
         switch event {
         case .pressed:
-            guard micAuthorized else {
+            switch DictationAttempt.decide(
+                microphoneAuthorized: micAuthorized,
+                accessibilityAuthorized: HotkeyMonitor.hasAccessibilityPermission
+            ) {
+            case .showAccessibilityWarning:
+                render(.blocked)
+                log("Accessibility not granted: recording blocked before capturing audio")
+                // Return the rejection before entering AppKit's nested modal loop.
+                // The monitor resets its latch synchronously from this result;
+                // only the next main-actor turn is allowed to present the alert.
+                Task { @MainActor [weak self] in
+                    self?.showAccessibilityRequiredAlert()
+                }
+                return false
+            case .showMicrophoneWarning:
                 render(.blocked)
                 log("microphone not authorized — dictation ignored")
-                return
+                return false
+            case .startRecording:
+                break
             }
             do {
                 try recorder.start()
                 Feedback.started()
                 render(.recording)
                 overlay.show()
+                return true
             } catch {
                 render(.blocked)
                 log("failed to start recording: \(error)")
+                return false
             }
         case .released:
+            guard recorder.isRecording else { return false }
             Feedback.stopped()
             let url = recorder.stop()
             render(.idle)
             guard url != nil else {
                 overlay.hide()
-                return
+                return false
             }
             // The pill stays on screen saying "working" until the text comes
             // out. Before, it went back to idle here, and the app spent the
@@ -384,17 +407,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.render(.blocked)
                 }
             }
+            return true
         case .latched:
             // The recording has been running since the first tap; here only
             // what keeps it alive changes — the state machine, not the key.
             Feedback.latched()
             log("hands-free locked. Tap \(monitor.trigger.label) to transcribe, Esc to discard.")
+            return true
         case .cancelled:
             Feedback.discarded()
             recorder.cancel()
             overlay.hide()
             render(.idle)
             log("cancelled: regular key pressed during the hold")
+            return true
         }
     }
 
@@ -541,13 +567,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Without Accessibility, the global monitors receive no events at all — and
-    /// do not say so. The app would sit mute looking broken, so this is said out loud.
+    /// Without Accessibility, the global monitors may still receive the modifier
+    /// event, but the synthetic paste cannot be posted. Checking only at launch
+    /// allowed a full recording and transcription to finish before apparently
+    /// doing nothing. The trigger now checks again; this launch warning remains
+    /// the first chance to explain what is missing.
     private func warnIfAccessibilityMissing() {
         guard !HotkeyMonitor.hasAccessibilityPermission else { return }
         render(.blocked)
-        log("Accessibility not granted: the global trigger will not work.")
+        log("Accessibility not granted: dictation is blocked until it is enabled.")
         HotkeyMonitor.requestAccessibilityPermission()
+    }
+
+    /// A trigger is an attempted action, so a changed icon or a menu line is not
+    /// enough feedback. This alert says that recording did not start and offers
+    /// the exact repair path instead of letting the user discover the permission
+    /// only after reading diagnostics elsewhere.
+    private func showAccessibilityRequiredAlert() {
+        guard accessibilityAlertGate.begin() else { return }
+        defer { accessibilityAlertGate.end() }
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "NeverType needs Accessibility access"
+        alert.informativeText = "Recording did not start. Enable NeverType in System Settings › Privacy & Security › Accessibility, then try again."
+        alert.addButton(withTitle: "Open System Settings")
+        alert.addButton(withTitle: "Not Now")
+        if alert.runModal() == .alertFirstButtonReturn {
+            openAccessibilitySettings()
+        }
     }
 
     // MARK: - Menu

@@ -42,7 +42,8 @@ bash scripts/install.sh
 ```
 
 On the first launch macOS asks for Microphone and Accessibility. The app needs
-both, and until Accessibility is granted, holding the key does nothing.
+both. Until Accessibility is granted, a dictation attempt is blocked before
+recording and an alert offers to open the right System Settings page.
 
 [`docs/INSTALL.md`](docs/INSTALL.md) has the whole walkthrough, the model
 included, and it was written for a coding agent to execute: send it the link to
@@ -82,7 +83,7 @@ binary side, and what nobody has run.
 
 ```bash
 bash scripts/build-app.sh     # compiles whisper.cpp into vendor/
-swift build && swift test     # 106 tests, in swift-testing
+swift build && swift test     # 109 tests, in swift-testing
 ```
 
 `vendor/` is not versioned. Without it the build fails with `could not build

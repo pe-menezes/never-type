@@ -4,10 +4,11 @@
 
 ## Idioma
 
-Código, tipos e APIs em inglês. **Comentários, mensagens de erro, texto de
-interface e documentação em português.** Termos técnicos ficam em inglês dentro
-do português ("o tap roda na thread de áudio"). Os nomes de arquivo em `docs/` e
-`.vibeflow/` também são em português.
+Código, tipos, APIs, comentários, mensagens de erro, texto de interface, testes,
+scripts, documentação pública e commits em inglês. A `.vibeflow/` fica em
+português porque é a memória de trabalho de quem conduz o repositório.
+`README.md` e `docs/INSTALL.md` têm espelhos em português, que mudam junto com o
+original: `README.pt-BR.md` e `docs/INSTALL.pt-BR.md`.
 
 ## Comentários registram a decisão e o custo do erro
 
@@ -51,16 +52,16 @@ estática em `Package.swift`.
 - Tipos e funções em inglês, `UpperCamelCase` e `lowerCamelCase`
 - Arquivos de fonte com o nome do tipo principal: `TextInjector.swift`
 - Scripts em kebab-case com verbo: `build-app.sh`, `fetch-model.sh`
-- Testes descrevem o comportamento em português, em frase:
-  `@Test("cancelar limpa as amostras da memória, não só o arquivo")`
-- Suítes nomeiam o assunto: `@Suite("Ciclo do arquivo de gravação")`
+- Testes descrevem o comportamento em inglês, em frase:
+  `@Test("cancelling clears the samples from memory, not just the file")`
+- Suítes nomeiam o assunto em inglês: `@Suite("Recording file cycle")`
 
 ## Swift
 
 - Swift 6, concorrência estrita. Isolamento no tipo (ver `patterns/isolamento-tipado.md`)
 - `public` só no que o executável ou os testes usam
 - Erros são `enum ...Error: Error, CustomStringConvertible`, com `description` em
-  português dizendo a ação de saída
+  inglês dizendo a ação de saída
 - Sem força de desempacotamento (`!`) fora de literais comprovadamente seguros
 - `guard` para saída antecipada; `defer` para liberar recurso, inclusive em erro
 - Doc comment (`///`) em todo `public`, explicando o porquê, não o quê
