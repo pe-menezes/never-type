@@ -63,8 +63,9 @@ If missing, run `xcode-select --install` and tell the person:
 > **Install** and accept the terms. It takes a few minutes. Let me know when it
 > finishes.
 
-Full Xcode is **not** required. Confirm with `xcode-select -p` before moving on;
-do not accept "I already installed it" without checking.
+They carry the Swift 6 toolchain and the macOS SDK the build uses. Full Xcode is
+**not** required. Confirm with `xcode-select -p` before moving on; do not accept
+"I already installed it" without checking.
 
 ### cmake
 
@@ -87,8 +88,9 @@ statically and signs. **It takes a few minutes the first time.** That is normal;
 do not interrupt it.
 
 `install.sh` refuses early what cannot be fixed later (non-Darwin, non-arm64,
-`/Applications` not writable), installs, verifies the signature and checks the
-model. It only builds if `build/NeverType.app` does not exist yet: after changing
+`/Applications` not writable), installs, verifies the signature, checks the
+model and opens the app. It only builds if `build/NeverType.app` does not exist
+yet: after changing
 code, or after a `git pull` done by hand, run `build-app.sh` first, otherwise it
 installs the old `build/` without a word. `update.sh` already does this in the
 right order.

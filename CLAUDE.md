@@ -107,5 +107,5 @@ item in `.vibeflow/backlog.md`.
 The app is signed with a local certificate, and macOS ties Microphone and
 Accessibility to that certificate. Whoever already runs code on the machine can
 use it. It is inherent to a local certificate; the alternative makes macOS
-revoke the permission on every build. See the README's Security section before
-touching `scripts/build-app.sh`.
+revoke the permission on every build. Read "Signing, and what it costs" in
+`docs/reference.md` before touching `scripts/build-app.sh`.

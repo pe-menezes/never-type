@@ -63,7 +63,8 @@ Faltando, rode `xcode-select --install` e diga à pessoa:
 > Comando. Clique em **Instalar** e aceite os termos. São alguns minutos. Me
 > avise quando terminar.
 
-Xcode completo **não** é necessário. Confirme com `xcode-select -p` antes de
+Elas trazem a toolchain do Swift 6 e o SDK do macOS que o build usa. Xcode
+completo **não** é necessário. Confirme com `xcode-select -p` antes de
 seguir — não aceite "já instalei" sem conferir.
 
 ### cmake
@@ -86,7 +87,8 @@ bash scripts/install.sh
 assina. **Leva alguns minutos na primeira vez** — é normal, não interrompa.
 
 `install.sh` recusa cedo o que não tem conserto depois (não-Darwin, não-arm64,
-`/Applications` sem escrita), instala, verifica a assinatura e confere o modelo.
+`/Applications` sem escrita), instala, verifica a assinatura, confere o modelo e
+abre o app.
 Ele só compila se `build/NeverType.app` ainda não existir: depois de mudar código
 — ou de um `git pull` feito à mão —, rode `build-app.sh` antes, senão ele instala
 o `build/` velho sem avisar. O `update.sh` já faz isso na ordem certa.

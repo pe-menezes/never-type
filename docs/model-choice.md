@@ -1,7 +1,8 @@
 # Why `large-v3-turbo`
 
 Three candidates, measured on real recordings of spontaneous Portuguese speech
-with English technical terms in the middle, not on lab audio.
+with English technical terms in the middle, not on lab audio. A whole dictation
+in another language sits outside that coverage.
 
 ## The rule, applied in this order
 
@@ -81,6 +82,11 @@ In the app the projection did not hold: a 31 s dictation, two windows, measured
 from the app's log, ~614 ms fixed plus ~22 ms per second of speech). Within the
 ceiling. Why the bench projects more than the app measures was not investigated,
 and above two windows nobody has measured.
+
+Inside a single window the cost stays nearly flat: the four dictations of that
+same reading, from 1.5 s to 19.4 s of speech, cost 612 to 698 ms. It is a
+working note read off a log, not a reproducible bench. The app sets no duration
+limit and shows no warning when a dictation crosses into a second window.
 
 It is not a defect: dictation is short speech, and under 30 s every model passes
 with room to spare. But it is a real limit, and speaking for more than half a

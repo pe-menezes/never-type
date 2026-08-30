@@ -380,7 +380,7 @@ honesta no README, no lugar do "não há vocabulário customizado" que estava l�
 
 ## 6. Higiene
 
-### H13 · O README passou no cold-read de forma e falhou no de estrutura — G
+### ✅ H13 · O README passou no cold-read de forma e falhou no de estrutura — FEITO em 30/08
 Medido em 29/08/2026 por dois leitores limpos, com tetos declarados antes de o
 texto em inglês existir. Rodada 1 sobre `e8044dd`: 4 de 14 tetos estourados
 (antítese, família inteira, 41 contra 6; clivada 8 contra 2; meta-comentário 2
@@ -399,17 +399,47 @@ instrução de forma. Rodada 2: **8 de 14 estourados**, e cinco famílias piorar
 | auto-plágio (famílias) | 12 | 8 | 0 |
 | travessão · ponto e vírgula de oposição | 0 · 0 | 0 · 0 | 0 |
 
-**O que a medição ensina, e é o motivo de este item ser G:** proibir a fivela
-NOMEADA funciona (ponto e vírgula de oposição foi proibido por escrito e ficou em
-0), proibir a família não funciona, porque a figura migra pra construção que
-nenhuma lista antecipou. Aqui migrou pra contraste sem negação nenhuma (24 casos)
-e pra frase copular (19 aberturas "The X is"). O defeito restante é
-**arquitetural**: 21 parágrafos no mesmo molde (frase-tese em negrito, 2 a 4
-frases de explicação, oração de julgamento no fim), 55 spans em negrito em 348
-linhas, e o frame binário anunciado antes de ser executado ("The two lists do
-different jobs", "there are two ways"; 23 ocorrências do frame "N coisas"). Isso
-não se conserta com teto numérico: exige reescrever a arquitetura das seções, uma
-de cada vez, e medir de novo.
+**O que a medição ensinou, e é o motivo de o conserto ter sido arquitetural:**
+proibir a fivela NOMEADA funciona (ponto e vírgula de oposição foi proibido por
+escrito e ficou em 0), proibir a família não funciona, porque a figura migra pra
+construção que nenhuma lista antecipou. Aqui migrou pra contraste sem negação
+nenhuma (24 casos) e pra frase copular (19 aberturas "The X is"). O defeito
+restante era **arquitetural**: 21 parágrafos no mesmo molde (frase-tese em
+negrito, 2 a 4 frases de explicação, oração de julgamento no fim), 55 spans em
+negrito em 348 linhas, e o frame binário anunciado antes de ser executado ("The
+two lists do different jobs", "there are two ways"; 23 ocorrências do frame "N
+coisas"). Teto numérico não conserta isso. O que consertou foi reescrever o
+arquivo a partir de um inventário de fatos com destino declarado, um por um.
+
+**Feito em 30/08/2026.** O README foi de 3.651 para 651 palavras, de 9 seções H2
+para 7, de 56 spans em negrito para 2, com 0 ponto e vírgula, 0 travessão e 0
+aspa curva. O `README.pt-BR.md` acompanha (675 palavras, 2 negritos) e perdeu os
+41 travessões que tinha. A estrutura nova responde três perguntas de quem chega
+de fora: o que é, se serve, como instalar. Todo o resto saiu para `docs/`.
+
+Nenhum fato foi cortado sem destino. `docs/reference.md` nasceu neste turno e
+recebeu o menu item a item, a gravação e a pílula, a inserção com a checagem de
+foco e o secure input, os dois ajustes de `UserDefaults` com faixa e padrão, o
+vocabulário, o inventário de disco, o grep de rede de 29/08 com os comandos do
+lado do binário e a nota de que ninguém os rodou, a assinatura com as três
+mitigações e o Developer ID, a tabela de arquitetura e o mapa do repositório.
+`docs/model-choice.md` recebeu a faixa de 612 a 698 ms dentro de uma janela, a
+ausência de limite e de aviso de duração, e a fronteira da cobertura da bancada
+(ditado inteiro em outro idioma). `docs/INSTALL.md` recebeu o que o `install.sh`
+faz no fim (abre o app) e o que as Command Line Tools trazem (toolchain do
+Swift 6 e SDK), com o espelho `INSTALL.pt-BR.md` junto.
+
+**O que ficou:** a conferência é minha, não de leitor limpo. Contei à mão no
+arquivo novo (0 antítese, 0 clivada de abertura, 0 sentença-veredito, 0
+auto-plágio), e o instrumento de 29/08 (`.cache/readme-metrics.py`) não rodou
+neste turno porque o sandbox recusa executá-lo. Um cold-read de terceiro em cima
+do README de hoje é o que fecha o ciclo de medição. E o `docs/reference.md` nunca
+passou por cold-read nenhum: ele herdou a prosa do README antigo em registro de
+referência, e as famílias de fivela não foram medidas lá.
+*Evidência:* `README.md` e `README.pt-BR.md` em 30/08/2026 (`wc -w`: 651 e 675;
+negritos: 2 e 2; `grep -c ';'`: 0 e 0) · `docs/reference.md` novo ·
+`docs/model-choice.md`, `docs/INSTALL.md` e `docs/INSTALL.pt-BR.md` alterados ·
+relatórios do cold-read em `.cache/coldread-r1.md` e `.cache/coldread-r2.md`
 
 Encerrado por decisão do Pedro em 29/08 depois da rodada 2, com o placar
 publicado como saiu: a medição do catálogo diz que da terceira rodada em diante o
