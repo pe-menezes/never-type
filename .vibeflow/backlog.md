@@ -462,10 +462,22 @@ Geração e indexação por pasteboard num bloco só.
 *Evidência:* `.vibeflow/index.md` (Known Issues)
 
 ### ✅ H3 · CI para build e testes no macOS, IMPLEMENTADO em 30/08
-`.github/workflows/ci.yml` roda em pull requests e em pushes para `main`. O job
-usa um runner macOS, compila o whisper.cpp no commit fixado pelo próprio
-`build-app.sh`, monta o app, executa a suíte Swift e confere o patch com
-`git diff --check`. Permissões do workflow são somente de leitura.
+`.github/workflows/ci.yml` roda em pull requests e em pushes para `main`. A
+matriz cobre `macos-15` e `macos-26`, incluindo o SDK atual onde mudanças de
+`Sendable` podem aparecer antes. Cada job compila o whisper.cpp no commit fixado
+pelo próprio `build-app.sh`, monta o app, executa a suíte Swift e confere o patch
+com `git diff --check`. Permissões do workflow são somente de leitura.
+
+Builds limpos têm quatro diagnósticos conhecidos, renderizados como oito linhas
+`warning:` em release e oito em debug. O CI aceita essa baseline e falha se a
+contagem líquida crescer. Ele não compara fingerprints: um warning novo que
+substitua um removido pode manter o total em oito. Zerar a dívida existente e
+adotar fingerprints são trabalhos separados.
+
+A matriz duplica os jobs e os minutos de runner macOS deste repositório privado.
+O custo efetivo depende da franquia e do plano da conta; a cobertura dos dois SDKs
+foi priorizada porque esse tipo de mudança já quebrou o build local sem quebrar no
+SDK anterior.
 
 A ausência de chamadas de rede no runtime continua sendo uma conferência do DoD,
 porque a suíte não prova isolamento de rede por si só. O CI fecha outra lacuna:
