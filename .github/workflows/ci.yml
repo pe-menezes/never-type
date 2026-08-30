@@ -22,8 +22,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     env:
-      # Four known diagnostics render as eight warning lines. Do not add debt.
-      MAX_WARNING_LINES: 8
+      # Parallel Swift builds may repeat diagnostics. Gate unique source warnings.
+      MAX_WARNING_DIAGNOSTICS: 4
 
     steps:
       - name: Check out repository
@@ -32,23 +32,26 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Test warning fingerprint counter
+        run: python3 scripts/test-count-swift-warnings.py
+
       - name: Bootstrap whisper.cpp and build the app
         run: |
           set -o pipefail
           swift package clean
           bash scripts/build-app.sh 2>&1 | tee "$RUNNER_TEMP/release-build.log"
-          warnings="$(grep -c 'warning:' "$RUNNER_TEMP/release-build.log" || true)"
-          echo "Release warning lines: $warnings/$MAX_WARNING_LINES"
-          (( warnings <= MAX_WARNING_LINES ))
+          warnings="$(python3 scripts/count-swift-warnings.py "$RUNNER_TEMP/release-build.log")"
+          echo "Unique release warnings: $warnings/$MAX_WARNING_DIAGNOSTICS"
+          (( warnings <= MAX_WARNING_DIAGNOSTICS ))
 
       - name: Run Swift Testing suite
         run: |
           set -o pipefail
           swift package clean
           swift test --disable-xctest --enable-swift-testing 2>&1 | tee "$RUNNER_TEMP/debug-build.log"
-          warnings="$(grep -c 'warning:' "$RUNNER_TEMP/debug-build.log" || true)"
-          echo "Debug warning lines: $warnings/$MAX_WARNING_LINES"
-          (( warnings <= MAX_WARNING_LINES ))
+          warnings="$(python3 scripts/count-swift-warnings.py "$RUNNER_TEMP/debug-build.log")"
+          echo "Unique debug warnings: $warnings/$MAX_WARNING_DIAGNOSTICS"
+          (( warnings <= MAX_WARNING_DIAGNOSTICS ))
 
       - name: Check patch hygiene
         env:

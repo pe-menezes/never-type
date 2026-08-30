@@ -468,11 +468,16 @@ matriz cobre `macos-15` e `macos-26`, incluindo o SDK atual onde mudanças de
 pelo próprio `build-app.sh`, monta o app, executa a suíte Swift e confere o patch
 com `git diff --check`. Permissões do workflow são somente de leitura.
 
-Builds limpos têm quatro diagnósticos conhecidos, renderizados como oito linhas
-`warning:` em release e oito em debug. O CI aceita essa baseline e falha se a
-contagem líquida crescer. Ele não compara fingerprints: um warning novo que
-substitua um removido pode manter o total em oito. Zerar a dívida existente e
-adotar fingerprints são trabalhos separados.
+Builds limpos têm quatro diagnósticos conhecidos. Como o compilador paralelo pode
+repetir o mesmo diagnóstico, `scripts/count-swift-warnings.py` deduplica
+fingerprints completos de warnings de fonte (caminho, linha, coluna e mensagem) e
+warnings globais canônicos (`warning: mensagem`) antes de aplicar a baseline de
+quatro. A linha inteira precisa corresponder ao formato de fonte ou global; caminhos
+Swift relativos com espaços são válidos, enquanto linhas de contexto não contam.
+Erro de leitura ou UTF-8 inválido falha o job. O gate detecta uma mensagem nova
+no mesmo local, mas ainda mede a contagem líquida: um warning novo que substitua
+um removido pode manter o total em quatro. Zerar a dívida existente é trabalho
+separado.
 
 A matriz duplica os jobs e os minutos de runner macOS deste repositório privado.
 O custo efetivo depende da franquia e do plano da conta; a cobertura dos dois SDKs
