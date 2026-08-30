@@ -126,11 +126,21 @@ in the menu reads `CPU (SLOW)`. When the model fails to load, the same line
 carries the error and the script to run.
 
 **The clipboard is given back.** The text goes in by pasting, and whatever you
-had copied comes back right after, images, files and HTML included. If the
+had copied comes back 0.6 s later, images, files and HTML included. The app
+reads the text back out of the clipboard before it posts the ⌘V, so a paste that
+would have landed with your old contents does not happen at all. If the
 insertion cannot happen, the app signals it with the **2 s slash**: the icon
 shows `mic.slash` for two seconds, then returns to idle, and the log has the
 reason. The text stays under **Copy Last Transcription**, in the menu bar menu,
 and in `historico.json` (see [What stays on disk](#what-stays-on-disk)).
+
+**The ⌘V only goes out when there is somewhere for it to land.** Before pasting,
+the app asks macOS what has the focus. On a button, an open menu or an image, a
+⌘V is an arbitrary shortcut in the application in front, so it is not posted,
+and you get the 2 s slash with the text on the clipboard and in the menu. The
+check answers "paste" whenever it is unsure, which is most of what you dictate
+into. [Known limitations](#known-limitations) says how far it reaches and how to
+turn it off.
 
 ### In the menu bar menu
 
@@ -181,7 +191,7 @@ and the hands-free summary. Then:
 | Model license | MIT, code **and** weights, by OpenAI |
 | Capture | `AVAudioEngine`, converted to 16 kHz mono |
 | Global key | `NSEvent` global monitor in listen mode, and the event still reaches the application |
-| Insertion | clipboard + synthetic ⌘V |
+| Insertion | clipboard + synthetic ⌘V, with the focused element checked first |
 
 The model is loaded once at launch and warmed up on one second of silence, and
 each dictation then pays the inference alone. Transcription is Portuguese only
@@ -236,12 +246,41 @@ an ordinary text field means some other process holds the flag. While the flag
 is on, NeverType skips the ⌘V, leaves the text on the clipboard (marked as
 concealed) and in the menu, and signals with the 2 s slash.
 
-**A clipboard manager may keep the dictation.** On insertion the text is marked
-with `org.nspasteboard.ConcealedType`. Raycast and Maccy honor the mark, and
-whether your manager does decides if every dictation ends up in its history.
-**"Copy Last Transcription" and the History items copy like a plain ⌘C**,
-unmarked, and the clipboard keeps the text, since those are copies you asked
-for, and any manager records them.
+**Your clipboard holds the dictation for 0.6 s, and nobody measured that
+number.** Applications read the clipboard asynchronously after a ⌘V, so the app
+waits before it gives your contents back. Waiting too little pastes what you had
+copied before, inside your document. Waiting too long keeps your own clipboard
+busy. The number is yours to set, anywhere from 0.1 s to 5 s:
+
+```bash
+defaults write com.nevertype.app clipboardRestoreDelay -float 1.2
+```
+
+espanso gives the clipboard back after 300 ms and QuiCopy after 100 ms, which
+puts 0.6 s at twice the larger of the two. An attempt to replace the timer with
+a signal from the system is written up in
+`.vibeflow/specs/devolucao-observada-do-pasteboard.md`: it worked, and it broke
+pasting in Slack. During those 0.6 s the text sits on the clipboard marked with
+`org.nspasteboard.ConcealedType`. Raycast and Maccy honor the mark, and whether
+your manager does decides if every dictation ends up in its history. **"Copy
+Last Transcription" and the History items copy like a plain ⌘C**, unmarked, and
+the clipboard keeps the text, since those are copies you asked for, and any
+manager records them.
+
+**The focus check catches controls and gives up on everything else.** Before
+pasting, the app asks the Accessibility API what has the focus, and it holds the
+⌘V back on a positive answer alone: a button, a checkbox, a slider, an image, a
+menu, a menu bar item. A text field, a text area, a combo box, and anything whose
+value macOS reports as settable, get the paste. So does everything else: an app
+with no Accessibility support, an app that answers with a role nobody listed, a
+terminal that draws its own screen, a list or a table where a cell may be
+editable. That is deliberate. A check that refuses where you could have typed
+leaves you with a dictation you already spoke and an app that did nothing, which
+is worse than the blind ⌘V it replaced. To turn it off:
+
+```bash
+defaults write com.nevertype.app checkFocusBeforePaste -bool false
+```
 
 **Pasting replaces the selection.** If text is selected in the field when the
 dictation lands, it goes in over that selection, the same way a ⌘V would.
@@ -300,9 +339,12 @@ reach of anyone who can already read the file.
 **Clear History** deletes `historico.json` and `last.wav`, the two files that
 hold what you said.
 
-Outside that folder, `UserDefaults` (domain `com.nevertype.app`) holds three
-preferences: the key, the sounds toggle and the pill's position. The
-`ultima-transcricao.txt` from earlier versions is deleted at launch.
+Outside that folder, `UserDefaults` (domain `com.nevertype.app`) holds five
+preferences: the key, the sounds toggle, the pill's position,
+`clipboardRestoreDelay` and `checkFocusBeforePaste`. None of them holds text.
+The last two have no menu item, and the log line written at launch
+(`insertion: …`) prints the values in effect. The `ultima-transcricao.txt` from
+earlier versions is deleted at launch.
 
 **The app runs with the hardened runtime**, which turns on library validation.
 The process then refuses to load code that is not signed along with it.
@@ -343,7 +385,7 @@ swift build && swift test
 `could not build Objective-C module 'CWhisper'`, a message that does not say the
 cause.
 
-86 tests in **swift-testing**, which ships with the Command Line Tools. XCTest
+106 tests in **swift-testing**, which ships with the Command Line Tools. XCTest
 ships with full Xcode alone.
 
 [`docs/pitfalls.md`](docs/pitfalls.md) lists the 24 things that broke in this

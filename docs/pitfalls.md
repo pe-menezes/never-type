@@ -239,6 +239,22 @@ can turn it on (including one with no interface, in the background), and some
 apps turn it on and forget to turn it off. An app that depends on it to decide
 whether to paste can stay mute indefinitely because of another program.
 
+That failure shape decided the design of the second query of the same family,
+added on 2026-08-30: asking the Accessibility API whether the focused element
+takes text, so the ⌘V does not go out as an arbitrary shortcut. The API answers
+for a button and a menu item, and on an Electron window, a Java window, a
+terminal that draws its own screen or an app with no Accessibility support it
+answers something nobody can classify. A check like that has two ways to be
+wrong, and they do not cost the same: pasting where it should not have leaves a
+stray ⌘V, and refusing where it should have pasted leaves the person with a
+dictation they already spoke and an app that did nothing. So only a positive
+"this takes no text" stops the paste. An API error, a missing permission, a
+timeout and an unrecognized role all mean "paste", and the whole check is
+switchable off with a `defaults write`.
+
+**Rule:** a check whose false negative makes the app look broken answers "yes"
+whenever it does not know, and it ships with a way to turn it off.
+
 ### `security find-identity -v -p codesigning` filters by trust
 
 A self-signed certificate never appears in that list, **even while working
@@ -285,6 +301,28 @@ gives back the original contents, not the intermediate ones) and the
 
 And mark the item with `org.nspasteboard.ConcealedType`, or every insertion
 enters the history of clipboard managers and survives the restoration.
+
+The delay itself has no right value that anyone here measured, and it was fixed
+at 0.6 s until 2026-08-30. Two things came out of looking at what other tools
+do. First, everybody times it: espanso restores after 300 ms, QuiCopy after
+100 ms, and the one attempt in this repository to replace the timer with a
+signal from the system worked and broke pasting in Slack (that is its own story,
+in `.vibeflow/specs/devolucao-observada-do-pasteboard.md`). A number nobody
+measured belongs to the person running the app, so it moved into a
+`UserDefaults` key.
+
+Second, espanso also waits 300 ms **before** firing the paste shortcut, because
+firing it before the content is on the clipboard makes the operation fail. That
+one was not copied. `NSPasteboard.writeObjects` is synchronous, its result was
+already checked, and the item carries concrete bytes with no data provider to
+defer anything: what was missing was confirming it by effect. Reading the string
+back out of the pasteboard and comparing it costs one round trip and proves what
+a 300 ms wait only assumes. A wait of 300 ms would also have been half the cost
+of the whole dictation.
+
+**Rule:** when a fixed delay is standing in for a check, look for the check
+first. When there is no check to be had, the number belongs to whoever pays for
+it being wrong.
 
 ### A privacy comment ages with nobody watching
 

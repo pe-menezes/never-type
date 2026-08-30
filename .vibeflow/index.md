@@ -28,7 +28,7 @@ Os artefatos pesados (`models/`, `vendor/`, `fixtures/`,
   flutuante de gravação, janela do vocabulário, ator dono do modelo. Orquestra,
   não decide.
 - **`Sources/CWhisper/`** — module map apontando para `vendor/whisper`.
-- **`Tests/NeverTypeCoreTests/`** — 86 testes em swift-testing.
+- **`Tests/NeverTypeCoreTests/`** — 106 testes em swift-testing.
 - **`scripts/`** — bancada de latência, build e assinatura, instalação,
   verificação e atualização.
 - **`docs/`** — armadilhas encontradas e a escolha do modelo, com os números.
@@ -111,10 +111,13 @@ patterns:
   projeto de 17 fontes, e é razoável para manutenção. As quatro partes
   implementadas precisaram de 5 a 9 arquivos cada, porque construíam do zero.
   Spec nova de manutenção deve caber em 4; spec que cria subsistema, não.
-- **O atraso de 0,6 s antes de devolver a área de transferência é um chute**, não
-  uma medição. Modo de falha: colar conteúdo antigo dentro do documento de alguém.
-- **O ⌘V é postado às cegas** — com o foco num app sem campo editável, vira
-  atalho arbitrário no app da frente.
+- **O atraso de 0,6 s antes de devolver a área de transferência continua sem
+  medição**, e desde 30/08 é ajustável pela pessoa (`clipboardRestoreDelay`), com
+  0,6 s de padrão. O ⌘V agora só sai depois que o texto é lido de volta do
+  pasteboard. Falta uso real (backlog D1).
+- **O ⌘V consulta o elemento em foco desde 30/08** (`PasteTarget`) e só é retido
+  diante de uma resposta positiva de "não aceita texto". Erro, timeout e papel
+  desconhecido colam, de propósito. Falta uso real (backlog D2).
 - **`IsSecureEventInputEnabled` é flag global da sessão**, não "campo de senha em
   foco". Qualquer processo pode ligá-la e esquecer de desligar.
 - **Cada ditado bloqueia uma thread do pool cooperativo por ~600 ms.**

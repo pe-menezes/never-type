@@ -114,10 +114,19 @@ lançamento — o ícone abre cortado e o log avisa; sem modelo válido, o ícon
 cortado e a linha "Model:" do menu traz a mensagem com o script a rodar.
 
 **A área de transferência é devolvida.** O texto entra por colagem, então o que
-você tinha copiado volta logo depois — inclusive imagem, arquivo e HTML, não só
-texto. Se a inserção não puder acontecer, o ícone fica cortado por 2 s e o texto
-não se perde: fica em **Copy Last Transcription**, no menu da bandeja, e em
-`historico.json` (ver [O que fica em disco](#o-que-fica-em-disco)).
+você tinha copiado volta 0,6 s depois, inclusive imagem, arquivo e HTML. Antes de
+postar o ⌘V o app lê o texto de volta da área de transferência, então uma colagem
+que fosse cair com o seu conteúdo antigo não chega a acontecer. Se a inserção não
+puder acontecer, o ícone fica cortado por 2 s e o texto não se perde: fica em
+**Copy Last Transcription**, no menu da bandeja, e em `historico.json` (ver
+[O que fica em disco](#o-que-fica-em-disco)).
+
+**O ⌘V só sai quando há onde ele cair.** Antes de colar, o app pergunta ao macOS
+o que está em foco. Num botão, num menu aberto ou numa imagem, um ⌘V é atalho
+arbitrário no app da frente, então ele não é postado: você recebe o ícone cortado
+por 2 s, com o texto na área de transferência e no menu. Na dúvida a checagem
+responde "cole", que é a maior parte do que você dita. As
+[Limitações](#limitações-conhecidas) dizem até onde ela alcança e como desligar.
 
 ### No menu da bandeja
 
@@ -166,7 +175,7 @@ speak)") e o resumo do mãos-livres. Depois:
 | Licença do modelo | MIT — código **e** pesos, pela OpenAI |
 | Captura | `AVAudioEngine`, convertido para 16 kHz mono |
 | Tecla global | `NSEvent` em modo escuta, sem interceptar |
-| Inserção | área de transferência + ⌘V sintético |
+| Inserção | área de transferência + ⌘V sintético, com o elemento em foco conferido antes |
 
 O modelo é carregado uma vez no lançamento e aquecido com 1 s de silêncio, então
 cada ditado paga só a inferência. Só transcreve **português**: o idioma é fixo no
@@ -218,12 +227,41 @@ desligar. Enquanto ela estiver ligada o NeverType não cola: deixa o texto na á
 de transferência (marcado como oculto) e no menu, o ícone fica cortado por 2 s e
 o log diz o que aconteceu. Se você não está num campo de senha, foi outro app.
 
-**Gestor de clipboard pode guardar o ditado.** Na inserção o texto é marcado com
+**A sua área de transferência fica com o ditado por 0,6 s, e ninguém mediu esse
+número.** Aplicativos leem a área de transferência de forma assíncrona depois do
+⌘V, então o app espera antes de devolver o seu conteúdo. Esperar de menos cola o
+que você tinha copiado antes, dentro do seu documento. Esperar demais deixa a sua
+própria área de transferência ocupada. O número é seu, de 0,1 s a 5 s:
+
+```bash
+defaults write com.nevertype.app clipboardRestoreDelay -float 1.2
+```
+
+O espanso devolve depois de 300 ms e o QuiCopy depois de 100 ms, o que põe os
+0,6 s no dobro do maior dos dois. A tentativa de trocar o cronômetro por um sinal
+do sistema está registrada em
+`.vibeflow/specs/devolucao-observada-do-pasteboard.md`: funcionou, e quebrou a
+colagem no Slack. Durante esses 0,6 s o texto fica marcado com
 `org.nspasteboard.ConcealedType`, que Raycast e Maccy respeitam; gestores que
 ignoram a marca vão registrar cada ditado no histórico deles. A exceção é sua:
 **"Copy Last Transcription" e os itens do History copiam sem a marca e sem
-devolver a área de transferência** — é uma cópia que você pediu, então o texto
-fica lá e entra no histórico de qualquer gestor.
+devolver a área de transferência**, porque é uma cópia que você pediu, então o
+texto fica lá e entra no histórico de qualquer gestor.
+
+**A checagem de foco pega controles e desiste do resto.** Antes de colar, o app
+pergunta à API de Acessibilidade o que está em foco, e segura o ⌘V só diante de
+uma resposta positiva: botão, caixa de seleção, controle deslizante, imagem,
+menu, item de menu. Campo de texto, área de texto, combo box e qualquer coisa
+cujo valor o macOS diga ser gravável recebem a colagem. Todo o resto também
+recebe: app sem suporte a Acessibilidade, app que responde com um papel que
+ninguém listou, terminal que desenha a própria tela, lista ou tabela em que uma
+célula pode ser editável. Isso é de propósito. Uma checagem que recusa onde dava
+para digitar deixa você com um ditado já falado e um app que não fez nada, o que
+é pior que o ⌘V às cegas que ela substituiu. Para desligar:
+
+```bash
+defaults write com.nevertype.app checkFocusBeforePaste -bool false
+```
 
 **Colar substitui a seleção.** Comportamento normal de colar, mas surpreende.
 
@@ -251,9 +289,12 @@ guardaria a chave ao lado do arquivo, na mesma máquina:
 - `vocabulario.json` — os termos e substituições que você cadastrou.
 - `models/` — o modelo, 547 MB.
 
-Fora dessa pasta só há preferências em `UserDefaults` (domínio
-`com.nevertype.app`): tecla, sons e posição da pílula, sem texto. O
-`ultima-transcricao.txt` de versões anteriores é apagado no lançamento.
+Fora dessa pasta só há cinco preferências em `UserDefaults` (domínio
+`com.nevertype.app`): tecla, sons, posição da pílula, `clipboardRestoreDelay` e
+`checkFocusBeforePaste`. Nenhuma guarda texto. As duas últimas não têm item de
+menu, e a linha de log escrita no lançamento (`insertion: …`) mostra os valores
+em vigor. O `ultima-transcricao.txt` de versões anteriores é apagado no
+lançamento.
 
 **O app roda com hardened runtime**, que liga a validação de bibliotecas: o
 processo recusa carregar código que não venha assinado junto com ele. Isso importa
@@ -291,8 +332,8 @@ swift build && swift test
 `vendor/` não é versionado. Sem ele o `swift build` falha com
 `could not build Objective-C module 'CWhisper'` — mensagem que não diz a causa.
 
-86 testes em **swift-testing**, não XCTest — o XCTest só existe com o Xcode
-completo instalado, e este projeto compila com Command Line Tools.
+106 testes em **swift-testing**. O XCTest só existe com o Xcode completo
+instalado, e este projeto compila com Command Line Tools.
 
 Se você vai mexer no código, leia [`docs/pitfalls.md`](docs/pitfalls.md)
 antes. São os erros que este projeto já cometeu, com o custo medido de cada um —

@@ -31,35 +31,100 @@ Spec: `.vibeflow/specs/abrir-com-o-sistema.md`
 Estes quatro são os únicos itens do backlog que causam **dano ao usuário**, não
 apenas incômodo. Por isso vêm antes de tudo, inclusive do streaming.
 
-### D1 · A devolução do clipboard é um chute de 0,6 s — P
-`TextInjector.restoreDelay = 0.6` nunca foi medido. O comentário no código
-admite: *"generoso de propósito"*. Se o app de destino ler o pasteboard depois
-disso, ele cola **o conteúdo antigo da pessoa** dentro do documento dela.
+### ✅ D1 · A devolução do clipboard é um chute de 0,6 s · IMPLEMENTADO em 30/08
+Os 0,6 s continuam sendo o padrão, porque são o comportamento que já está em uso,
+e passaram a ser ajustáveis pela pessoa: chave `clipboardRestoreDelay` em
+`UserDefaults`, domínio `com.nevertype.app`, número em segundos, lida a cada
+ditado e presa entre 0,1 s e 5 s (`TextInjector.resolvedRestoreDelay`, 4 testes).
+Não entrou item de menu. O motivo está em "A decisão de interface", abaixo.
 
-**Uma tentativa já falhou (2026-08-28).** Dado prometido
-(`NSPasteboardItemDataProvider`) dá o instante exato da leitura, e foi
-implementado — mas **quebrou a colagem no Slack**, que lê em várias etapas: a
-primeira dispara o provider, a devolução limpa o pasteboard e as etapas
-seguintes acham vazio. Revertido no mesmo dia. Patch em
-`scratchpad/d1-dado-prometido.patch`, autópsia em
-`.vibeflow/specs/devolucao-observada-do-pasteboard.md`.
+**A pesquisa externa que decidiu o desenho (29/08).** O espanso, expansor de
+texto open source com a mesma engrenagem (escreve no pasteboard, dispara o atalho
+de colar, devolve o conteúdo), documenta quatro botões onde este projeto tinha um
+número fixo: `restore_clipboard` ligado por padrão, `restore_clipboard_delay` de
+**300 ms**, `pre_paste_delay` de **300 ms** (espera antes de disparar o atalho,
+porque disparar antes de o conteúdo estar no clipboard faz a operação falhar) e
+`paste_shortcut_event_delay` de 10 ms entre as teclas. Fonte:
+<https://espanso.org/docs/configuration/options/>. O QuiCopy usa 100 ms para a
+devolução. O que isso ensina: **ninguém resolve isso por observação, todo mundo
+usa cronômetro**, o que confirma a autópsia de 28/08. E os nossos 0,6 s são o
+dobro do padrão do espanso, o que os torna conservadores contra o modo de falha
+deste item e piores para o tempo em que o clipboard fica com o ditado.
 
-Aprendizado que vale para qualquer tentativa nova: **não existe sinal de
-"colagem consumida" que não exija dado preguiçoso**, e dado preguiçoso quebra
-leitor de várias etapas. A devolução continua sendo por tempo. A pergunta boa
-deixou de ser "como observar?" e passou a ser "qual tempo, e o que se troca
-entre janela de sequestro do clipboard e segurança?".
+**A espera antes do ⌘V não entrou, e o motivo é medição.** O `pre_paste_delay`
+existe porque o atalho pode sair antes de o conteúdo chegar ao clipboard. Aqui a
+escrita já é síncrona e o resultado dela já era conferido (`writeObjects`), e o
+item carrega bytes concretos, sem nenhum data provider neste arquivo para adiar
+a leitura até um callback. Então o código lê o texto de volta do pasteboard e
+compara antes de postar o ⌘V. Se o que volta não for o que foi escrito, o ⌘V não
+sai, o conteúdo da pessoa é devolvido na hora sob a mesma guarda de `changeCount`
+da devolução agendada, e a inserção falha alto. Custa uma ida ao servidor de
+pasteboard. Os 300 ms custariam metade do ditado inteiro (~614 ms, L1) e não
+provariam nada.
 
-*Evidência:* `.vibeflow/index.md` (Known Issues) · `TextInjector.swift:52` ·
-regressão observada no Slack em 2026-08-28
+**A decisão de interface.** Chave de `UserDefaults` documentada no README, sem
+submenu. Três razões, e todas saem deste arquivo. O número nunca foi medido, e
+oferecer três valores no menu daria a eles uma autoridade que a medição não
+sustenta. Os dois ajustes que estão no menu (tecla e sons) são coisas que se
+trocam durante o uso, e este é de configurar uma vez quando algum app se
+comporta mal. E a posição da pílula já é uma preferência guardada sem nenhum item
+de menu, que é o precedente mais próximo.
 
-### D2 · O ⌘V é postado às cegas — P
-O app não checa se o foco tem campo editável. Com o foco num app sem campo de
-texto, o ⌘V vira **atalho arbitrário no app da frente** — e em vários apps ⌘V
-faz outra coisa. O anti-escopo original excluiu consultar a API de
-Acessibilidade para descobrir isso; vale reabrir, já que a permissão já é
-concedida.
-*Evidência:* `.vibeflow/index.md` (Known Issues)
+**Falta você usar.** Dite com algo conhecido na área de transferência antes, em
+Slack e no terminal, e confira as duas coisas: o ditado entrou certo e o conteúdo
+anterior voltou. Depois experimente `defaults write com.nevertype.app
+clipboardRestoreDelay -float 1.2` e confira a linha `insertion:` do
+`nevertype.log` no lançamento seguinte, que imprime o valor efetivo. Ninguém
+mediu qual valor é o certo nesta máquina, e este item não pretende ter medido.
+*Evidência:* `TextInjector.swift` (`defaultRestoreDelay`, `restoreDelayKey`,
+`restoreDelayRange`, `resolvedRestoreDelay`, a guarda de leitura de volta em
+`insert`) · `TextInjectorTests.swift` (4 testes do valor, 2 da leitura de volta) ·
+`.vibeflow/specs/devolucao-observada-do-pasteboard.md` (a tentativa revertida) ·
+espanso, URL acima, consultada em 29/08/2026
+
+### ✅ D2 · O ⌘V é postado às cegas · IMPLEMENTADO em 30/08
+`PasteTarget.swift` consulta o elemento em foco da sessão
+(`AXUIElementCreateSystemWide` mais `AXFocusedUIElement`) e responde uma de três
+coisas: `editable`, `notEditable` ou `unknown`. Só `notEditable` impede o ⌘V.
+Nesse caso o texto fica no clipboard com a marca `concealed`, entra no histórico
+como qualquer outro ditado, e o aviso sai pelos três canais que a falha de
+inserção já usava: ícone cortado por 2 s, "Copy Last Transcription" no menu e
+linha no `nevertype.log`, esta dizendo o papel que recusou e o comando que
+desliga a checagem.
+
+**A regra foi desenhada em torno de uma assimetria: falso negativo é pior que o
+defeito.** Recusar colar onde dava deixa a pessoa com um ditado já falado e um
+app que não fez nada, que é a queixa que o README inteiro tenta evitar. Então
+erro da API de Acessibilidade, permissão ausente, timeout, elemento sem papel e
+papel desconhecido chegam todos como `unknown`, e `unknown` cola. A ordem da
+regra também protege: `AXValue` settable é conferido antes da lista de papéis,
+então um elemento que diz aceitar texto nunca é vetado pelo papel dele.
+
+**O que a consulta não classifica**, e onde o código cola assim mesmo: Electron e
+Java quando o papel exposto não é de texto e o `AXValue` não é settable; terminal
+que desenha a própria tela, cujo papel costuma ser de grupo ou desconhecido;
+campo de senha, decidido antes pela flag de entrada segura (D3); app sem suporte
+a Acessibilidade, que devolve erro; lista, tabela e outline, deixados de fora da
+lista de recusa de propósito, porque célula de planilha e renomear no lugar vivem
+lá e aceitam digitação. O terceiro sinal que o pedido citava,
+`kAXFocusedWindowAttribute` com campo, não foi implementado: ele só poderia
+produzir um `editable`, e todo caso em que ele responderia já cola por ser
+`unknown`.
+
+Desligável, no mesmo lugar da preferência do D1:
+`defaults write com.nevertype.app checkFocusBeforePaste -bool false`. Com a
+checagem desligada o comportamento é o de até 29/08.
+
+**Falta você usar.** A regra tem 11 testes, e o caminho da API ao elemento real
+não tem nenhum: ele depende de qual janela está na frente da máquina que roda a
+suíte, e teste que lê isso não é teste. Então dite com o foco num botão, com um
+menu aberto, e depois nos lugares onde você dita todo dia (Slack, terminal,
+navegador, Notas), e veja se algum deles recusa onde dava para escrever. Uma
+recusa dessas é mais grave que o defeito original, e a saída é o comando acima.
+*Evidência:* `PasteTarget.swift` · `TextInjector.swift`
+(`Outcome.noEditableField`, a guarda de foco em `insert`) · `main.swift`
+(`deliver`, o caso novo) · `PasteTargetTests.swift` (11 testes da regra) ·
+`TextInjectorTests.swift` (3 testes do caminho)
 
 ### D3 · `IsSecureEventInputEnabled` não significa o que o código assume — P
 É flag **global da sessão**, não "campo de senha em foco". Qualquer processo

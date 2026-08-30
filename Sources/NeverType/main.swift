@@ -166,8 +166,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Resolves a tension in the spec: it says to restore the pasteboard after
     /// pasting (polite) and also not to lose the transcription if there is
     /// nowhere to paste. Together they contradict each other — restoring erases
-    /// the text. And there is no way to know whether the paste landed anywhere
-    /// without querying the Accessibility API, which is out of scope.
+    /// the text. Since 2026-08-30 the app does query the Accessibility API
+    /// before pasting (`PasteTarget`), and that answers a different question:
+    /// whether the focused element takes text, never whether the ⌘V landed.
     ///
     /// So: always restore the pasteboard, and the text stays reachable from
     /// here. Nothing is lost, and nobody's clipboard is hijacked.
@@ -280,6 +281,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         log("ready. trigger: \(monitor.trigger.label)")
+        // The two insertion preferences have no menu item, so this line is how
+        // you confirm that a `defaults write` took effect. Effective values, not
+        // what is stored: both are read through the rule that bounds them.
+        log("insertion: clipboard given back after \(TextInjector.restoreDelay) s · focus checked before pasting: \(PasteTarget.isCheckEnabled ? "yes" : "no")")
     }
 
     // MARK: - Visual states
@@ -413,6 +418,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // discussion in backlog D3); the text stays on the clipboard and in
             // the menu.
             log("secure input is on for this session — did not paste. Some process turned it on (a password field in focus is the common case, but some apps leave it on). The text is on the clipboard and in the menu, under \"Copy Last Transcription\".")
+            render(.blocked)
+            flashIdle()
+        case .noEditableField(let role):
+            // The same three signals as any other insertion failure: the 2 s
+            // slash, the line here, and the text reachable from the menu (it
+            // went into the history above). The message names the way out,
+            // because this is the path that can be wrong on an app nobody here
+            // has tried: if it refuses where you can type, the key turns the
+            // check off and the app goes back to pasting blindly.
+            log("the focused element takes no text (\(role)). Did not paste, so the ⌘V would not become a shortcut in the app in front. The text is on the clipboard and in the menu, under \"Copy Last Transcription\". To turn this check off: defaults write com.nevertype.app \(PasteTarget.checkKey) -bool false")
             render(.blocked)
             flashIdle()
         case .failed(let reason):
