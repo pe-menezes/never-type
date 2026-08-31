@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
   <rect x="80" y="80" width="864" height="864" rx="202" fill="#111111"/>
   <!-- This 53 x 49 geometry mirrors BrandMark in RecordingOverlay.swift. -->
-  <g fill="#F4F2ED" transform="translate(252 277) scale(9.818181818)">
+  <g fill="#F4F2ED" transform="translate(210.683 246.909) scale(9.818181818)">
     <rect x="0" y="21" width="6" height="12" rx="3"/>
     <rect x="12" y="13.5" width="6" height="27" rx="3"/>
     <rect x="24" y="5" width="6" height="44" rx="3"/>

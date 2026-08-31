@@ -31,6 +31,9 @@ enum OverlayState: Equatable {
 enum BrandMark {
     private static let designSize = NSSize(width: 53, height: 49)
     private static let stroke: CGFloat = 6
+    // Every shape is vertically centered at 27. The I-beam carries more area
+    // than the bars, moving the filled-area centroid to 30.69 on the x axis.
+    private static let opticalCenter = NSPoint(x: 30.69, y: 27)
 
     private struct Geometry {
         let origin: NSPoint
@@ -103,8 +106,8 @@ enum BrandMark {
     private static func geometry(in rect: NSRect) -> Geometry {
         let scale = min(rect.width / designSize.width, rect.height / designSize.height)
         return Geometry(
-            origin: NSPoint(x: rect.midX - designSize.width * scale / 2,
-                            y: rect.midY - designSize.height * scale / 2),
+            origin: NSPoint(x: rect.midX - opticalCenter.x * scale,
+                            y: rect.midY - opticalCenter.y * scale),
             scale: scale)
     }
 
@@ -241,8 +244,8 @@ final class OverlayActivityView: NSView {
         }
     }
 
-    /// Every state uses the resting logo's exact 20 × 22 drawing box. The orb
-    /// never changes shape; only the contents of the mark move.
+    /// Every state uses the same 20 × 22 scaling box and optical center. The
+    /// orb never changes shape; only the contents of the mark move.
     private var markRect: NSRect {
         NSRect(x: 7, y: 6, width: 20, height: 22)
     }
