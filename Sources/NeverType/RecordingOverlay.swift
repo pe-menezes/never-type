@@ -1,29 +1,183 @@
 import AppKit
 import NeverTypeCore
 
-/// The three states the pill needs to tell apart.
-///
-/// There used to be two — idle and recording — and transcription happened inside
-/// "idle": you released the key, everything went back to rest, and ~600 ms went
-/// by with the app working and nothing on screen saying so.
-enum OverlayState {
+/// The moments the overlay must distinguish through shape and motion.
+enum OverlayState: Equatable {
     case idle
     case recording
+    case latched
     case transcribing
+
+    var size: NSSize {
+        NSSize(width: 34, height: 34)
+    }
+
+    var accessibilityValue: String {
+        switch self {
+        case .idle:          "Ready"
+        case .recording:     "Listening"
+        case .latched:       "Hands-free recording"
+        case .transcribing:  "Writing"
+        }
+    }
 }
 
-/// Bars that rise with what the microphone is hearing.
+/// The NeverType mark and its compact menu bar states.
 ///
-/// The static red dot that used to be here proved the app was recording, not
-/// that sound was coming in. With the microphone muted or on the wrong input the
-/// drawing was identical to everything working, and the only sign of trouble
-/// came later, as an empty transcription.
+/// Rounded voice bars resolve into a text cursor. The same geometry is used by
+/// the app icon, menu bar and resting overlay so the product has one mark at
+/// every scale.
 @MainActor
-final class LevelMeter: NSView {
-    private static let barCount = 18
-    private var levels = [CGFloat](repeating: 0, count: barCount)
+enum BrandMark {
+    private static let designSize = NSSize(width: 53, height: 49)
 
-    /// Phase of the wave that runs during transcription. Only exists in that state.
+    private struct Geometry {
+        let origin: NSPoint
+        let scale: CGFloat
+
+        func rect(_ x: CGFloat, _ y: CGFloat, _ width: CGFloat, _ height: CGFloat) -> NSRect {
+            NSRect(x: origin.x + x * scale,
+                   y: origin.y + y * scale,
+                   width: width * scale,
+                   height: height * scale)
+        }
+    }
+
+    enum StatusStyle {
+        case idle
+        case recording
+        case blocked
+
+        var logName: String {
+            switch self {
+            case .idle:      "brand"
+            case .recording: "waveform"
+            case .blocked:   "brand.slash"
+            }
+        }
+    }
+
+    static func draw(in rect: NSRect, color: NSColor) {
+        drawWaveform(in: rect, heights: [12, 27, 44], levels: nil, color: color)
+        drawCursor(in: rect, color: color)
+    }
+
+    /// The live waveform uses the logo's three bar positions and exact stroke
+    /// width. A transition changes only their height and opacity.
+    static func drawWaveform(in rect: NSRect, levels: [CGFloat], color: NSColor) {
+        let heights = levels.map { 12 + max(0, min(1, $0)) * 32 }
+        drawWaveform(in: rect, heights: heights, levels: levels, color: color)
+    }
+
+    /// Draws the same cursor as the resting mark, including its cap proportions.
+    static func drawCursor(in rect: NSRect, color: NSColor) {
+        let geometry = geometry(in: rect)
+        color.setFill()
+        let cursor = [
+            geometry.rect(43, 5, 5, 44),
+            geometry.rect(38, 5, 15, 5),
+            geometry.rect(38, 44, 15, 5),
+        ]
+        for shape in cursor {
+            let radius = min(shape.width, shape.height) / 2
+            NSBezierPath(roundedRect: shape, xRadius: radius, yRadius: radius).fill()
+        }
+    }
+
+    /// The processing dots occupy the former bar centers. The bars collapse in
+    /// place while the cursor remains unchanged.
+    static func drawWriting(in rect: NSRect, phase: CGFloat, color: NSColor) {
+        let geometry = geometry(in: rect)
+        let progress = phase * 4
+        for index in 0..<3 {
+            let distance = CGFloat(index + 1) - progress
+            let emphasis = exp(-(distance * distance) / 0.48)
+            color.withAlphaComponent(0.28 + 0.72 * emphasis).setFill()
+            let dot = geometry.rect(CGFloat(index) * 12, 24, 6, 6)
+            NSBezierPath(ovalIn: dot).fill()
+        }
+        drawCursor(in: rect, color: color)
+    }
+
+    private static func geometry(in rect: NSRect) -> Geometry {
+        let scale = min(rect.width / designSize.width, rect.height / designSize.height)
+        return Geometry(
+            origin: NSPoint(x: rect.midX - designSize.width * scale / 2,
+                            y: rect.midY - designSize.height * scale / 2),
+            scale: scale)
+    }
+
+    private static func drawWaveform(in rect: NSRect,
+                                     heights: [CGFloat],
+                                     levels: [CGFloat]?,
+                                     color: NSColor) {
+        let geometry = geometry(in: rect)
+        let centerY: CGFloat = 27
+        for (index, height) in heights.prefix(3).enumerated() {
+            let alpha: CGFloat
+            if let levels, index < levels.count {
+                let level = max(0, min(1, levels[index]))
+                alpha = level > 0 ? 0.72 + 0.28 * level : 0.42
+            } else {
+                alpha = 1
+            }
+            color.withAlphaComponent(alpha).setFill()
+            let shape = geometry.rect(CGFloat(index) * 12,
+                                      centerY - height / 2,
+                                      6,
+                                      height)
+            NSBezierPath(roundedRect: shape,
+                         xRadius: 3 * geometry.scale,
+                         yRadius: 3 * geometry.scale).fill()
+        }
+    }
+
+    static func statusImage(_ style: StatusStyle) -> NSImage {
+        let size = NSSize(width: 18, height: 18)
+        let image = NSImage(size: size, flipped: false) { rect in
+            NSColor.black.setFill()
+            NSColor.black.setStroke()
+
+            switch style {
+            case .idle:
+                draw(in: rect.insetBy(dx: 1.5, dy: 1.5), color: .black)
+
+            case .recording:
+                NSBezierPath(ovalIn: NSRect(x: 0.5, y: 7.5, width: 3, height: 3)).fill()
+                let heights: [CGFloat] = [5, 11, 16, 10, 6]
+                for (index, height) in heights.enumerated() {
+                    let bar = NSRect(x: 5 + CGFloat(index) * 2.7,
+                                     y: (rect.height - height) / 2,
+                                     width: 1.8,
+                                     height: height)
+                    NSBezierPath(roundedRect: bar, xRadius: 0.9, yRadius: 0.9).fill()
+                }
+
+            case .blocked:
+                draw(in: rect.insetBy(dx: 2.5, dy: 2.5), color: .black)
+                let slash = NSBezierPath()
+                slash.move(to: NSPoint(x: 2, y: 2))
+                slash.line(to: NSPoint(x: 16, y: 16))
+                slash.lineWidth = 2.4
+                slash.lineCapStyle = .round
+                slash.stroke()
+            }
+            return true
+        }
+        image.isTemplate = true
+        return image
+    }
+}
+
+/// Draws the content that changes inside the orb.
+///
+/// Audio levels are historical, not one flickering instant. Writing has its
+/// own synthetic motion because no microphone samples arrive in that state.
+@MainActor
+final class OverlayActivityView: NSView {
+    private static let levelCount = 3
+    private static let restingLevels: [CGFloat] = [0, 15.0 / 32.0, 1]
+    private var levels = restingLevels
     private var phase: CGFloat = 0
     private var pulse: Timer?
 
@@ -35,8 +189,6 @@ final class LevelMeter: NSView {
         }
     }
 
-    /// Pushes the new level and scrolls the previous ones to the left, so the
-    /// drawing becomes the shape of the speech instead of a flickering instant value.
     func push(_ level: Float) {
         levels.removeFirst()
         levels.append(CGFloat(max(0, min(1, level))))
@@ -44,37 +196,17 @@ final class LevelMeter: NSView {
     }
 
     func reset() {
-        levels = [CGFloat](repeating: 0, count: Self.barCount)
+        levels = Self.restingLevels
         needsDisplay = true
     }
 
-    /// Transparent to the mouse: the meter covers almost the whole pill, and if
-    /// it swallowed the click only the border would be draggable.
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
-
-    /// Dark, saturated green, not `systemGreen`.
-    ///
-    /// On the dark pill the previous light green glowed too much and pulled
-    /// attention from whoever was writing — the indicator needs to be noticed
-    /// without competing for focus.
-    static let live = NSColor(srgbRed: 0.13, green: 0.68, blue: 0.40, alpha: 1)
-
-    /// Blue for transcribing: a different color, not a weaker green.
-    ///
-    /// "Recording in silence" and "transcribing" need to be distinguishable at a
-    /// glance — if transcription were a dimmed green, it would look the same as
-    /// silence during recording, which is precisely the pair the level meter
-    /// exists to separate.
-    static let working = NSColor(srgbRed: 0.36, green: 0.60, blue: 0.92, alpha: 1)
 
     private func startPulse() {
         stopPulse()
         phase = 0
-        // 30 fps. The wave exists to say "I am working", and a stuttering
-        // animation would say the opposite of what it exists to say.
-        //
-        // `assumeIsolated` here is the legitimate case: the Timer was scheduled
-        // on the main run loop by this method, which is already `@MainActor`.
+        // The panel runs at 30 fps. This is enough for a small status motion and
+        // keeps the animation smooth during the roughly 600 ms transcription.
         pulse = Timer.scheduledTimer(withTimeInterval: 1.0 / 30, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
@@ -91,132 +223,128 @@ final class LevelMeter: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        let barWidth: CGFloat = 2.5
-        let gap: CGFloat = 1.9
-        let maxHeight = bounds.height
-        // Floor: a zero-height bar would disappear, and a meter that vanishes in
-        // silence does not distinguish "no sound" from "no meter".
-        let minHeight: CGFloat = 2.5
+        let ink = NSColor(srgbRed: 0.96, green: 0.95, blue: 0.92, alpha: 1)
+        ink.setFill()
+        ink.setStroke()
 
-        for i in 0..<Self.barCount {
-            let height: CGFloat
-            let color: NSColor
+        switch state {
+        case .idle:
+            BrandMark.draw(in: markRect, color: ink)
 
-            switch state {
-            case .transcribing:
-                // Wave running left to right, unrelated to the audio: no more
-                // sound comes in here, and showing frozen levels would suggest
-                // it still does.
-                let position = phase * CGFloat(Self.barCount + 6) - 3
-                let distance = CGFloat(i) - position
-                let bump = exp(-(distance * distance) / 6)
-                height = max(minHeight, bump * maxHeight * 0.85)
-                color = Self.working.withAlphaComponent(0.35 + 0.55 * bump)
+        case .recording, .latched:
+            BrandMark.drawWaveform(in: markRect, levels: levels, color: ink)
+            BrandMark.drawCursor(in: markRect, color: ink)
 
-            case .recording:
-                let level = levels[i]
-                height = max(minHeight, level * maxHeight)
-                // Intensity follows volume along with height: quiet speech gets
-                // visibly dimmer, not just shorter. In silence, dimmed green —
-                // this used to be gray, same as idle, and holding the key without
-                // speaking was identical to not having pressed anything.
-                color = Self.live.withAlphaComponent(level > 0 ? 0.6 + 0.4 * level : 0.35)
-
-            case .idle:
-                height = minHeight
-                color = NSColor.white.withAlphaComponent(0.16)
-            }
-
-            let rect = NSRect(x: CGFloat(i) * (barWidth + gap),
-                              y: (maxHeight - height) / 2,
-                              width: barWidth,
-                              height: height)
-            color.setFill()
-            NSBezierPath(roundedRect: rect, xRadius: barWidth / 2, yRadius: barWidth / 2).fill()
+        case .transcribing:
+            BrandMark.drawWriting(in: markRect, phase: phase, color: ink)
         }
     }
 
-    // No `deinit { stopPulse() }`: `deinit` is nonisolated and cannot touch
-    // main-actor state. The meter lives as long as the app does.
+    /// Every state uses the resting logo's exact 20 × 22 drawing box. The orb
+    /// never changes shape; only the contents of the mark move.
+    private var markRect: NSRect {
+        NSRect(x: 7, y: 6, width: 20, height: 22)
+    }
+
+    // The timer is owned for the process lifetime with this view. A deinitializer
+    // cannot touch main-actor state, so state transitions stop it explicitly.
 }
 
-/// The pill's body: draws the background and carries the drag.
-///
-/// The panel does not use `isMovableByWindowBackground` because with it there is
-/// no way to know when the drag ended — and the end is when the pill snaps to the
-/// edge and the position is saved.
+/// The floating body's background and drag surface.
 @MainActor
 final class PillView: NSView {
     var onDragEnd: (() -> Void)?
+    let activity = OverlayActivityView(frame: .zero)
 
-    /// Second cue of the state, along with the bars: in absolute silence the bars
-    /// barely show, and the border keeps saying what is happening.
-    var state: OverlayState = .idle { didSet { needsDisplay = true } }
+    var state: OverlayState = .idle {
+        didSet {
+            activity.state = state
+            setAccessibilityValue(state.accessibilityValue)
+            needsDisplay = true
+        }
+    }
 
     private var dragOrigin: NSPoint?
     private var windowOrigin: NSPoint?
 
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        configure()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        configure()
+    }
+
+    private func configure() {
+        activity.frame = bounds
+        activity.autoresizingMask = [.width, .height]
+        addSubview(activity)
+        setAccessibilityElement(true)
+        setAccessibilityLabel("NeverType")
+        setAccessibilityValue(state.accessibilityValue)
+    }
+
+    /// Every visible pixel is a drag surface, including the animated content.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        bounds.contains(point) ? self : nil
+    }
+
+    override func resetCursorRects() {
+        addCursorRect(bounds, cursor: dragOrigin == nil ? .openHand : .closedHand)
+    }
+
     override func draw(_ dirtyRect: NSRect) {
-        let radius = bounds.height / 2
-        let path = NSBezierPath(roundedRect: bounds, xRadius: radius, yRadius: radius)
-        // Dark in both themes, on purpose.
-        //
-        // The `.hudWindow` material drew almost white in light mode, and the
-        // panel looked like an old dialog box. A dark pill is legible over any
-        // content and does not change personality with the background.
-        NSColor(srgbRed: 0.09, green: 0.10, blue: 0.12, alpha: 0.92).setFill()
+        let drawingBounds = bounds.insetBy(dx: 0.5, dy: 0.5)
+        let radius = drawingBounds.height / 2
+        let path = NSBezierPath(roundedRect: drawingBounds, xRadius: radius, yRadius: radius)
+
+        let background = dragOrigin == nil
+            ? NSColor(srgbRed: 0.065, green: 0.065, blue: 0.065, alpha: 0.96)
+            : NSColor(srgbRed: 0.10, green: 0.10, blue: 0.10, alpha: 0.98)
+        background.setFill()
         path.fill()
 
-        switch state {
-        case .recording:
-            LevelMeter.live.withAlphaComponent(0.85).setStroke()
-            path.lineWidth = 1.5
-        case .transcribing:
-            LevelMeter.working.withAlphaComponent(0.85).setStroke()
-            path.lineWidth = 1.5
-        case .idle:
-            NSColor.white.withAlphaComponent(0.09).setStroke()
-            path.lineWidth = 1
-        }
+        NSColor.white.withAlphaComponent(state == .idle ? 0.10 : 0.17).setStroke()
+        path.lineWidth = 1
         path.stroke()
     }
 
     override func mouseDown(with event: NSEvent) {
         dragOrigin = NSEvent.mouseLocation
         windowOrigin = window?.frame.origin
+        NSCursor.closedHand.set()
+        discardCursorRects()
+        window?.invalidateCursorRects(for: self)
+        needsDisplay = true
     }
 
     override func mouseDragged(with event: NSEvent) {
         guard let dragOrigin, let windowOrigin, let window else { return }
         let now = NSEvent.mouseLocation
-        window.setFrameOrigin(NSPoint(x: windowOrigin.x + (now.x - dragOrigin.x),
-                                      y: windowOrigin.y + (now.y - dragOrigin.y)))
+        window.setFrameOrigin(NSPoint(x: windowOrigin.x + now.x - dragOrigin.x,
+                                      y: windowOrigin.y + now.y - dragOrigin.y))
     }
 
     override func mouseUp(with event: NSEvent) {
         dragOrigin = nil
         windowOrigin = nil
+        NSCursor.openHand.set()
+        discardCursorRects()
+        window?.invalidateCursorRects(for: self)
+        needsDisplay = true
         onDragEnd?()
     }
 }
 
-/// Floating indicator, always visible.
-///
-/// Exists because the menu bar icon is not enough: in full screen — the normal
-/// mode for Slack, VS Code and Chrome — the menu bar is hidden, and with it the
-/// only sign that the app is listening.
-///
-/// Stays on screen the whole time, not just during dictation: an accessory app
-/// with no window leaves no trace of absence, so when it dies nothing on screen
-/// changes. The idle pill is the proof that it is alive.
+/// Always-visible dictation status that survives full-screen applications.
 @MainActor
 final class RecordingOverlay {
     private var panel: NSPanel?
-    private var meter: LevelMeter?
     private var pill: PillView?
 
     private static let originKey = "overlayOrigin"
-    /// Distance at which the pill snaps to the edge on release.
     private static let snapDistance: CGFloat = 48
 
     func showIdle() {
@@ -224,43 +352,37 @@ final class RecordingOverlay {
         panel?.orderFrontRegardless()
     }
 
-    /// Recording: the key was pressed.
     func show() {
-        meter?.reset()
+        pill?.activity.reset()
         apply(.recording)
         panel?.orderFrontRegardless()
     }
 
-    /// Transcribing: the key was released and the model is working.
-    ///
-    /// Without this state, releasing the key returned everything to rest and the
-    /// app spent ~600 ms working with nothing on screen saying so — and on a
-    /// long dictation the dead zone is bigger.
+    func latch() {
+        apply(.latched)
+    }
+
     func transcribing() {
         apply(.transcribing)
     }
 
-    /// Back to rest. Does not leave the screen: leaving was what made "dead app"
-    /// and "idle app" look the same — like nothing.
     func hide() {
-        meter?.reset()
+        pill?.activity.reset()
         apply(.idle)
+    }
+
+    func push(level: Float) {
+        pill?.activity.push(level)
     }
 
     private func apply(_ state: OverlayState) {
         let panel = self.panel ?? makePanel()
         self.panel = panel
-        meter?.state = state
         pill?.state = state
     }
 
-    /// Called for every slice of the microphone buffer.
-    func push(level: Float) {
-        meter?.push(level)
-    }
-
     private func makePanel() -> NSPanel {
-        let size = NSSize(width: 108, height: 32)
+        let size = OverlayState.idle.size
         let panel = NSPanel(
             contentRect: NSRect(origin: .zero, size: size),
             styleMask: [.borderless, .nonactivatingPanel],
@@ -273,7 +395,6 @@ final class RecordingOverlay {
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hasShadow = true
-        // Above full-screen apps. `.floating` would sit below them.
         panel.level = .screenSaver
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
 
@@ -282,23 +403,11 @@ final class RecordingOverlay {
         pill.onDragEnd = { [weak self] in self?.snapAndPersist() }
         self.pill = pill
 
-        let meter = LevelMeter(frame: NSRect(x: 16, y: 7, width: 76, height: 18))
-        meter.autoresizingMask = [.minXMargin, .maxXMargin]
-        self.meter = meter
-
-        pill.addSubview(meter)
         panel.contentView = pill
         panel.setFrameOrigin(restoredOrigin(for: size))
         return panel
     }
 
-    // MARK: - Position
-
-    /// Where the pill was, or the bottom-right corner the first time.
-    ///
-    /// Always validated against the current screens: saving the position and
-    /// restoring it blindly leaves the pill off screen when someone unplugs the
-    /// monitor it was on — and an invisible pill proves nothing.
     private func restoredOrigin(for size: NSSize) -> NSPoint {
         let visible = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
         let physical = NSScreen.main?.frame ?? visible
@@ -313,21 +422,14 @@ final class RecordingOverlay {
         return candidate
     }
 
-    /// On release, snaps to the nearest edge and saves where it ended up.
     private func snapAndPersist() {
         guard let panel else { return }
         let frame = panel.frame
         let screen = NSScreen.screens.first { $0.frame.intersects(frame) } ?? NSScreen.main
         guard let visible = screen?.visibleFrame else { return }
 
-        // Floor, sides and ceiling come from different sources on purpose.
-        //
-        // `visibleFrame` excludes the Dock, so using it at the bottom made "as low
-        // as possible" mean the top edge of the Dock — and since at the top the
-        // limit is just below the menu bar, going up seemed to work and going
-        // down did not. The pill floats above everything, so the floor and the
-        // sides are the physical screen. Only the ceiling respects
-        // `visibleFrame`, so as not to cover the menu bar or vanish behind it.
+        // The pill can cover the Dock, so the floor and sides use the physical
+        // display. The ceiling uses visibleFrame to keep it below the menu bar.
         let physical = screen?.frame ?? visible
         var origin = frame.origin
         let margin: CGFloat = 12

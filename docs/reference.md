@@ -27,10 +27,13 @@ what it is, what it requires and how to install it.
 
 ## The floating pill
 
-While recording, the menu bar icon turns red and the pill shows the microphone
-level as bars. Bars that do not move mean no sound is coming in, and the
-transcription will come back empty. After the release the pill shows a blue wave
-while the model works, then goes back to idle when the text comes out.
+The overlay remains a 34 px orb across all four states. At rest it shows the
+NeverType mark. During recording, including hands-free, the mark's same three
+bars become a live waveform without changing thickness or position. Bars that
+do not move mean no sound is coming in, and the transcription will come back
+empty. After the release, the bars collapse into three moving dots in place and
+the mark's cursor stays unchanged while the model works. The menu bar uses the
+same identity.
 
 The pill stays on screen the whole time, idle included, and serves as a
 heartbeat, since a windowless app that dies leaves the screen looking exactly as
@@ -67,9 +70,10 @@ macOS secure input is on:
   flag. The app then leaves the text on the clipboard, marked as concealed, and
   in the menu.
 
-Whenever the insertion cannot happen, the icon shows `mic.slash` for two seconds
-and then returns to idle, and the log has the reason. The text stays under
-**Copy Last Transcription** in the menu and in `historico.json`.
+Whenever the insertion cannot happen, the menu bar shows the NeverType mark
+with a slash for two seconds and then returns to idle, and the log has the
+reason. The text stays under **Copy Last Transcription** in the menu and in
+`historico.json`.
 
 Pasting replaces the selection, the same way a ⌘V would.
 
@@ -130,8 +134,9 @@ and the hands-free summary. Then:
   preview. The submenu appears from the second one on, clicking copies, and the
   full text is in the tooltip. **Clear History** deletes `historico.json` and
   `last.wav`.
-- **Open at Login**: the app checks its own path when you click, since the login
-  item must point at `/Applications` or `~/Applications`. A copy running from
+- **Start NeverType with macOS**: the app checks its own path when you click,
+  since the login item must point at `/Applications` or `~/Applications`. A copy
+  running from
   any other folder is turned down with the two-second slash and a log line that
   says to run `install.sh`. If you turn it off in System Settings, the menu says
   so and offers a shortcut to that pane. What it costs at boot is measured in

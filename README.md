@@ -1,10 +1,18 @@
-Português: [README.pt-BR.md](README.pt-BR.md)
+<p align="center">
+  <img src="assets/NeverTypeIcon.svg" width="112" height="112" alt="NeverType logo">
+</p>
 
-# NeverType
+<h1 align="center">NeverType</h1>
 
-Local voice dictation for macOS: the audio, the model and the transcription stay
-on the machine. Hold a key in any application, speak, release, and the text
-appears where the cursor is.
+<p align="center">
+  Local voice dictation for macOS.<br>
+  <sub>Audio, model and transcription stay on your Mac.</sub>
+</p>
+
+<p align="center"><a href="README.pt-BR.md">Português</a></p>
+
+Hold a key in any application, speak, release, and the text appears where the
+cursor is.
 
 Around 600 ms per dictation with the model warm, on a MacBook Pro M4 Pro.
 
@@ -12,8 +20,9 @@ Around 600 ms per dictation with the model warm, on a MacBook Pro M4 Pro.
 
 Hold **Right ⌘**, speak, release. The transcription is pasted at the cursor.
 Two quick taps lock the recording on so you can speak with the key up, one more
-tap ends it, and Esc discards. While the microphone is open the menu bar icon
-turns red and a floating pill shows the input level.
+tap ends it, and Esc discards. The overlay stays a 34 px orb with the NeverType
+mark. Its three bars move with the voice while listening, including hands-free,
+then collapse into moving dots beside the unchanged cursor while writing text.
 
 The menu bar menu switches the trigger key among Right ⌘, ⌥ and ⌃, and it holds
 the last 30 transcriptions, a custom vocabulary and the permission status.

@@ -241,6 +241,15 @@ in its natural color (black) and vanish against the dark bar.
 And `contentTintColor` **only tints template images**, so the intended red did
 not happen either. The icon was invisible exactly while recording.
 
+The red tint was retired on 2026-08-30 when the microphone symbol became the
+custom monochrome NeverType mark. The image remains a template so macOS always
+chooses a legible color. `contentTintColor` is deliberately nil. Recording now
+changes the menu bar mark into a waveform, and the always-visible overlay moves
+the same three bars with the live microphone level.
+
+**Rule:** keep menu bar artwork as a template for contrast. A tint is an
+optional state signal and requires the template flag too.
+
 ### In full screen there is no menu bar
 
 An app whose only feedback is the tray icon has no feedback at all in the mode
