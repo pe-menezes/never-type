@@ -12,8 +12,9 @@ Cerca de 600 ms por ditado com o modelo quente, num MacBook Pro M4 Pro.
 
 Segure o **⌘ direito**, fale, solte. A transcrição é colada no cursor. Dois
 toques rápidos travam a gravação para você falar com a tecla solta, mais um
-toque encerra e Esc descarta. Enquanto o microfone está aberto, o ícone da barra
-de menus fica vermelho e uma pílula flutuante mostra o nível de entrada.
+toque encerra e Esc descarta. O overlay permanece um círculo de 34 px com a
+marca do NeverType. Os três traços se movem com a voz, inclusive em mãos-livres,
+e viram pontos móveis ao lado do mesmo cursor enquanto o texto é escrito.
 
 O menu da barra troca a tecla de gatilho entre ⌘, ⌥ e ⌃ direitos, e guarda as
 últimas 30 transcrições, um vocabulário customizado e o estado das permissões.

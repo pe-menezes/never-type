@@ -297,32 +297,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             log("NO BUTTON on the status item — nowhere to draw the icon")
             return
         }
-        let symbol: String
+        let style: BrandMark.StatusStyle
+        let accessibilityValue: String
         switch state {
-        // The shape changes along with the color: outline when idle, filled
-        // while recording, slashed when blocked. Color alone does not work as
-        // the only state signal.
-        case .idle:      symbol = "mic"
-        case .recording: symbol = "mic.fill"
-        case .blocked:   symbol = "mic.slash"
+        // Shape carries the state at menu bar scale. The brand is idle, a live
+        // waveform is recording, and the slashed brand means attention needed.
+        case .idle:
+            style = .idle
+            accessibilityValue = "Ready"
+        case .recording:
+            style = .recording
+            accessibilityValue = "Listening"
+        case .blocked:
+            style = .blocked
+            accessibilityValue = "Needs attention"
         }
-        let image = NSImage(systemSymbolName: symbol, accessibilityDescription: "NeverType")
-        if image == nil { log("symbol '\(symbol)' did not load") }
-        // Always template.
-        //
-        // A template image is the one macOS repaints to match the bar's
-        // background; without it the symbol is drawn in its natural color,
-        // black, and vanishes against the dark bar — the icon was invisible
-        // exactly while recording. And `contentTintColor` only tints template
-        // images, so the red I wanted did not happen either.
-        image?.isTemplate = true
+        // Template images let macOS keep the custom mark legible on every menu
+        // bar background. The approved identity is monochrome in every state.
+        let image = BrandMark.statusImage(style)
         button.image = image
-        button.contentTintColor = (state == .recording) ? .systemRed : nil
-        // Width fallback: a variable-length item with only a nil image ends up
-        // zero pixels wide and disappears without any error.
-        button.title = (image == nil) ? "NT" : ""
-        let tint = (state == .recording) ? "red" : "default"
-        log("icon → \(symbol) (\(tint)), template=\(image?.isTemplate ?? false), width=\(button.frame.width)")
+        button.contentTintColor = nil
+        button.title = ""
+        button.setAccessibilityLabel("NeverType")
+        button.setAccessibilityValue(accessibilityValue)
+        log("icon → \(style.logName) (monochrome), template=\(image.isTemplate), width=\(button.frame.width)")
     }
 
     // MARK: - Dictation cycle
@@ -412,6 +410,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // The recording has been running since the first tap; here only
             // what keeps it alive changes — the state machine, not the key.
             Feedback.latched()
+            overlay.latch()
             log("hands-free locked. Tap \(monitor.trigger.label) to transcribe, Esc to discard.")
             return true
         case .cancelled:

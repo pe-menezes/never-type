@@ -12,8 +12,9 @@ Around 600 ms per dictation with the model warm, on a MacBook Pro M4 Pro.
 
 Hold **Right ⌘**, speak, release. The transcription is pasted at the cursor.
 Two quick taps lock the recording on so you can speak with the key up, one more
-tap ends it, and Esc discards. While the microphone is open the menu bar icon
-turns red and a floating pill shows the input level.
+tap ends it, and Esc discards. The overlay stays a 34 px orb with the NeverType
+mark. Its three bars move with the voice while listening, including hands-free,
+then collapse into moving dots beside the unchanged cursor while writing text.
 
 The menu bar menu switches the trigger key among Right ⌘, ⌥ and ⌃, and it holds
 the last 30 transcriptions, a custom vocabulary and the permission status.
