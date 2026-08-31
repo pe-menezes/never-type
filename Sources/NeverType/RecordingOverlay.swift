@@ -30,6 +30,7 @@ enum OverlayState: Equatable {
 @MainActor
 enum BrandMark {
     private static let designSize = NSSize(width: 53, height: 49)
+    private static let stroke: CGFloat = 6
 
     private struct Geometry {
         let origin: NSPoint
@@ -74,9 +75,9 @@ enum BrandMark {
         let geometry = geometry(in: rect)
         color.setFill()
         let cursor = [
-            geometry.rect(43, 5, 5, 44),
-            geometry.rect(38, 5, 15, 5),
-            geometry.rect(38, 44, 15, 5),
+            geometry.rect(42.5, 5, stroke, 44),
+            geometry.rect(38, 5, 15, stroke),
+            geometry.rect(38, 43, 15, stroke),
         ]
         for shape in cursor {
             let radius = min(shape.width, shape.height) / 2
@@ -93,7 +94,7 @@ enum BrandMark {
             let distance = CGFloat(index + 1) - progress
             let emphasis = exp(-(distance * distance) / 0.48)
             color.withAlphaComponent(0.28 + 0.72 * emphasis).setFill()
-            let dot = geometry.rect(CGFloat(index) * 12, 24, 6, 6)
+            let dot = geometry.rect(CGFloat(index) * 12, 24, stroke, stroke)
             NSBezierPath(ovalIn: dot).fill()
         }
         drawCursor(in: rect, color: color)
@@ -124,11 +125,11 @@ enum BrandMark {
             color.withAlphaComponent(alpha).setFill()
             let shape = geometry.rect(CGFloat(index) * 12,
                                       centerY - height / 2,
-                                      6,
+                                      stroke,
                                       height)
             NSBezierPath(roundedRect: shape,
-                         xRadius: 3 * geometry.scale,
-                         yRadius: 3 * geometry.scale).fill()
+                         xRadius: stroke * geometry.scale / 2,
+                         yRadius: stroke * geometry.scale / 2).fill()
         }
     }
 
