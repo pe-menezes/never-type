@@ -1,10 +1,18 @@
-English: [README.md](README.md)
+<p align="center">
+  <img src="assets/NeverTypeIcon.svg" width="112" height="112" alt="Logo do NeverType">
+</p>
 
-# NeverType
+<h1 align="center">NeverType</h1>
 
-Ditado por voz local no macOS: o áudio, o modelo e a transcrição ficam na
-máquina. Segure uma tecla em qualquer aplicativo, fale, solte, e o texto aparece
-onde o cursor está.
+<p align="center">
+  Ditado por voz local no macOS.<br>
+  <sub>Áudio, modelo e transcrição ficam no seu Mac.</sub>
+</p>
+
+<p align="center"><a href="README.md">English</a></p>
+
+Segure uma tecla em qualquer aplicativo, fale, solte, e o texto aparece onde o
+cursor está.
 
 Cerca de 600 ms por ditado com o modelo quente, num MacBook Pro M4 Pro.
 

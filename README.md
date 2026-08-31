@@ -1,10 +1,18 @@
-Português: [README.pt-BR.md](README.pt-BR.md)
+<p align="center">
+  <img src="assets/NeverTypeIcon.svg" width="112" height="112" alt="NeverType logo">
+</p>
 
-# NeverType
+<h1 align="center">NeverType</h1>
 
-Local voice dictation for macOS: the audio, the model and the transcription stay
-on the machine. Hold a key in any application, speak, release, and the text
-appears where the cursor is.
+<p align="center">
+  Local voice dictation for macOS.<br>
+  <sub>Audio, model and transcription stay on your Mac.</sub>
+</p>
+
+<p align="center"><a href="README.pt-BR.md">Português</a></p>
+
+Hold a key in any application, speak, release, and the text appears where the
+cursor is.
 
 Around 600 ms per dictation with the model warm, on a MacBook Pro M4 Pro.
 
