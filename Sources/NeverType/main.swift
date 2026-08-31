@@ -674,7 +674,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         menu.addItem(.separator())
         let loginState = loginItemState
-        let login = NSMenuItem(title: "Open at Login",
+        let login = NSMenuItem(title: "Start NeverType with macOS",
                                action: #selector(toggleLoginItem), keyEquivalent: "")
         login.target = self
         login.state = loginState == .on ? .on : .off

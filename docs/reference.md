@@ -134,8 +134,9 @@ and the hands-free summary. Then:
   preview. The submenu appears from the second one on, clicking copies, and the
   full text is in the tooltip. **Clear History** deletes `historico.json` and
   `last.wav`.
-- **Open at Login**: the app checks its own path when you click, since the login
-  item must point at `/Applications` or `~/Applications`. A copy running from
+- **Start NeverType with macOS**: the app checks its own path when you click,
+  since the login item must point at `/Applications` or `~/Applications`. A copy
+  running from
   any other folder is turned down with the two-second slash and a log line that
   says to run `install.sh`. If you turn it off in System Settings, the menu says
   so and offers a shortcut to that pane. What it costs at boot is measured in
