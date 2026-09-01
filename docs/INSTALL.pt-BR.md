@@ -132,8 +132,9 @@ bash scripts/fetch-model.sh
 547 MB) antes de promover, e apaga a cópia se ela não ficar válida. Copiar direto
 para `~/Library/Application Support/` pula essa validação: o app confere de novo
 ao abrir, recusa o arquivo, abre com o ícone cortado e a linha "Model:" do menu
-traz a mensagem com o script a rodar. A pessoa descobre o problema no menu, não
-no primeiro ditado.
+traz a mensagem com o script a rodar. Essa linha aparece com o Option segurado na
+hora de abrir o menu. A pessoa descobre o problema no menu, não no primeiro
+ditado.
 
 ## 4. Permissões
 
@@ -221,7 +222,8 @@ apagá-lo revoga a Acessibilidade e a pessoa precisa conceder tudo de novo.
 
 Depois de atualizar, o teste continua sendo o mesmo: **ditar uma frase.**
 
-A versão instalada também aparece no menu da bandeja, em "Version:".
+A versão instalada também aparece no menu da bandeja, em "Version:", com o Option
+segurado na hora de abrir o menu.
 
 ## Como usar
 

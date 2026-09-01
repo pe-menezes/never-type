@@ -67,7 +67,22 @@ public final class HotkeyMonitor {
 
         private(set) var state: State = .idle
 
-        public init() {}
+        /// Whether the double tap locks at all.
+        ///
+        /// Off, `.awaitingSecondTap` is never entered: a short tap concludes on
+        /// the release itself, so `(.awaitingSecondTap, .down)` has no state to
+        /// fire from. The other way of writing it was to arm the window as usual
+        /// and refuse the latch when the second tap arrived. That keeps a timer
+        /// running for a gesture that cannot happen, and leaves a case in this
+        /// table that no input can ever produce.
+        ///
+        /// It also gives the delay back: with hands-free on, a tap under 250 ms
+        /// waits up to 300 ms to see whether the second one arrives.
+        private let handsFree: Bool
+
+        public init(handsFree: Bool = true) {
+            self.handsFree = handsFree
+        }
 
         public var isLatched: Bool { state == .latched }
 
@@ -95,7 +110,7 @@ public final class HotkeyMonitor {
                 return [.start]
 
             case (.holding(let since), .up(let t)):
-                guard t - since < Self.tapThreshold else {
+                guard handsFree, t - since < Self.tapThreshold else {
                     state = .idle
                     return [.finish]
                 }
@@ -182,18 +197,36 @@ public final class HotkeyMonitor {
 
     /// Switchable in use: the choice lives in the menu.
     ///
-    /// No need to reinstall the monitors — they listen to `.flagsChanged` from
-    /// any key, and the keyCode filter happens on read. What does need resetting
-    /// is the state machine: switching keys in the middle of a hold would leave
-    /// an orphan recording, with no key to finish it.
+    /// No need to reinstall the monitors, which listen to `.flagsChanged` from
+    /// any key with the keyCode filter happening on read. What does need
+    /// resetting is the state machine: a gesture in flight belongs to the key
+    /// that started it. Ending the recording that gesture was holding open is
+    /// the app's job (`chooseTrigger`, in `main.swift`), since the recorder does
+    /// not live here.
     public var trigger: Trigger {
         didSet {
             guard trigger.keyCode != oldValue.keyCode else { return }
-            tapTimer?.invalidate()
-            tapTimer = nil
-            latch = Latch()
+            resetGesture()
         }
     }
+
+    /// Whether two taps lock the recording, switchable from the menu.
+    ///
+    /// Somebody who locks by accident needs a way out of the mode, and the mode
+    /// costs everyone else up to 300 ms on a tap under the threshold. Changing
+    /// it resets the state machine for the same reason switching keys does: a
+    /// gesture already in flight belongs to the rule that started it.
+    ///
+    /// What the reset cannot do is stop a recording, because the recorder does
+    /// not live here. Whoever flips this has to end the recording that the
+    /// abandoned gesture was holding open (`toggleHandsFree`, in `main.swift`).
+    public var handsFreeEnabled: Bool {
+        didSet {
+            guard handsFreeEnabled != oldValue else { return }
+            resetGesture()
+        }
+    }
+
     /// Returns whether `.pressed` actually started a recording. Other event
     /// return values are ignored. A refusal resets the gesture in the monitor,
     /// so every failure path gets the same state-machine cleanup.
@@ -201,14 +234,19 @@ public final class HotkeyMonitor {
 
     private var globalMonitors: [Any] = []
     private var localMonitor: Any?
-    private var latch = Latch()
+    private var latch: Latch
     private var tapTimer: Timer?
 
     /// True while the recording continues without the key held.
     public var isLatched: Bool { latch.isLatched }
 
-    public init(trigger: Trigger = .rightCommand) {
+    /// The `Latch` is built here as well: a property observer does not run
+    /// during initialization, so setting `handsFreeEnabled` alone would leave
+    /// the state machine on the default rule, whatever was chosen.
+    public init(trigger: Trigger = .rightCommand, handsFreeEnabled: Bool = true) {
         self.trigger = trigger
+        self.handsFreeEnabled = handsFreeEnabled
+        self.latch = Latch(handsFree: handsFreeEnabled)
     }
 
     /// The Accessibility grant required for synthetic input.
@@ -260,9 +298,15 @@ public final class HotkeyMonitor {
         globalMonitors.removeAll()
         if let localMonitor { NSEvent.removeMonitor(localMonitor) }
         localMonitor = nil
+        resetGesture()
+    }
+
+    /// Back to idle, with nothing armed. The `Latch` is rebuilt, because the
+    /// rule it was built with is what changed.
+    private func resetGesture() {
         tapTimer?.invalidate()
         tapTimer = nil
-        latch = Latch()
+        latch = Latch(handsFree: handsFreeEnabled)
     }
 
 

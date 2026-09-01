@@ -25,7 +25,8 @@ mark. Its three bars move with the voice while listening, including hands-free,
 then collapse into moving dots beside the unchanged cursor while writing text.
 
 The menu bar menu switches the trigger key among Right ⌘, ⌥ and ⌃, and it holds
-the last 30 transcriptions, a custom vocabulary and the permission status.
+the last 30 transcriptions and a custom vocabulary. Clicking the orb opens that
+same menu, which is how you reach it in full screen.
 [`docs/reference.md`](docs/reference.md) goes through every item.
 
 ## Requirements

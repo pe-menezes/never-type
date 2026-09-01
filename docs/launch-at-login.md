@@ -50,8 +50,9 @@ What would change the decision is the icon taking long, and it does not.
 
 ## How to redo the measurement
 
-**At boot, with no tooling at all:** restart, open the menu bar menu and read the
-`Model: Metal · load N ms · warm-up N ms` line. The app already measures itself,
+**At boot, with no tooling at all:** restart, open the menu bar menu with Option
+held and read the `Model: Metal · load N ms · warm-up N ms` line, which is one of
+the lines that only appear under Option. The app already measures itself,
 and that is the real cold load. It is the right way to redo this number. The
 others below are for measuring outside of boot.
 

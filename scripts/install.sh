@@ -96,7 +96,8 @@ else
   echo
   echo "     Do not copy straight into $MODEL_DIR/: that skips fetch-model.sh's"
   echo "     magic and size validation, and a bad file is only refused when the"
-  echo "     app opens — the message shows up in the menu, under \"Model:\", not here."
+  echo "     app opens — the message shows up in the menu, under \"Model:\" (hold"
+  echo "     Option as you open it), not here."
   echo
 fi
 
@@ -127,7 +128,9 @@ cat <<'MSG'
   In the menu bar menu: the key (Right ⌘, ⌥ or ⌃) and the sounds are under
   "Hotkey"; the latest transcriptions under "Copy Last Transcription" and
   "History", where clicking copies and "Clear History" deletes the file; terms
-  and replacements under "Vocabulary…".
+  and replacements under "Vocabulary…". Clicking the floating orb opens that
+  same menu, which is how you reach it in full screen. Holding Option as it
+  opens adds the trigger, the model and the version.
 
 MSG
 

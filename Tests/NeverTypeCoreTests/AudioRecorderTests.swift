@@ -480,4 +480,35 @@ struct LatchTests {
         #expect(latch.handle(.timeout) == [], "timeout with no window armed")
         #expect(latch.handle(.otherKey) == [], "regular key with nothing in progress")
     }
+
+    /// Off, the mode leaves the table. The release concludes on its own,
+    /// nothing is armed, and the 300 ms a short tap used to spend waiting for a
+    /// second one comes back.
+    @Test("with hands-free off, a tap and a hold both end on the release")
+    func handsFreeOffEndsOnTheRelease() {
+        var latch = L(handsFree: false)
+        #expect(latch.handle(.down(0)) == [.start])
+        #expect(latch.handle(.up(0.05)) == [.finish],
+                "a short tap has no second tap to wait for, so no window is armed")
+
+        #expect(latch.handle(.down(1)) == [.start])
+        #expect(latch.handle(.up(1 + L.tapThreshold + 0.1)) == [.finish],
+                "the ordinary hold is untouched")
+    }
+
+    /// The state that locking goes through is never entered, so there is no
+    /// state left for a second tap to lock from.
+    @Test("with hands-free off, two taps do not lock")
+    func handsFreeOffDoesNotLatch() {
+        var latch = L(handsFree: false)
+        _ = latch.handle(.down(0))
+        _ = latch.handle(.up(0.05))
+
+        #expect(latch.handle(.down(0.15)) == [.start],
+                "the second tap opens a new dictation, and nothing locks")
+        #expect(!latch.isLatched)
+        #expect(latch.handle(.up(0.2)) == [.finish])
+        #expect(!latch.isLatched)
+        #expect(latch.handle(.timeout) == [], "no window was ever armed to expire")
+    }
 }
