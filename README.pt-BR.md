@@ -25,7 +25,8 @@ marca do NeverType. Os três traços se movem com a voz, inclusive em mãos-livr
 e viram pontos móveis ao lado do mesmo cursor enquanto o texto é escrito.
 
 O menu da barra troca a tecla de gatilho entre ⌘, ⌥ e ⌃ direitos, e guarda as
-últimas 30 transcrições, um vocabulário customizado e o estado das permissões.
+últimas 30 transcrições e um vocabulário customizado. Um clique no círculo abre
+esse mesmo menu, que é como se chega nele em tela cheia.
 O [`docs/reference.md`](docs/reference.md) passa por cada item.
 
 ## Requisitos

@@ -17,6 +17,12 @@ what it is, what it requires and how to install it.
   recording running. A keystroke cancels only while the modifier is down, where
   it means you were pressing a shortcut. A tap is a hold under 250 ms, and the
   second one has 300 ms to arrive.
+- Hands-free can be turned off, in its own item in the menu. Off, two taps no
+  longer lock: the key records while it is held, the release finishes it, and a
+  tap under 250 ms concludes on the release, with no 300 ms wait for a second
+  one. Switching it while a recording is running discards that
+  recording, because the gesture holding it open goes with the switch. The same
+  happens if you change the key mid-recording.
 - An empty transcription is dropped. The app writes one line to the log and
   leaves the history as it was.
 - Bluetooth headsets go into narrowband HFP (8 kHz) when the microphone opens,
@@ -40,6 +46,14 @@ heartbeat, since a windowless app that dies leaves the screen looking exactly as
 before. It is born in the bottom right corner and it is draggable. Drop it near
 an edge and it snaps, and the position is remembered. It also survives
 full-screen applications, where the menu bar is hidden.
+
+Clicking it opens the same menu the menu bar icon opens, next to the orb. The
+two gestures share one button, and 3 px of travel separate them: under that it
+is a click, and from there on the orb follows the pointer and no menu opens. The
+cursor is the ordinary arrow, and it turns into a closed hand once the orb is
+really moving. Near an edge of the screen, which is where the orb tends to live,
+macOS flips the menu to whichever side fits. While the menu is open the orb
+drops below it, so a menu that lands on top of the orb covers it.
 
 A short tone marks start, finish, lock and discard, and the pitch says which one
 it was. The finishing tone is lower than the starting one, and the locking tone
@@ -105,29 +119,55 @@ came out, I wanted Y", so they require you to already know what the term gets
 confused with. A word that comes out wrong in a different way every time gives
 them nothing stable to match.
 
+## The tooltip
+
+Rest the pointer on the menu bar icon, or on the orb, and after a moment it
+says `NeverType. Hold Right ⌘ to dictate. Click for the menu.`, naming whichever
+key is chosen. It is the only thing the app says without being clicked, and it
+exists because reading the menu means having already worked out that there is a
+menu to open.
+
+On the icon this is the ordinary menu bar behavior. On the orb it is a tooltip
+inside a borderless panel that never becomes the active window, which needed the
+panel to accept mouse-moved events and the view to keep tracking marked
+`.activeAlways`. Whether macOS draws it there was not watched happening: the app
+was not run for this change.
+
 ## The menu bar menu
 
-The first two lines say the current key ("Trigger: Right ⌘ (hold and speak)")
-and the hands-free summary. Then:
+It opens from two places, the menu bar icon and a click on the orb, and it is
+rebuilt from scratch every time, so it never shows stale state. In full screen
+the orb is the only one of the two that exists.
 
-- **Hotkey**: Right ⌘, ⌥ or ⌃, with a check on the current one. The choice is
-  saved and comes back on the next launch.
+```
+Hotkey: Right ⌘            >
+Hands-free: double tap     >
+Vocabulary…
+──────────────
+Copy Last Transcription
+History (30)               >
+──────────────
+Start NeverType with macOS
+Quit NeverType             ⌘Q
+```
+
+- **Hotkey: Right ⌘**: the title carries the key in use, so the line teaches the
+  gesture to somebody who opened the menu for something else. The submenu offers
+  Right ⌘, ⌥ and ⌃, with a check on the current one. The choice is saved and
+  comes back on the next launch.
 - **Sounds**: a toggle in the same submenu, on by default, for whoever works in
   a shared room. The volume is fixed.
+- **Hands-free: double tap**: the submenu holds the switch, on by default, and
+  three lines of instruction under it: `Double-tap Right ⌘ to lock`, `Tap once
+  to finish · Esc discards`, `Typing does not cancel while locked`. Turned off,
+  the item reads **Hands-free: off** and the submenu keeps one line,
+  `Right ⌘ only records while held`. The choice is saved. This is the way out
+  for somebody who locked by accident: turning it off ends the recording that
+  was running.
 - **Vocabulary…**: opens the vocabulary window, with two tabs (**Vocabulary**,
   for the terms, and **Replacements**), plus and minus buttons, and a save on
   every edited cell. Closing gives the focus back to the app you were in, and
   the counts show up in the item itself.
-- **Microphone**, **Accessibility**: `ok` or `missing`, queried from the system
-  every time the menu opens. When Accessibility is missing, **Open
-  Accessibility Settings…** appears as well.
-- **Model**, shown as `Metal · load N ms · warm-up N ms`: the backend ggml
-  registered, how long the model took to load and how long the warm-up took
-  (1 s of silence transcribed at launch). `CPU (SLOW)` in place of `Metal` is
-  the Metal failure below, and a model that failed to load puts its error on
-  this line, with the script to run.
-- **Version**: the commit the binary was built from. The Finder shows a fixed
-  0.1.0.
 - **Copy Last Transcription**: appears from the first transcription on, with the
   preview in the tooltip.
 - **History**: the last 30, most recent first, with the time and a 44-character
@@ -144,9 +184,41 @@ and the hands-free summary. Then:
 - **Quit NeverType** (⌘Q). Opening the app while it is already running activates
   the running copy, and the new process exits.
 
+### The lines that only show up when they are needed
+
+- **Accessibility: missing** and **Microphone: missing**, queried from the system
+  every time the menu opens. Granted, they take no line at all. Missing, they
+  open the menu, above everything else, and **Open Accessibility Settings…**
+  comes right under the Accessibility one. The microphone has no item of its
+  own: macOS asks for it once, at the first launch.
+- **turned off in Login Items**, with **Open Login Items…** under it, when the
+  login item is registered and you turned it off in System Settings.
+
+### Diagnostics, under Option
+
+Hold Option as you open the menu, from the icon or from the orb, and the
+diagnostic lines come back:
+
+- **Trigger: Right ⌘ (hold and speak)** opens the menu, and under it the summary
+  `double-tap locks · tap to finish · Esc discards`. The summary describes the
+  double tap, so it only shows while hands-free is on. With hands-free off, hold
+  and speak is the whole cycle and the line above it already says it.
+- **Model**, in a block of its own above the login item, shown as
+  `Metal · load N ms · warm-up N ms`: the backend ggml
+  registered, how long the model took to load and how long the warm-up took
+  (1 s of silence transcribed at launch). `CPU (SLOW)` in place of `Metal` is
+  the Metal failure below, and a model that failed to load puts its error on
+  this line, with the script to run.
+- **Version**: the commit the binary was built from. The Finder shows a fixed
+  0.1.0.
+
+The key is read once, at the moment the menu is built. Holding Option after the
+menu is already on screen changes nothing: close it and open it again with the
+key down.
+
 Two launch failures open with the icon slashed. The ggml device enumeration at
 launch may list no Metal device, and the model may fail to load. Both say so in
-the log and on the "Model:" line.
+the log, and on the "Model:" line under Option.
 
 ## What stays on disk
 
@@ -165,8 +237,8 @@ reach of anyone who can already read the file.
 **Clear History** deletes `historico.json` and `last.wav`, the two files that
 hold what you said.
 
-Outside that folder, `UserDefaults` holds five preferences: the key, the sounds
-toggle, the pill's position, `clipboardRestoreDelay` and
+Outside that folder, `UserDefaults` holds six preferences: the key, hands-free,
+the sounds toggle, the pill's position, `clipboardRestoreDelay` and
 `checkFocusBeforePaste`. None of them holds text. The `ultima-transcricao.txt`
 from earlier versions is deleted at launch.
 

@@ -254,10 +254,11 @@ final class OverlayActivityView: NSView {
     // cannot touch main-actor state, so state transitions stop it explicitly.
 }
 
-/// The floating body's background and drag surface.
+/// The floating body's background, drag surface and menu button.
 @MainActor
 final class PillView: NSView {
     var onDragEnd: (() -> Void)?
+    var onClick: (() -> Void)?
     let activity = OverlayActivityView(frame: .zero)
 
     var state: OverlayState = .idle {
@@ -268,8 +269,12 @@ final class PillView: NSView {
         }
     }
 
-    private var dragOrigin: NSPoint?
+    /// Reborn on every press. Outside a press its answer is not read.
+    private var gesture = PointerGesture(origin: .zero)
     private var windowOrigin: NSPoint?
+    private var isPressed = false
+    private var isDragging: Bool { isPressed && gesture.outcome == .drag }
+    private var hover: NSTrackingArea?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -290,13 +295,44 @@ final class PillView: NSView {
         setAccessibilityValue(state.accessibilityValue)
     }
 
-    /// Every visible pixel is a drag surface, including the animated content.
+    /// Every visible pixel answers the mouse, including the animated content.
     override func hitTest(_ point: NSPoint) -> NSView? {
         bounds.contains(point) ? self : nil
     }
 
+    /// Tracking of its own, so the tooltip has a chance in this window.
+    ///
+    /// `NSView.toolTip` installs tracking by itself, and AppKit's default
+    /// follows the mouse while the application is the active one. NeverType is
+    /// accessory and is almost never active, which is exactly the moment
+    /// somebody rests the pointer on the orb wondering what it is. `.activeAlways`
+    /// is the option that keeps the hover arriving in that state, and
+    /// `.inVisibleRect` keeps the area on the bounds as the panel is dragged
+    /// around the screen.
+    ///
+    /// Not watched happening: the app was not run for this change. The hint on
+    /// the menu bar button is the trodden path. This one puts the same string
+    /// in a borderless non-activating panel, and that is where the doubt is.
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hover { removeTrackingArea(hover) }
+        let area = NSTrackingArea(rect: bounds,
+                                  options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect],
+                                  owner: self,
+                                  userInfo: nil)
+        addTrackingArea(area)
+        hover = area
+    }
+
+    /// The plain arrow at rest, and the closed hand only while the orb is really
+    /// being moved.
+    ///
+    /// It was the open hand until a click started opening the menu. A hand over
+    /// something clickable promises one thing, dragging, and the orb now does
+    /// two. The closed hand still marks the drag, and it appears when the press
+    /// passes the slop instead of when the button goes down.
     override func resetCursorRects() {
-        addCursorRect(bounds, cursor: dragOrigin == nil ? .openHand : .closedHand)
+        addCursorRect(bounds, cursor: isDragging ? .closedHand : .arrow)
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -304,9 +340,9 @@ final class PillView: NSView {
         let radius = drawingBounds.height / 2
         let path = NSBezierPath(roundedRect: drawingBounds, xRadius: radius, yRadius: radius)
 
-        let background = dragOrigin == nil
-            ? NSColor(srgbRed: 0.065, green: 0.065, blue: 0.065, alpha: 0.96)
-            : NSColor(srgbRed: 0.10, green: 0.10, blue: 0.10, alpha: 0.98)
+        let background = isPressed
+            ? NSColor(srgbRed: 0.10, green: 0.10, blue: 0.10, alpha: 0.98)
+            : NSColor(srgbRed: 0.065, green: 0.065, blue: 0.065, alpha: 0.96)
         background.setFill()
         path.fill()
 
@@ -316,29 +352,44 @@ final class PillView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
-        dragOrigin = NSEvent.mouseLocation
+        gesture = PointerGesture(origin: NSEvent.mouseLocation)
         windowOrigin = window?.frame.origin
-        NSCursor.closedHand.set()
-        discardCursorRects()
-        window?.invalidateCursorRects(for: self)
+        isPressed = true
         needsDisplay = true
     }
 
+    /// The orb does not follow the pointer inside the slop.
+    ///
+    /// Moving it there and calling the press a click afterwards would leave the
+    /// orb a couple of pixels from where the saved origin says it is, and the
+    /// next launch would put it back in the other place.
     override func mouseDragged(with event: NSEvent) {
-        guard let dragOrigin, let windowOrigin, let window else { return }
-        let now = NSEvent.mouseLocation
-        window.setFrameOrigin(NSPoint(x: windowOrigin.x + now.x - dragOrigin.x,
-                                      y: windowOrigin.y + now.y - dragOrigin.y))
+        let wasDragging = isDragging
+        guard let moved = gesture.translation(to: NSEvent.mouseLocation),
+              let windowOrigin, let window else { return }
+        window.setFrameOrigin(NSPoint(x: windowOrigin.x + moved.dx,
+                                      y: windowOrigin.y + moved.dy))
+        if !wasDragging { refreshCursor() }
     }
 
     override func mouseUp(with event: NSEvent) {
-        dragOrigin = nil
+        let outcome = gesture.outcome
+        isPressed = false
         windowOrigin = nil
-        NSCursor.openHand.set()
+        refreshCursor()
+        needsDisplay = true
+        switch outcome {
+        // A click never moved the orb, so there is no position to snap or to
+        // save: the two gestures end in different places on purpose.
+        case .click: onClick?()
+        case .drag:  onDragEnd?()
+        }
+    }
+
+    private func refreshCursor() {
+        (isDragging ? NSCursor.closedHand : NSCursor.arrow).set()
         discardCursorRects()
         window?.invalidateCursorRects(for: self)
-        needsDisplay = true
-        onDragEnd?()
     }
 }
 
@@ -348,8 +399,42 @@ final class RecordingOverlay {
     private var panel: NSPanel?
     private var pill: PillView?
 
+    /// The status item's menu, which a click on the orb opens as well.
+    ///
+    /// The same object, never a copy. The menu rebuilds itself from the state of
+    /// the moment in `menuNeedsUpdate` (`main.swift`), so whatever opens it gets
+    /// the same rebuilt menu. A second menu would be a second path to keep in
+    /// step, and it would be the one used in full screen, where the menu bar is
+    /// hidden and nobody would see it drifting from the other.
+    var menu: NSMenu?
+
+    /// What the pointer gets for standing still on the orb, the same line the
+    /// menu bar icon carries. Kept here as well as on the view, because the
+    /// panel is built on the first state change and the hint may be set before
+    /// or after that.
+    var hint: String? {
+        didSet { pill?.toolTip = hint }
+    }
+
     private static let originKey = "overlayOrigin"
     private static let snapDistance: CGFloat = 48
+
+    /// Above every window, including a full-screen application's own.
+    private static let restingLevel: NSWindow.Level = .screenSaver
+
+    /// Where the panel waits while a menu is on screen.
+    ///
+    /// AppKit draws menus in a window at `.popUpMenu`, which is level 101, and
+    /// this panel rests at `.screenSaver`, which is 1000: a menu opened over the
+    /// orb comes out underneath it. `.statusBar` is 25, still above the windows
+    /// of the application in front and above a full-screen one, so the orb stays
+    /// visible while the menu covers it. This follows from the three constants
+    /// and was not watched happening: the app was not run for this change.
+    private static let menuOpenLevel: NSWindow.Level = .statusBar
+
+    /// Called from the menu's delegate, for the menu opened from either place.
+    func menuOpened() { panel?.level = Self.menuOpenLevel }
+    func menuClosed() { panel?.level = Self.restingLevel }
 
     func showIdle() {
         apply(.idle)
@@ -399,17 +484,53 @@ final class RecordingOverlay {
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hasShadow = true
-        panel.level = .screenSaver
+        panel.level = Self.restingLevel
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
+        // The tooltip timer is fed by mouse-moved events, and a borderless
+        // panel does not receive them unless it is asked to. Nothing else in
+        // the orb reads them: the drag runs on mouse-dragged, which arrives
+        // either way.
+        panel.acceptsMouseMovedEvents = true
 
         let pill = PillView(frame: NSRect(origin: .zero, size: size))
         pill.autoresizingMask = [.width, .height]
+        pill.toolTip = hint
         pill.onDragEnd = { [weak self] in self?.snapAndPersist() }
+        pill.onClick = { [weak self] in self?.presentMenu() }
         self.pill = pill
 
         panel.contentView = pill
         panel.setFrameOrigin(restoredOrigin(for: size))
         return panel
+    }
+
+    /// Opens the menu against the orb itself.
+    ///
+    /// `popUp(positioning:at:in:)` and not `statusItem.button?.performClick(nil)`
+    /// because in full screen macOS hides the menu bar, and the orb exists for
+    /// that case (`docs/pitfalls.md`, "In full screen there is no menu bar"). A
+    /// menu anchored to an icon that is not on screen would fail in the one
+    /// scenario where the orb is the whole interface.
+    ///
+    /// The anchor is the orb's bottom left corner, so the menu hangs under it.
+    /// The orb is born in the bottom right corner of the screen, where the menu
+    /// does not fit downwards, and there AppKit flips it upwards on its own and
+    /// it covers the orb. Nothing was done about that: it is what any context
+    /// menu near an edge does, and the level above keeps the orb from being
+    /// drawn on top of the menu when they overlap.
+    private func presentMenu() {
+        guard let menu, let pill else { return }
+        // Out of the mouse handler before the menu's own tracking loop starts.
+        // Entering a nested AppKit loop from inside an event handler is what the
+        // Accessibility alert had to stop doing (`main.swift`), and the click is
+        // finished by then anyway.
+        Task { @MainActor in
+            // The answer says whether an item was chosen. Every item carries its
+            // own target and acts on its own, so nothing here reads it.
+            _ = menu.popUp(positioning: nil,
+                           at: NSPoint(x: pill.bounds.minX, y: pill.bounds.minY - 4),
+                           in: pill)
+        }
     }
 
     private func restoredOrigin(for size: NSSize) -> NSPoint {

@@ -242,10 +242,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // shows stale state.
         menu.delegate = self
         statusItem.menu = menu
+        // The same object, so a click on the orb opens the menu that was just
+        // rebuilt. It is the only way to reach the menu in full screen, where
+        // macOS hides the menu bar and the icon with it.
+        overlay.menu = menu
 
         if let saved = HotkeyMonitor.Trigger.named(UserDefaults.standard.string(forKey: Self.triggerKey)) {
             monitor.trigger = saved
         }
+        monitor.handsFreeEnabled = Self.handsFreeIsOn
         monitor.onEvent = { [weak self] event in self?.handle(event) ?? false }
         recorder.onLevel = { [weak self] level in self?.overlay.push(level: level) }
         recorder.onError = { [weak self] message in
@@ -257,6 +262,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Always on screen: an accessory app that dies changes nothing visually,
         // so the idle pill is the only sign that it is still alive.
         overlay.showIdle()
+        // After the orb exists, since one of the two hints lives on it.
+        refreshHoverHint()
 
         requestMicrophoneAccess()
         warnIfAccessibilityMissing()
@@ -281,7 +288,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.render(.blocked)
             }
         }
-        log("ready. trigger: \(monitor.trigger.label)")
+        log("ready. trigger: \(monitor.trigger.label) · hands-free: \(monitor.handsFreeEnabled ? "on" : "off")")
         // The two insertion preferences have no menu item, so this line is how
         // you confirm that a `defaults write` took effect. Effective values, not
         // what is stored: both are read through the rule that bounds them.
@@ -414,13 +421,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             log("hands-free locked. Tap \(monitor.trigger.label) to transcribe, Esc to discard.")
             return true
         case .cancelled:
-            Feedback.discarded()
-            recorder.cancel()
-            overlay.hide()
-            render(.idle)
-            log("cancelled: regular key pressed during the hold")
+            discardRecording(reason: "regular key pressed during the hold")
             return true
         }
+    }
+
+    /// Throws the running recording away: the tone, the pill and the icon all
+    /// go back to rest, and the audio is not transcribed.
+    private func discardRecording(reason: String) {
+        Feedback.discarded()
+        recorder.cancel()
+        overlay.hide()
+        render(.idle)
+        log("cancelled: \(reason)")
+    }
+
+    /// Ends a recording whose gesture the monitor has just thrown away.
+    ///
+    /// Switching the key or hands-free resets the state machine, and the
+    /// recording that gesture had started would go on with nothing able to stop
+    /// it: hands-free holds no key to release, and the reset already took the
+    /// state a tap would have finished. Reachable from the menu, which is open
+    /// during a hands-free recording precisely when somebody locked by accident
+    /// and is looking for the way out. Not watched happening; the app was not
+    /// run for this change.
+    private func endOrphanRecording(_ reason: String) {
+        guard recorder.isRecording else { return }
+        discardRecording(reason: reason)
     }
 
     /// Puts the text where the cursor is.
@@ -490,6 +517,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private static let triggerKey = "trigger"
+    private static let handsFreeKey = "handsFree"
+
+    /// On by default, because locking with two taps is what the app has always
+    /// done. A preference arriving to turn a working gesture off would be a
+    /// change nobody asked for. Same shape as the sounds toggle: absent means
+    /// on, and only an explicit `false` turns it off.
+    private static var handsFreeIsOn: Bool {
+        UserDefaults.standard.object(forKey: handsFreeKey) as? Bool ?? true
+    }
+
+    /// What the pointer gets for standing still on the icon or on the orb.
+    ///
+    /// The menu teaches the gesture now, and reading a menu means having already
+    /// found that there is a menu. This line is the one that reaches somebody
+    /// who has never clicked either of the two, and it costs no line in the menu.
+    private var hoverHint: String {
+        "NeverType. Hold \(monitor.trigger.label) to dictate. Click for the menu."
+    }
+
+    private func refreshHoverHint() {
+        statusItem.button?.toolTip = hoverHint
+        overlay.hint = hoverHint
+    }
 
     /// The commit this binary was built from, stamped by `build-app.sh`.
     ///
@@ -504,12 +554,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         vocabularyWindow.show()
     }
 
+    /// The key already chosen is left alone. Picking it again would rewrite the
+    /// same value and, through `endOrphanRecording`, throw away a hands-free
+    /// recording that nothing about the app had changed.
     @objc private func chooseTrigger(_ sender: NSMenuItem) {
         guard let id = sender.representedObject as? String,
-              let option = HotkeyMonitor.Trigger.named(id) else { return }
+              let option = HotkeyMonitor.Trigger.named(id),
+              option.keyCode != monitor.trigger.keyCode else { return }
         monitor.trigger = option
         UserDefaults.standard.set(id, forKey: Self.triggerKey)
+        endOrphanRecording("the trigger key changed while recording")
+        refreshHoverHint()
         log("trigger is now \(option.label)")
+    }
+
+    @objc private func toggleHandsFree() {
+        monitor.handsFreeEnabled.toggle()
+        UserDefaults.standard.set(monitor.handsFreeEnabled, forKey: Self.handsFreeKey)
+        endOrphanRecording("hands-free switched with a recording running")
+        log("hands-free: \(monitor.handsFreeEnabled ? "on" : "off")")
     }
 
     @objc private func toggleSound() {
@@ -599,103 +662,193 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Menu
 
+    /// Rebuilt from scratch on every opening, from the state of that moment.
+    ///
+    /// Which lines exist is decided by `MenuLayout`, which knows no AppKit; this
+    /// method only turns each line into an `NSMenuItem`.
     private func rebuildMenu() {
         menu.removeAllItems()
-        let acc = HotkeyMonitor.hasAccessibilityPermission
-        menu.addItem(disabled("Trigger: \(monitor.trigger.label) (hold and speak)"))
-        menu.addItem(disabled("  double-tap locks · tap to finish · Esc discards"))
+        let loginState = loginItemState
+        let conditions = MenuLayout.Conditions(
+            microphoneAuthorized: micAuthorized,
+            accessibilityAuthorized: HotkeyMonitor.hasAccessibilityPermission,
+            // Read here, in the rebuild, because this is the one moment the
+            // contents are decided. Holding Option after the menu is already
+            // open changes nothing, and `docs/reference.md` says so.
+            //
+            // The alternative, `isAlternate` with a `keyEquivalentModifierMask`,
+            // does follow the key live, and it swaps items in pairs: each hidden
+            // line would need a visible line in its place, which is the wall of
+            // text this menu just stopped opening with.
+            showsDiagnostics: NSEvent.modifierFlags.contains(.option),
+            historyCount: history.entries.count,
+            triggerLabel: monitor.trigger.label,
+            handsFreeEnabled: monitor.handsFreeEnabled,
+            startsAtLogin: loginState == .on,
+            loginItemNeedsApproval: loginState == .needsApproval)
 
-        let keyItem = NSMenuItem(title: "Hotkey", action: nil, keyEquivalent: "")
+        for row in MenuLayout.rows(for: conditions) {
+            menu.addItem(item(for: row))
+        }
+    }
+
+    private func item(for row: MenuLayout.Row) -> NSMenuItem {
+        switch row {
+        case .separator:
+            return .separator()
+
+        case .accessibilityMissing:
+            return disabled("Accessibility: missing")
+
+        case .openAccessibilitySettings:
+            return action("Open Accessibility Settings…", #selector(openAccessibilitySettings))
+
+        case .microphoneMissing:
+            return disabled("Microphone: missing")
+
+        case .trigger:
+            return disabled("Trigger: \(monitor.trigger.label) (hold and speak)")
+
+        case .gestureHint:
+            return disabled("  double-tap locks · tap to finish · Esc discards")
+
+        // The title names the key in use, so the line teaches the gesture to
+        // whoever opened the menu for something else entirely.
+        case .hotkey(let trigger):
+            let item = NSMenuItem(title: "Hotkey: \(trigger)", action: nil, keyEquivalent: "")
+            item.submenu = hotkeyMenu()
+            return item
+
+        // Off, the title stops advertising a gesture that no longer locks.
+        case .handsFree(let enabled):
+            let item = NSMenuItem(title: enabled ? "Hands-free: double tap" : "Hands-free: off",
+                                  action: nil,
+                                  keyEquivalent: "")
+            item.submenu = handsFreeMenu(enabled: enabled)
+            return item
+
+        case .vocabulary:
+            let counts = vocabulary.terms.count + vocabulary.replacements.count
+            let title = counts > 0
+                ? "Vocabulary (\(vocabulary.terms.count) terms, \(vocabulary.replacements.count) replacements)…"
+                : "Vocabulary…"
+            return action(title, #selector(openVocabulary))
+
+        case .copyLastTranscription:
+            let item = action("Copy Last Transcription", #selector(copyLastTranscript))
+            if let lastTranscript { item.toolTip = preview(of: lastTranscript) }
+            return item
+
+        case .history(let count):
+            let item = NSMenuItem(title: "History (\(count))", action: nil, keyEquivalent: "")
+            item.submenu = historyMenu()
+            return item
+
+        case .model:
+            return disabled("Model: \(modelStatus)")
+
+        case .version:
+            return disabled("Version: \(Self.buildCommit)")
+
+        case .startAtLogin(let enabled):
+            let item = action("Start NeverType with macOS", #selector(toggleLoginItem))
+            item.state = enabled ? .on : .off
+            return item
+
+        // The item speaks this app's language; the notice speaks Apple's, which
+        // is what the user will search for when looking for where to turn it back on.
+        case .loginItemTurnedOff:
+            return disabled("  turned off in Login Items")
+
+        case .openLoginItems:
+            return action("Open Login Items…", #selector(openLoginItemsSettings))
+
+        case .quit:
+            // The app's own selector instead of `terminate:`, which is what
+            // macOS 26 recognizes as the standard Quit command and draws a
+            // symbol next to. It was the only icon in the whole menu, and a menu
+            // with one icon looks like a menu missing fifteen. Routing through
+            // this app's method leaves AppKit no standard command to recognize.
+            // Not watched happening: the app was not run for this change.
+            return action("Quit NeverType", #selector(quitNeverType), keyEquivalent: "q")
+        }
+    }
+
+    private func hotkeyMenu() -> NSMenu {
         let keyMenu = NSMenu()
         for option in HotkeyMonitor.Trigger.all {
-            let line = NSMenuItem(title: option.label,
-                                  action: #selector(chooseTrigger(_:)), keyEquivalent: "")
-            line.target = self
+            let line = action(option.label, #selector(chooseTrigger(_:)))
             line.state = option.keyCode == monitor.trigger.keyCode ? .on : .off
             line.representedObject = option.id
             keyMenu.addItem(line)
         }
         keyMenu.addItem(.separator())
-        let soundItem = NSMenuItem(title: "Sounds",
-                                   action: #selector(toggleSound), keyEquivalent: "")
-        soundItem.target = self
+        let soundItem = action("Sounds", #selector(toggleSound))
         soundItem.state = Feedback.isEnabled ? .on : .off
         keyMenu.addItem(soundItem)
-        keyItem.submenu = keyMenu
-        menu.addItem(keyItem)
+        return keyMenu
+    }
 
-        let vocab = NSMenuItem(title: "Vocabulary…", action: #selector(openVocabulary), keyEquivalent: "")
-        vocab.target = self
-        let counts = vocabulary.terms.count + vocabulary.replacements.count
-        if counts > 0 {
-            vocab.title = "Vocabulary (\(vocabulary.terms.count) terms, \(vocabulary.replacements.count) replacements)…"
+    /// The whole hands-free cycle, one submenu deep.
+    ///
+    /// Grey text is allowed down here. This submenu is opened on purpose, by
+    /// somebody looking for what the item means. The menu above it opens for
+    /// anyone copying a transcription, which is where a wall of text was the
+    /// verdict.
+    ///
+    /// The switch comes first, ahead of what cannot be clicked, and its
+    /// checkmark is already the answer to "is this on?".
+    private func handsFreeMenu(enabled: Bool) -> NSMenu {
+        let submenu = NSMenu()
+        let toggle = action("Hands-free", #selector(toggleHandsFree))
+        toggle.state = enabled ? .on : .off
+        submenu.addItem(toggle)
+        submenu.addItem(.separator())
+        if enabled {
+            submenu.addItem(disabled("Double-tap \(monitor.trigger.label) to lock"))
+            submenu.addItem(disabled("Tap once to finish · Esc discards"))
+            submenu.addItem(disabled("Typing does not cancel while locked"))
+        } else {
+            submenu.addItem(disabled("\(monitor.trigger.label) only records while held"))
         }
-        menu.addItem(vocab)
+        return submenu
+    }
 
-        menu.addItem(.separator())
-        menu.addItem(disabled("Microphone: \(micAuthorized ? "ok" : "missing")"))
-        menu.addItem(disabled("Accessibility: \(acc ? "ok" : "missing")"))
-        menu.addItem(disabled("Model: \(modelStatus)"))
-        menu.addItem(disabled("Version: \(Self.buildCommit)"))
-        if let lastTranscript {
-            menu.addItem(.separator())
-            let copy = NSMenuItem(title: "Copy Last Transcription",
-                                  action: #selector(copyLastTranscript), keyEquivalent: "")
-            copy.target = self
-            copy.toolTip = preview(of: lastTranscript)
-            menu.addItem(copy)
+    private func historyMenu() -> NSMenu {
+        let submenu = NSMenu()
+        for (index, entry) in history.entries.enumerated() {
+            let line = action("\(Self.clock.string(from: entry.date))  \(preview(of: entry.text))",
+                              #selector(copyFromHistory(_:)))
+            line.tag = index
+            line.toolTip = entry.text
+            submenu.addItem(line)
+        }
+        submenu.addItem(.separator())
+        submenu.addItem(action("Clear History", #selector(clearHistory)))
+        return submenu
+    }
 
-            if history.entries.count > 1 {
-                let item = NSMenuItem(title: "History (\(history.entries.count))",
-                                      action: nil, keyEquivalent: "")
-                let submenu = NSMenu()
-                for (index, entry) in history.entries.enumerated() {
-                    let line = NSMenuItem(title: "\(Self.clock.string(from: entry.date))  \(preview(of: entry.text))",
-                                          action: #selector(copyFromHistory(_:)), keyEquivalent: "")
-                    line.target = self
-                    line.tag = index
-                    line.toolTip = entry.text
-                    submenu.addItem(line)
-                }
-                submenu.addItem(.separator())
-                let clear = NSMenuItem(title: "Clear History",
-                                       action: #selector(clearHistory), keyEquivalent: "")
-                clear.target = self
-                submenu.addItem(clear)
-                item.submenu = submenu
-                menu.addItem(item)
-            }
-        }
-        if !acc {
-            let fix = NSMenuItem(title: "Open Accessibility Settings…",
-                                 action: #selector(openAccessibilitySettings), keyEquivalent: "")
-            fix.target = self
-            menu.addItem(fix)
-        }
-        menu.addItem(.separator())
-        let loginState = loginItemState
-        let login = NSMenuItem(title: "Start NeverType with macOS",
-                               action: #selector(toggleLoginItem), keyEquivalent: "")
-        login.target = self
-        login.state = loginState == .on ? .on : .off
-        menu.addItem(login)
-        // The item speaks this app's language; the notice speaks Apple's, which
-        // is what the user will search for when looking for where to turn it back on.
-        if loginState == .needsApproval {
-            menu.addItem(disabled("  turned off in Login Items"))
-            let allow = NSMenuItem(title: "Open Login Items…",
-                                   action: #selector(openLoginItemsSettings), keyEquivalent: "")
-            allow.target = self
-            menu.addItem(allow)
-        }
-        menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "Quit NeverType", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+    /// Every clickable item carries its own target.
+    ///
+    /// Not for tidiness: the menu is also opened from the orb, whose panel is
+    /// non-activating, and an item with no target has to find its action by
+    /// walking a responder chain that starts somewhere else. With the target
+    /// set, the item calls this object and the click lands the same from both
+    /// places.
+    private func action(_ title: String, _ selector: Selector, keyEquivalent: String = "") -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: selector, keyEquivalent: keyEquivalent)
+        item.target = self
+        return item
     }
 
     private func disabled(_ title: String) -> NSMenuItem {
         let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
         item.isEnabled = false
         return item
+    }
+
+    @objc private func quitNeverType() {
+        NSApp.terminate(nil)
     }
 
     @objc private func openAccessibilitySettings() {
@@ -777,6 +930,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 extension AppDelegate: NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         rebuildMenu()
+    }
+
+    /// The orb rests above every window and a menu does not, so it steps down
+    /// while one is open. The reason, with the three window levels, is in
+    /// `RecordingOverlay.menuOpenLevel`.
+    func menuWillOpen(_ menu: NSMenu) {
+        overlay.menuOpened()
+    }
+
+    func menuDidClose(_ menu: NSMenu) {
+        overlay.menuClosed()
     }
 }
 

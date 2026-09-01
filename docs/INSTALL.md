@@ -137,8 +137,9 @@ bash scripts/fetch-model.sh
 before promoting, and deletes the copy if it does not come out valid. Copying
 straight into `~/Library/Application Support/` skips that validation: the app
 checks again when it opens, refuses the file, opens with the slashed icon, and the
-"Model:" line in the menu carries the message with the script to run. The person
-discovers the problem in the menu, before the first dictation.
+"Model:" line in the menu carries the message with the script to run. That line
+comes up with Option held as the menu opens. The person discovers the problem in
+the menu, before the first dictation.
 
 ## 4. Permissions
 
@@ -226,7 +227,8 @@ deleting it revokes Accessibility and the person has to grant everything again.
 
 After updating, the test is still the same: **dictate a sentence.**
 
-The installed version also shows in the menu bar menu, under "Version:".
+The installed version also shows in the menu bar menu, under "Version:", with
+Option held as the menu opens.
 
 ## How to use
 
