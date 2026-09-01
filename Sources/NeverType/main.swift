@@ -443,8 +443,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// it: hands-free holds no key to release, and the reset already took the
     /// state a tap would have finished. Reachable from the menu, which is open
     /// during a hands-free recording precisely when somebody locked by accident
-    /// and is looking for the way out. Not watched happening; the app was not
-    /// run for this change.
+    /// and is looking for the way out. Not watched happening: the app was built,
+    /// installed and exercised by hand on 2026-09-01, and switching hands-free
+    /// off in the middle of a recording is the path nobody walked in that pass.
     private func endOrphanRecording(_ reason: String) {
         guard recorder.isRecording else { return }
         discardRecording(reason: reason)
@@ -769,7 +770,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // symbol next to. It was the only icon in the whole menu, and a menu
             // with one icon looks like a menu missing fifteen. Routing through
             // this app's method leaves AppKit no standard command to recognize.
-            // Not watched happening: the app was not run for this change.
+            // Confirmed in use on 2026-09-01: the build that was approved came
+            // up with no icon anywhere in the menu.
             return action("Quit NeverType", #selector(quitNeverType), keyEquivalent: "q")
         }
     }

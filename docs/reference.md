@@ -130,8 +130,9 @@ menu to open.
 On the icon this is the ordinary menu bar behavior. On the orb it is a tooltip
 inside a borderless panel that never becomes the active window, which needed the
 panel to accept mouse-moved events and the view to keep tracking marked
-`.activeAlways`. Whether macOS draws it there was not watched happening: the app
-was not run for this change.
+`.activeAlways`. Whether macOS draws it there was not watched happening. The app
+was built, installed and exercised by hand on 2026-09-01, and in that pass nobody
+rested the pointer on the orb to look.
 
 ## The menu bar menu
 

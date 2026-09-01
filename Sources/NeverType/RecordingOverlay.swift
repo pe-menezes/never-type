@@ -310,9 +310,12 @@ final class PillView: NSView {
     /// `.inVisibleRect` keeps the area on the bounds as the panel is dragged
     /// around the screen.
     ///
-    /// Not watched happening: the app was not run for this change. The hint on
-    /// the menu bar button is the trodden path. This one puts the same string
-    /// in a borderless non-activating panel, and that is where the doubt is.
+    /// Not watched happening, and here is the scope of that: the app was built,
+    /// installed and exercised by hand on 2026-09-01, and in that pass nobody
+    /// rested the pointer on the orb to look. The hint on the menu bar button is
+    /// the trodden path, ordinary menu bar behavior. This one puts the same
+    /// string in a borderless non-activating panel, and that is where the doubt
+    /// is.
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let hover { removeTrackingArea(hover) }
@@ -428,8 +431,9 @@ final class RecordingOverlay {
     /// this panel rests at `.screenSaver`, which is 1000: a menu opened over the
     /// orb comes out underneath it. `.statusBar` is 25, still above the windows
     /// of the application in front and above a full-screen one, so the orb stays
-    /// visible while the menu covers it. This follows from the three constants
-    /// and was not watched happening: the app was not run for this change.
+    /// visible while the menu covers it. The three constants say so, and it was
+    /// confirmed in use on 2026-09-01: a click on the orb brought the menu out
+    /// over it, which is what every click that opens the menu does.
     private static let menuOpenLevel: NSWindow.Level = .statusBar
 
     /// Called from the menu's delegate, for the menu opened from either place.

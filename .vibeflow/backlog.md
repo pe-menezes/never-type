@@ -28,7 +28,7 @@ Spec: `.vibeflow/specs/abrir-com-o-sistema.md`
 
 ## 1. Defeitos que podem estragar o trabalho de alguém
 
-Estes quatro são os únicos itens do backlog que causam **dano ao usuário**, não
+Estes cinco são os únicos itens do backlog que causam **dano ao usuário**, não
 apenas incômodo. Por isso vêm antes de tudo, inclusive do streaming.
 
 ### ✅ D1 · A devolução do clipboard é um chute de 0,6 s · IMPLEMENTADO em 30/08
@@ -176,6 +176,27 @@ alguém rodar. Visto na tradução de 29/08/2026; não consertado.
 *Evidência:* `scripts/install.sh:78-79` · `scripts/verify-install.sh:95-107` (a
 mesma conferência, com magic) · `docs/pitfalls.md` ("The magic alone does not
 validate a file", os cinco lugares)
+
+### D6 · Desligar mãos-livres com uma gravação rodando joga o áudio fora · P
+`toggleHandsFree` (`Sources/NeverType/main.swift:572`) chama `endOrphanRecording`
+(`main.swift:449`, chamada em `:575`), que descarta a gravação em curso:
+`recorder.cancel()` apaga o WAV e limpa as amostras da memória. O caminho existe
+por um motivo real: trocar a trava zera a máquina de estados do `HotkeyMonitor`
+(`HotkeyMonitor.swift:223-228`), e a gravação que o gesto abandonado segurava
+ficaria aberta sem nada capaz de encerrá-la.
+
+O problema está em quem chega por ali. O comentário do próprio código diz que
+este item de menu existe para quem travou sem querer
+(`HotkeyMonitor.swift:215`), e essa pessoa pode ter falado antes de chegar ao
+menu. O áudio some sem transcrever. Concluir a gravação e transcrever estava
+disponível e não perderia nada. O `estado-do-usuario.md` pede que nada do que a
+pessoa falou seja descartado sem outro caminho até ele.
+
+Não bloqueia porque a mitigação que o pattern exige existe: o comportamento está
+escrito em `docs/reference.md:20-25`. Trocar descarte por conclusão é P, e com
+teste encosta no teto de 4 arquivos.
+*Evidência:* auditoria de 01/09/2026 (§3 `estado-do-usuario`, L5) ·
+`Sources/NeverType/main.swift:449` e `:575` · `docs/reference.md:20-25`
 
 ---
 
@@ -338,6 +359,38 @@ antes disso há apenas "Copiar última transcrição". Pode ser o certo, ou pode
 parecer que o histórico sumiu.
 *Evidência:* `CLAUDE.md` (O que falta) · `TranscriptHistory.swift` ·
 commit `1479a4b`
+
+### U5 · Ninguém viu o tooltip da orbe aparecer · P
+`PillView.updateTrackingAreas` (`Sources/NeverType/RecordingOverlay.swift:303-328`)
+instala o rastreio que deveria alimentar o tooltip da orbe, e `refreshHoverHint()`
+(`Sources/NeverType/main.swift:540`) põe nela a mesma frase que o ícone da barra
+carrega: `NeverType. Hold Right ⌘ to dictate. Click for the menu.` O app foi
+compilado, instalado e exercitado à mão em 01/09/2026, e nessa passada ninguém
+parou o ponteiro sobre a orbe para olhar.
+
+**Por que este canal vale mais que os outros dois.** Os títulos do menu e os
+submenus só ensinam o gesto a quem já abriu o menu. O tooltip é o único que
+alcança quem nunca abriu, que é a metade do pedido que originou a mudança ("nem
+todo mundo vê que pode clicar lá em cima"). E desde esta branch o cursor é seta em
+repouso (`RecordingOverlay.swift:337-338`), então o tooltip ficou sendo o único
+aviso de que ali existe um botão.
+
+**A dúvida técnica que a auditoria levantou e não teve como resolver sem rodar.**
+`NSView.toolTip` instala rastreio próprio do AppKit, e a `NSTrackingArea`
+adicionada aqui (`RecordingOverlay.swift:322-325`) tem `owner: self` numa view que
+não implementa `mouseEntered` nem `mouseMoved`. Não é evidente que a área
+adicionada seja o que alimenta o timer do tooltip.
+`panel.acceptsMouseMovedEvents = true` (`RecordingOverlay.swift:497`) é a parte
+que plausivelmente importa.
+
+**Como exercitar:** com o NeverType inativo, pare o ponteiro sobre a orbe por dois
+segundos e olhe. Se aparecer, o comentário de `updateTrackingAreas` e a seção "The
+tooltip" (`docs/reference.md:122-135`) trocam a data da dúvida pela data da
+confirmação, nas duas com o mesmo texto. Se não aparecer, o achado é o tooltip, e
+o tamanho passa a ser outro.
+*Evidência:* auditoria de 01/09/2026 (L2, §2.3, canal (c) do D4) ·
+`Sources/NeverType/RecordingOverlay.swift:303-328` e `:497` ·
+`Sources/NeverType/main.swift:536` e `:540` · `docs/reference.md:122-135`
 
 ---
 
@@ -577,6 +630,118 @@ reinstall is missing` (`:79`) e recompila. O motivo real, carimbo ausente, não
 aparece: a saída mostra `installed: unknown` sem dizer o que fazer com isso.
 Visto na tradução de 29/08/2026; não consertado.
 *Evidência:* `scripts/build-app.sh:291-293` · `scripts/update.sh:56-70`, `:79`
+
+### H14 · `docs/pitfalls.md` não recebeu os três defeitos desta branch · P
+A branch `feat/overlay-click-and-lean-menu` produziu três defeitos com causa
+nomeada, e os três estão só no corpo do PR #5, que some do caminho depois do
+merge. O `CLAUDE.md` chama `docs/pitfalls.md` de leitura obrigatória antes de
+escrever código e diz que esse item não é opcional. O arquivo é o registro do que
+quebrou e por quê, com o custo medido, e os três se qualificam.
+
+1. Um `NSPanel` em `.screenSaver` fica acima do menu que o AppKit desenha em
+   `.popUpMenu`. Os níveis são 1000 e 101, então o menu aberto sobre a orbe sai
+   por baixo dela. A saída é descer para `.statusBar`, que é 25 e continua acima
+   da janela do app da frente e de uma em tela cheia
+   (`Sources/NeverType/RecordingOverlay.swift:426-441`). Seção "macOS: things that
+   vanish without an error".
+2. O macOS 26 reconhece `terminate:` como o comando Quit padrão e desenha um glifo
+   ao lado. Era o único ícone do menu inteiro, e um menu com um ícone só parece um
+   menu faltando quinze. Rotear por um seletor do próprio app deixa o AppKit sem
+   comando padrão para reconhecer (`Sources/NeverType/main.swift:767-775`). Mesma
+   seção.
+3. `NSTrackingArea` toma `userInfo:` no Swift, e `userData:` é o rótulo do
+   Objective-C. Custo medido: um erro de compilação que chegou na branch e foi
+   consertado antes do PR #5, na mesma função do item U5.
+*Evidência:* auditoria de 01/09/2026 (§7, §8, L3) · corpo do PR #5 ·
+`docs/pitfalls.md` (hoje sem nenhum dos três)
+
+### H15 · `.vibeflow/index.md` desatualizado depois desta branch · P
+A linha 31 diz "109 testes em swift-testing", e são **132 em 16 suítes**, medidos
+fora do sandbox em 01/09/2026 com
+`swift test --disable-xctest --enable-swift-testing`.
+A linha 87 descreve `HotkeyMonitor.swift` como o gatilho
+com push-to-talk, trava por duplo toque e as três teclas, sem dizer que a trava
+agora pode ser desligada (`HotkeyMonitor.swift:223-228`, `main.swift:572`). A
+seção "Known Issues / Tech Debt" não registra nada desta branch.
+
+As duas linhas ficam fora dos únicos marcadores do arquivo
+(`vibeflow:patterns`, linhas 39 a 65), então o ajuste sobrevive à próxima rodada
+de `analyze`. A auditoria de 01/09 afirmou que elas ficam dentro de marcadores
+`vibeflow:auto`, e isso está errado: não existe nenhum no arquivo.
+*Evidência:* auditoria de 01/09/2026 (§7, L8) · `.vibeflow/index.md:31` e `:87` ·
+contagem medida fora do sandbox em 01/09/2026
+
+### H16 · O interruptor de mãos-livres não tem registro em `.vibeflow/decisions.md` · P
+O pedido de 01/09 era mostrar que a trava existe, para quem nunca descobriu o
+duplo toque. A entrega inclui desligar a trava, com superfície própria e
+permanente: chave `handsFree` no `UserDefaults`
+(`Sources/NeverType/main.swift:521` e `:528`), parâmetro no construtor de `Latch`
+(`HotkeyMonitor.swift:246-249`), propriedade com `didSet` que reconstrói a máquina
+(`HotkeyMonitor.swift:223-228`), ação de menu `toggleHandsFree` (`main.swift:572`),
+`endOrphanRecording` (`main.swift:449`), ramo no layout
+(`Sources/NeverTypeCore/MenuLayout.swift:122`), 4 testes e um parágrafo em
+`docs/reference.md:20-25`.
+
+A razão está escrita em `HotkeyMonitor.swift:215` e é razoável. Falta a linha em
+`.vibeflow/decisions.md` dizendo por que um recurso que ninguém pediu entrou,
+porque ele cria preferência permanente com migração implícita para todo mundo que
+já usa o app. Hoje isso está declarado no PR #5 e no `docs/reference.md`, e o PR
+some depois do merge.
+*Evidência:* auditoria de 01/09/2026 (§2.1, L4) · `.vibeflow/decisions.md` (sem o
+item)
+
+### H17 · Duas figuras de oposição novas, dentro de uma varredura maior · P
+`Sources/NeverType/RecordingOverlay.swift:336` e `Sources/NeverType/main.swift:768`
+ganharam "instead of", que está na lista nominal do Don't de
+`conventions.md:128-134`. Sobre elas há 5 ocorrências pré-existentes nos mesmos
+arquivos (`main.swift:71`, `:198`, `:647`, `:886` e
+`Sources/NeverTypeCore/HotkeyMonitor.swift:10`), então consertar só as duas desta
+branch deixa cada arquivo inconsistente consigo mesmo.
+
+O tamanho depende de onde se traça a linha: as duas isoladas são P, e a varredura
+de `Sources/` inteiro passa do teto de 4 arquivos e precisa ser dividida. É por
+isso que o item ficou na higiene.
+*Evidência:* auditoria de 01/09/2026 (§3 Convention Violations, L6) ·
+`.vibeflow/conventions.md:128-134`
+
+### H18 · Três buracos de teste que a branch do menu deixou · P
+Em ordem de quanto importa:
+
+1. Falta a combinação "permissão faltando com Option segurado" por igualdade da
+   lista inteira. `aMissingPermissionDoesNotBringTheDiagnosticsBack`
+   (`Tests/NeverTypeCoreTests/MenuLayoutTests.swift:133`) testa Accessibility
+   faltando com Option desligado, e `quitIsAlwaysLast` (`:235`) monta o estado
+   máximo e afirma um elemento só, o último. A ordem completa do estado mais cheio
+   do menu não é comparada em lugar nenhum. É P.
+2. `HotkeyMonitor.handsFreeEnabled` e o `didSet` que reconstrói a máquina não têm
+   teste (`Sources/NeverTypeCore/HotkeyMonitor.swift:223-228`). A classe nunca é
+   instanciada na suíte, porque é `@MainActor` e instala monitores do `NSEvent`. A
+   `Latch` interna é testada, e o `resetGesture()` que a reconstrói (`:309`) não. É
+   a mesma forma do `didSet` de `trigger`, que já era não testado. Fechar este pede
+   extrair o `resetGesture` para onde um teste alcance, e aí passa de P.
+3. `PointerGesture.init(origin:slop:)` nunca é chamado com slop customizado. O
+   parâmetro existe e só o padrão é exercitado. Baixo.
+
+A montagem de `Conditions` em `rebuildMenu()` (`Sources/NeverType/main.swift:670-689`)
+também não tem teste, e não pode ter: trocar `microphoneAuthorized:` por
+`accessibilityAuthorized:` no ponto de chamada deixa os 14 testes de
+`MenuLayoutTests` verdes. É o limite conhecido de `nucleo-testavel`, que o repo já
+aceita em todo o `Sources/NeverType/`. Informativo, sem ação.
+*Evidência:* auditoria de 01/09/2026 (§5, L7)
+
+### H19 · `hoverHint` é recalculado à mão e depende de um único ponto de troca · P
+`hoverHint` (`Sources/NeverType/main.swift:536`) chega ao ícone da barra e à orbe
+por `refreshHoverHint()` (`:540`), chamado no lançamento (`:266`) e em
+`chooseTrigger` (`:567`). Ele depende só de `monitor.trigger.label`, e
+`chooseTrigger` é hoje o único ponto que muda esse valor, então o texto está certo
+agora.
+
+Uma quarta tecla, ou um segundo caminho que troque o gatilho, deixaria o tooltip
+dizendo a tecla errada sem nenhum sinal. O `estado-consultado.md` pede consulta na
+hora, que é o que o menu já faz em `menuNeedsUpdate`. Confiança alta na leitura,
+gravidade baixa hoje, e ligado ao U5: o tooltip é justamente o canal que ninguém
+viu funcionando.
+*Evidência:* auditoria de 01/09/2026 (§3 `estado-consultado`, §7)
 
 ---
 
