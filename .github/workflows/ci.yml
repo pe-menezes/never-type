@@ -29,14 +29,19 @@ jobs:
           # passed on the two jobs above and did not build on Swift 6.0.3, and
           # the colleague who hit it found out by installing (docs/pitfalls.md).
           #
-          # Xcode 16 carries Swift 6.0.0, the floor build-app.sh enforces and
-          # the manifest's own swift-tools-version. A red here means the floor
-          # is wrong and the number in build-app.sh and both INSTALL mirrors has
-          # to move, which is the answer we want out of a job, not out of a
-          # person's terminal.
+          # Xcode 16.2 carries Swift 6.0.3 and SDK 15.2, which is what a stale
+          # Command Line Tools install gave the colleague who reported #7.
+          #
+          # Not Xcode 16 (Swift 6.0.0, SDK 15.0), which was the first pin here
+          # and failed on 2026-09-04 with two errors in AudioRecorder.swift:402,
+          # `capture of 'self' with non-sendable type 'AudioRecorder' in a
+          # @Sendable closure` and the same for the AVAudioPCMBuffer. That is
+          # the Sendable pitfall docs/pitfalls.md already records, appearing a
+          # third time, and it has nothing to do with #7. So the real floor is
+          # above 6.0.0, and build-app.sh enforces the number this job proves.
           - os: macos-15
-            label: macos-15, Swift 6.0 floor
-            xcode: "16"
+            label: macos-15, oldest supported toolchain
+            xcode: "16.2"
             expect_swift: "6.0"
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
