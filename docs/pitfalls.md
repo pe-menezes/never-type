@@ -163,6 +163,53 @@ broken round, none new)**; `swift test --disable-xctest
 `xcrun --show-sdk-version` written down is not reproducible. Record both along
 with the measurement. Apple moves the `Sendable` ruler with every SDK.
 
+### An older toolchain refuses what CI's newer one accepts
+
+The twin of the item above, running in the other direction. There the compiler
+started seeing more and broke code nobody had touched. Here the compiler on the
+documented install path sees less than the one CI uses, and the commit that CI
+approved does not build.
+
+`FocusHandback` reached `main` in #6 with four call sites shaped
+`(hide ?? Self.systemHide)()`, an unapplied reference to a `@MainActor` static
+serving as the default for an injected closure. CI passed on the commit: run
+33884872858, `macos-15` and `macos-26`, conclusion `success` on
+`9e2a0750d6027bcb1357d5fb3c27728bf1dff5f6`. On a colleague's machine the same
+commit failed on 2026-09-04 with four errors, one per call site:
+
+```
+FocusHandback.swift:63:28: error: call to main actor-isolated static method 'systemIsActive()' in a synchronous nonisolated context
+```
+
+Measured there: Apple Swift 6.0.3 (swiftlang-6.0.3.1.10), `xcode-select -p`
+answering `/Library/Developer/CommandLineTools`, macOS 26.2, Apple Silicon.
+6.0.3 forms the function value from `Self.systemIsActive` in a nonisolated
+context and rejects it at the reference, ahead of any call. 6.2.3 accepts the
+same line: `swiftc -typecheck -swift-version 6` of the committed file exits 0
+on the author's machine, so nothing local reproduces the failure.
+
+What made the construct look safe is that `TextInjector` carries the identical
+`??` shape in three places and compiles on both toolchains. Its statics are
+nonisolated, so the value being formed is a plain `() -> Bool`. The four in
+`FocusHandback` are isolated through the type, and the value has to be
+`@MainActor () -> Bool`.
+
+The fix is a closure literal at each site, `?? { Self.systemHide() }`, which
+takes `@MainActor` from the contextual type and calls the static from a body
+already on the main actor. The same inference the first item of this section
+warns about is the one that rescues this one. Verified on 6.0.3 by the
+colleague, exit 1 with 4 errors before and exit 0 with no warnings after, and on
+6.2.3 here, `swift build` plus 169 of 169 tests, exit 0.
+
+The gap: the runners select a full Xcode, and `docs/INSTALL.md` sends the person
+to `xcode-select --install` with no floor on the version. A Command Line Tools
+install that has sat unupdated satisfies that sentence and carries 6.0.3. No job
+builds with it.
+
+**Rule:** a green CI proves the commit builds on the runner's toolchain. The
+toolchain in the install instructions is a second one, and while no job runs it,
+the person installing is the test.
+
 ### Query-then-decide is not mutual exclusion
 
 `NSRunningApplication.runningApplications(withBundleIdentifier:)` to guarantee a

@@ -15,6 +15,19 @@ import AppKit
 /// The system calls enter as parameters with defaults, the same shape as
 /// `TextInjector.insert(secureInput:)`, so every branch runs in a test without
 /// activating or hiding anything.
+///
+/// Each default is written as a closure literal: `?? { Self.systemHide() }`.
+/// The bare reference, `?? Self.systemHide`, is what Swift 6.0.3 refuses, and
+/// a Command Line Tools install left unupdated still carries 6.0.3. Forming
+/// the function value from an isolated static counts as a nonisolated context
+/// there, so the four call sites below came out as four errors on a
+/// colleague's machine on 2026-09-04, on a commit CI had approved under Swift
+/// 6.2 the same week. The closure literal takes `@MainActor` from the
+/// contextual type and calls the static from a body already on the main actor.
+/// `TextInjector` writes the bare reference in three places and compiles on
+/// both toolchains. Its statics are nonisolated. These four are isolated
+/// through the type, and they stay that way: they touch `NSApp` and
+/// `NSWorkspace`. Recorded in docs/pitfalls.md.
 @MainActor
 public final class FocusHandback {
     private let frontmost: (@MainActor () -> pid_t?)?
@@ -43,7 +56,7 @@ public final class FocusHandback {
     /// afterwards the app in front is this one, and there would be nothing to
     /// give the focus back to.
     public func remember() {
-        remembered = (frontmost ?? Self.systemFrontmost)()
+        remembered = (frontmost ?? { Self.systemFrontmost() })()
     }
 
     /// Hands the activation to the remembered app. Returns false when it hid
@@ -60,11 +73,11 @@ public final class FocusHandback {
     @discardableResult
     public func giveBack() -> Bool {
         defer { remembered = nil }
-        guard (isActive ?? Self.systemIsActive)() else { return true }
-        if let pid = remembered, pid != own, (activate ?? Self.systemActivate)(pid) {
+        guard (isActive ?? { Self.systemIsActive() })() else { return true }
+        if let pid = remembered, pid != own, (activate ?? { Self.systemActivate($0) })(pid) {
             return true
         }
-        (hide ?? Self.systemHide)()
+        (hide ?? { Self.systemHide() })()
         return false
     }
 

@@ -67,6 +67,17 @@ Elas trazem a toolchain do Swift 6 e o SDK do macOS que o build usa. Xcode
 completo **não** é necessário. Confirme com `xcode-select -p` antes de
 seguir. Não aceite "já instalei" sem conferir.
 
+Uma instalação de um tempo atrás responde `xcode-select -p` carregando um Swift
+mais velho do que o build precisa, e o que o build imprime então não nomeia nada
+útil. Confira também a versão:
+
+```bash
+swift --version   # 6.0 ou mais novo
+```
+
+Abaixo de 6.0 elas precisam ser atualizadas, e isso é **PARE E PEÇA**. O build
+recusa antes, dizendo a versão que achou e de qual toolchain ela veio.
+
 ### cmake
 
 ```bash
