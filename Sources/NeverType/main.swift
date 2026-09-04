@@ -180,6 +180,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let vocabulary = Vocabulary(
         url: logURL.deletingLastPathComponent().appendingPathComponent("vocabulario.json"))
     private lazy var vocabularyWindow = VocabularyWindow(vocabulary: vocabulary)
+    private let capturePanel = TriggerCapturePanel()
 
     private let history = TranscriptHistory(
         url: logURL.deletingLastPathComponent().appendingPathComponent("historico.json"))
@@ -248,7 +249,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlay.menu = menu
 
         if let saved = HotkeyMonitor.Trigger.named(UserDefaults.standard.string(forKey: Self.triggerKey)) {
-            monitor.trigger = saved
+            setTrigger(saved)
         }
         monitor.handsFreeEnabled = Self.handsFreeIsOn
         monitor.onEvent = { [weak self] event in self?.handle(event) ?? false }
@@ -555,18 +556,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         vocabularyWindow.show()
     }
 
+    @objc private func chooseTrigger(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String,
+              let option = HotkeyMonitor.Trigger.named(id) else { return }
+        setTrigger(option)
+    }
+
+    /// The one place the trigger changes. The three quick picks, the capture
+    /// panel and the launch restore all come through here, so the title, the
+    /// submenu and the tooltip cannot disagree about the key in use: a second
+    /// path would leave the tooltip naming the wrong key with no sign of it.
+    ///
     /// The key already chosen is left alone. Picking it again would rewrite the
     /// same value and, through `endOrphanRecording`, throw away a hands-free
     /// recording that nothing about the app had changed.
-    @objc private func chooseTrigger(_ sender: NSMenuItem) {
-        guard let id = sender.representedObject as? String,
-              let option = HotkeyMonitor.Trigger.named(id),
-              option != monitor.trigger else { return }
-        monitor.trigger = option
-        UserDefaults.standard.set(id, forKey: Self.triggerKey)
+    private func setTrigger(_ trigger: HotkeyMonitor.Trigger) {
+        guard trigger != monitor.trigger else { return }
+        monitor.trigger = trigger
+        UserDefaults.standard.set(trigger.id, forKey: Self.triggerKey)
         endOrphanRecording("the trigger key changed while recording")
         refreshHoverHint()
-        log("trigger is now \(option.label)")
+        log("trigger is now \(trigger.label)")
+    }
+
+    /// Opens the capture panel with the trigger switched off. Pressing the
+    /// current key to choose it again would otherwise start a dictation, so the
+    /// monitor is stopped for as long as the panel is open, and whatever
+    /// gesture was in flight goes with it, the same as a switch from the
+    /// submenu. `onClosed` switches it back on from every way out of the panel.
+    @objc private func chooseOtherTrigger() {
+        endOrphanRecording("the trigger is being chosen")
+        monitor.stop()
+        log("capture panel open: trigger monitor off")
+        capturePanel.show(
+            purpose: .pushToTalk,
+            onChosen: { [weak self] trigger in self?.setTrigger(trigger) },
+            onClosed: { [weak self] in
+                self?.monitor.start()
+                self?.log("capture panel closed: trigger monitor back on")
+            })
     }
 
     @objc private func toggleHandsFree() {
@@ -784,6 +812,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             line.representedObject = option.id
             keyMenu.addItem(line)
         }
+        keyMenu.addItem(.separator())
+        keyMenu.addItem(action("Other key or mouse button…", #selector(chooseOtherTrigger)))
         keyMenu.addItem(.separator())
         let soundItem = action("Sounds", #selector(toggleSound))
         soundItem.state = Feedback.isEnabled ? .on : .off
