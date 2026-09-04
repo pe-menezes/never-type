@@ -32,7 +32,8 @@ existe, com os rótulos e as frases que o app mostra.
 
 1. **A limitação antiga sumiu.** `grep -n -E "only those|three keys"
    docs/reference.md` não responde nada; `grep -n "among Right" README.md`
-   não responde nada; a linha 4 do `CLAUDE.md` nomeia o painel e o botão do
+   não responde nada; `grep -n "Right ⌘, ⌥ or ⌃" scripts/install.sh` não
+   responde nada; a linha 4 do `CLAUDE.md` nomeia o painel e o botão do
    mouse.
 
 2. **A referência descreve o que existe.** Em `docs/reference.md`: a seção
@@ -63,8 +64,11 @@ existe, com os rótulos e as frases que o app mostra.
 - `README.md`
 - `README.pt-BR.md`
 - `CLAUDE.md`
+- `scripts/install.sh`, o bloco "How to use": também dizia "Right ⌘, ⌥ or ⌃"
 
-Quatro arquivos.
+Cinco arquivos. O quinto estoura o orçamento de `index.md` em um, e foi
+autorizado pelo autor em 2026-09-04, quando a parte 3 mostrou o bloco ainda
+citando as três teclas.
 
 ## Anti-escopo
 

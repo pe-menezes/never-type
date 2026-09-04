@@ -123,9 +123,12 @@ cat <<'MSG'
   Pressing any regular key (or Esc) during the hold cancels and discards the audio.
 
   Hands-free: two quick taps on the key lock the recording; one tap finishes
-  and transcribes; Esc discards. While locked, typing does not cancel.
+  and transcribes; Esc discards. While locked, typing does not cancel. A second
+  key can lock with one tap: "Choose a hands-free key…" under "Hands-free".
 
-  In the menu bar menu: the key (Right ⌘, ⌥ or ⌃) and the sounds are under
+  In the menu bar menu: the key (the three quick picks Right ⌘, Right ⌥ and
+  Right ⌃, or any modifier, Fn or an extra mouse button through "Other key or
+  mouse button…", which takes the next press) and the sounds are under
   "Hotkey"; the latest transcriptions under "Copy Last Transcription" and
   "History", where clicking copies and "Clear History" deletes the file; terms
   and replacements under "Vocabulary…". Clicking the floating orb opens that
