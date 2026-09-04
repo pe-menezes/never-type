@@ -50,7 +50,25 @@ warn() { printf '\033[1;33m  !\033[0m  %s\n' "$*"; }
 fail() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
 [ "$(uname -s)" = "Darwin" ] || fail "only makes sense on macOS."
-command -v swift >/dev/null || fail "Swift toolchain not found."
+command -v swift >/dev/null || fail "Swift toolchain not found. Run: xcode-select --install"
+
+# Command Line Tools that have sat unupdated still answer `swift`, with a
+# compiler older than this package, and what comes out then names nothing
+# useful. On 6.0.3 the build reached FocusHandback and printed four
+# actor-isolation errors, measured 2026-09-04 on a commit CI had approved on a
+# full Xcode (docs/pitfalls.md). Below 6.0 the manifest itself stops compiling
+# and SwiftPM answers "Invalid manifest". The floor is the manifest's own
+# swift-tools-version.
+#
+# This reads the compiler and nothing else. A 6.x compiler that loads a pre-6
+# PackageDescription from another toolchain also reports "Invalid manifest",
+# and passes this check: separate failure, same message, still open.
+swift_version="$(swift --version 2>&1 | sed -n 's/.*Swift version \([0-9][0-9.]*\).*/\1/p')"
+[ -n "$swift_version" ] || fail "could not read a version out of \`swift --version\`:
+$(swift --version 2>&1)"
+[ "${swift_version%%.*}" -ge 6 ] || fail "Swift $swift_version is too old; this needs 6.0 or later.
+It comes from the toolchain at $(xcode-select -p), and updating that toolchain
+replaces the compiler. Ask before reinstalling anything."
 
 # --- signing identity ---------------------------------------------------------
 
