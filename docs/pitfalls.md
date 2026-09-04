@@ -206,9 +206,38 @@ to `xcode-select --install` with no floor on the version. A Command Line Tools
 install that has sat unupdated satisfies that sentence and carries 6.0.3. No job
 builds with it.
 
+Closed the same day. A third matrix entry selects Xcode 16.2 on `macos-15`,
+which reports `Apple Swift version 6.0.3 (swiftlang-6.0.3.1.10)` and SDK 15.2,
+the same swiftlang build the colleague measured. Every job now prints
+`xcode-select -p`, `swift --version` and the SDK version, because the report had
+to say the CI Swift version was not measured.
+
+### The floor was a guess, and the job caught it in one run
+
+The first pin on that job was Xcode 16, Swift 6.0.0 and SDK 15.0, chosen so the
+job would test the floor the documentation claimed. It failed on the first run,
+in a file nobody had touched:
+
+```
+AudioRecorder.swift:402:29: error: capture of 'self' with non-sendable type 'AudioRecorder' in a `@Sendable` closure
+AudioRecorder.swift:402:41: error: capture of 'copy' with non-sendable type 'AVAudioPCMBuffer' in a `@Sendable` closure
+```
+
+This is the `NS_SWIFT_SENDABLE` item above appearing a third time. In that one, a
+newer SDK started marking a type and broke code nobody had touched. In this one,
+the same two captures compile from 6.0.3 onward and stop compiling on 6.0.0.
+Which change between those two releases moved the line was not chased: the job
+answers the question that mattered, which is the oldest toolchain to support.
+
+So `scripts/build-app.sh` enforces 6.0.3, not the 6.0 of the manifest's
+`swift-tools-version`, and it compares with `sort -V` so that 6.0.10 counts as
+newer than 6.0.3. The boundary was exercised with a fake `swift` on PATH:
+5.10, 6.0, 6.0.0 and 6.0.2 refused, 6.0.3, 6.0.10, 6.1, 6.2.3 and 7.0 accepted.
+
 **Rule:** a green CI proves the commit builds on the runner's toolchain. The
 toolchain in the install instructions is a second one, and while no job runs it,
-the person installing is the test.
+the person installing is the test. A minimum version that no job compiles is a
+guess: this one was read off the manifest and was wrong by three patch releases.
 
 ### Query-then-decide is not mutual exclusion
 

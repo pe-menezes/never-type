@@ -57,16 +57,27 @@ command -v swift >/dev/null || fail "Swift toolchain not found. Run: xcode-selec
 # useful. On 6.0.3 the build reached FocusHandback and printed four
 # actor-isolation errors, measured 2026-09-04 on a commit CI had approved on a
 # full Xcode (docs/pitfalls.md). Below 6.0 the manifest itself stops compiling
-# and SwiftPM answers "Invalid manifest". The floor is the manifest's own
-# swift-tools-version.
+# and SwiftPM answers "Invalid manifest".
+#
+# The floor is 6.0.3 and not the manifest's swift-tools-version of 6.0, because
+# 6.0.0 does not build this package. Xcode 16 (Swift 6.0.0, SDK 15.0) was the
+# first pin on the CI job that covers old toolchains, and it failed on the first
+# run in AudioRecorder.swift:402, a non-sendable `self` and AVAudioPCMBuffer
+# captured in a @Sendable closure, measured 2026-09-04. 6.0.3 is what a job
+# compiles on every push, and what a stale Command Line Tools install carries.
 #
 # This reads the compiler and nothing else. A 6.x compiler that loads a pre-6
 # PackageDescription from another toolchain also reports "Invalid manifest",
 # and passes this check: separate failure, same message, still open.
+SWIFT_MIN="6.0.3"
 swift_version="$(swift --version 2>&1 | sed -n 's/.*Swift version \([0-9][0-9.]*\).*/\1/p')"
 [ -n "$swift_version" ] || fail "could not read a version out of \`swift --version\`:
 $(swift --version 2>&1)"
-[ "${swift_version%%.*}" -ge 6 ] || fail "Swift $swift_version is too old; this needs 6.0 or later.
+# `sort -V` so that 6.0.10 counts as newer than 6.0.3, which comparing as text
+# gets backwards, and so that 6.0.0 is refused, which comparing the first number
+# alone lets straight through.
+swift_oldest="$(printf '%s\n%s\n' "$swift_version" "$SWIFT_MIN" | sort -V)"
+[ "${swift_oldest%%$'\n'*}" = "$SWIFT_MIN" ] || fail "Swift $swift_version is too old; this needs $SWIFT_MIN or later.
 It comes from the toolchain at $(xcode-select -p), and updating that toolchain
 replaces the compiler. Ask before reinstalling anything."
 
