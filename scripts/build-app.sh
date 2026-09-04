@@ -7,8 +7,8 @@
 #
 # The signature is not decoration. TCC (the macOS permission subsystem) stores
 # the app's *designated requirement*. Signed ad hoc, that requirement points at
-# the binary's hash, which changes with every build — and the Accessibility
-# permission is revoked every time. Signed with a stable certificate, the
+# the binary's hash, which changes with every build, and every build revokes
+# the Accessibility permission. Signed with a stable certificate, the
 # requirement points at the certificate, and the grant survives rebuilds.
 # Verified: two binaries with different cdhashes share
 # `certificate leaf = H"5a6bfe7c…"`.
@@ -29,13 +29,13 @@ IDENTITY="NeverType Local Signing"
 # The first version of this drew a random password and kept it in the login
 # keychain. Prettier on paper and terrible in practice: whenever macOS decided to
 # ask for authorization to read the item, it opened a dialog asking for a
-# password the user **has no way of knowing** — it is random. A build that can
+# password the user **has no way of knowing**: it is random. A build that can
 # hang asking for an impossible secret is worse than the problem it solves.
 #
 # Deriving is not hiding: anyone with local access to the machine can reproduce
-# this value. But the goal here was never to keep a secret from a local attacker
-# — that is impossible with a local certificate, as the README explains. The
-# goal is to never version a credential and never hang the build. Both met.
+# this value. The goal here was never to keep a secret from a local attacker.
+# That is impossible with a local certificate, as the README explains. The goal
+# is to never version a credential and never hang the build. Both met.
 machine_password() {
   local uuid
   uuid="$(ioreg -rd1 -c IOPlatformExpertDevice \
@@ -73,8 +73,8 @@ replaces the compiler. Ask before reinstalling anything."
 # --- signing identity ---------------------------------------------------------
 
 # No `-v` and no `-p codesigning`, on purpose. Those filters only list *trusted*
-# identities, and a self-signed certificate never is — but codesign uses it all
-# the same (verified: Authority=NeverType Local Signing, designated requirement
+# identities, and a self-signed certificate never is. Codesign uses it all the
+# same (verified: Authority=NeverType Local Signing, designated requirement
 # with `certificate leaf`). With the filter, this check would always fail, the
 # certificate would be recreated on every build and the Accessibility permission
 # would be revoked every time: exactly the problem the stable signature exists
@@ -127,12 +127,12 @@ CNF
   security unlock-keychain -p "$KEYCHAIN_PASS" "$KEYCHAIN"
   # `-T /usr/bin/codesign` and NOT `-A`. With `-A`, any application uses the
   # private key directly, without even going through codesign or the password.
-  # This does not stop a local attacker from invoking codesign itself — but it
-  # closes direct programmatic access, which was the widest path.
+  # This does not stop a local attacker from invoking codesign itself. It closes
+  # direct programmatic access, which was the widest path.
   security import "$tmp/id.p12" -k "$KEYCHAIN" -P "$KEYCHAIN_PASS" -T /usr/bin/codesign >/dev/null
 
   # This line is what keeps the keychain dialog from hanging the build. Without
-  # it codesign opens a graphical prompt and the script hangs forever — it is
+  # it codesign opens a graphical prompt and the script hangs forever. It is
   # also why the certificate does not live in the login keychain: there we would
   # not have the password to pass here.
   security set-key-partition-list -S apple-tool:,apple:,codesign: \
@@ -143,7 +143,7 @@ CNF
 }
 
 # The keychain needs to be in the user's search list: `codesign --keychain`
-# alone is not enough (verified — it answers "no identity found" without this).
+# alone is not enough (verified: it answers "no identity found" without this).
 #
 # `list-keychains -s` REPLACES the whole list. If the read comes back empty and
 # we write only ours, the login keychain drops out of the list and the user
@@ -188,8 +188,8 @@ ok "$IDENTITY"
 # --- static whisper.cpp -------------------------------------------------------
 #
 # Static, not the Homebrew dylib. The hardened runtime turns on library
-# validation — which is what closes code injection into a process that holds
-# Accessibility — and it refuses a dylib signed by another team. With dynamic
+# validation (which is what closes code injection into a process that holds
+# Accessibility), and it refuses a dylib signed by another team. With dynamic
 # linking the app died in dyld with "different Team IDs".
 #
 # As a bonus the .app is self-contained: whoever uses it does not need Homebrew,
@@ -199,11 +199,11 @@ VENDOR="$REPO_ROOT/vendor/whisper"
 WHISPER_TAG="v1.9.2"
 # The exact commit, not just the tag.
 #
-# `v1.9.2` is a lightweight tag — a pointer that the maintainer, or whoever
+# `v1.9.2` is a lightweight tag, a pointer that the maintainer, or whoever
 # compromises the account, can move without a trace. This becomes ~300 thousand
 # lines of C++ compiled and linked into the binary that holds Accessibility, so
 # it deserves at least the same rigor already applied to the model converter in
-# setup-bench.sh — which is a Python script that runs offline once. The
+# setup-bench.sh, which is a Python script that runs offline once. The
 # criterion was inverted.
 WHISPER_COMMIT="306c88f4d1286aec1bf96e544632897886af5501"
 
@@ -238,7 +238,7 @@ build_whisper_static() {
   # runtime: it is what removes the need for the Metal toolchain, which does not
   # exist without full Xcode.
   # GGML_BACKEND_DL=OFF links the Metal backend in directly, instead of loading
-  # it from an external dylib — which is precisely what we are eliminating.
+  # it from an external dylib, which is precisely what we are eliminating.
   # The deployment target follows the package's; without it the linker warns
   # that the objects were built for a newer macOS than the target.
   cmake -S "$src" -B "$build" \
@@ -267,7 +267,7 @@ build_whisper_static() {
   cp "$src/include/whisper.h" "$VENDOR/include/"
   cp "$src/ggml/include/"*.h "$VENDOR/include/"
   # Manifest of what was produced. Without it, reusing vendor/ on a later run
-  # would trust the .a files just because they exist — and this is code that
+  # would trust the .a files just because they exist, and this is code that
   # goes inside the binary that holds Accessibility.
   ( cd "$VENDOR/lib" && shasum -a 256 ./*.a ) > "$VENDOR/MANIFEST"
   ok "vendor/whisper ready ($(du -sh "$VENDOR" | cut -f1), $(wc -l < "$VENDOR/MANIFEST" | tr -d ' ') libs verified)"
@@ -282,7 +282,7 @@ info "Checking static whisper.cpp"
 if vendor_intact; then
   ok "vendor/whisper intact (checksums match)"
 elif [ -d "$VENDOR" ]; then
-  warn "vendor/whisper does not match the manifest — rebuilding from scratch"
+  warn "vendor/whisper does not match the manifest, rebuilding from scratch"
   build_whisper_static
 else
   build_whisper_static
@@ -306,7 +306,7 @@ ok "$(basename "$BIN")"
 # With the stamp, comparing what is in /Applications with what is in the
 # repository is one line.
 #
-# `unknown` when there is no git — someone who downloaded a tarball instead of
+# `unknown` when there is no git: someone who downloaded a tarball instead of
 # cloning. The app works the same; only the automatic update path is unusable.
 COMMIT="$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 
@@ -345,7 +345,7 @@ rm -rf "$ICONSET"
 [ -s "$APP/Contents/Resources/NeverType.icns" ] || fail "NeverType.icns is empty."
 
 # LSUIElement keeps the app out of the Dock: it lives only in the menu bar.
-# NSMicrophoneUsageDescription is mandatory — without it macOS kills the process
+# NSMicrophoneUsageDescription is mandatory. Without it macOS kills the process
 # when the microphone is opened, instead of asking for permission.
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -374,9 +374,9 @@ ok "bundle assembled"
 
 info "Signing"
 # The hardened runtime turns on library validation. Without it, a process that
-# holds Accessibility — that is, one that can read and inject keystrokes across
-# the whole system — accepts third-party code injection. It is the second path
-# to the same prize, and this one can be closed.
+# holds Accessibility (one that can read and inject keystrokes across the whole
+# system) accepts third-party code injection. It is the second path to the same
+# prize, and this one can be closed.
 ENTITLEMENTS="$REPO_ROOT/build/NeverType.entitlements"
 cat > "$ENTITLEMENTS" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -405,5 +405,5 @@ echo "  App:  $APP"
 echo "  Open: open '$APP'"
 echo
 echo "  On first launch macOS will ask for Microphone and Accessibility."
-echo "  Once granted, they survive the next builds — that is what the stable"
+echo "  Once granted, they survive the next builds. That is what the stable"
 echo "  identity above is for."
