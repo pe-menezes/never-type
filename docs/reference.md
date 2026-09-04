@@ -31,7 +31,12 @@ what it is, what it requires and how to install it.
 - A second key can lock hands-free with one tap. **Choose a hands-free key…**,
   in the Hands-free submenu, opens the same panel for it: one tap locks the
   recording, the next tap finishes and transcribes, Esc discards, and the
-  trigger's own tap finishes as well. The panel refuses the trigger for that
+  trigger's own tap finishes as well. The tap also works while the trigger is
+  still held: hold Right ⌥, speak, tap Right ⌘, and the recording is locked
+  without a release and without a second tap. That is the chord this app can
+  offer. A chord with a regular key, ⌘ Space or ⌥ Space, would reach the app
+  in front (Spotlight, Raycast, Alfred, a non-breaking space), since the app
+  listens without intercepting. The panel refuses the trigger for that
   role (`That is the push-to-talk key. Pick another one for hands-free.`), and
   picking the hands-free key as the trigger from the quick picks removes it,
   with `hands-free key removed: it is now the trigger` in the log. The choice

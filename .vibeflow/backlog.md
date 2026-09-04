@@ -344,6 +344,22 @@ checks de hardware da parte 1 (botão do meio, Fn, lado esquerdo) e os roteiros
 das partes 2 e 3 foram feitos pelo autor em 2026-09-03 e 2026-09-04. Ainda de
 olho: o item F2.
 
+### I5 · Acorde com tecla comum para travar, ⌘ Space · G, depende de reabrir o `CGEventTap`
+Pedido do autor em 2026-09-04: segurar o gatilho e apertar Space para travar o
+mãos-livres, como o Wispr Flow faz com ⌥ Space. O acorde com **modificador** já
+existe desde a parte 3 do gatilho por captura: segurando o gatilho, um toque na
+tecla de mãos-livres trava sem soltar (`Latch`, caso `(.holding, .toggle)`,
+teste "a toggle while holding locks without the second tap"), e a referência
+passou a dizer isso em 04/09. Com Space o app não consegue: ele escuta sem
+interceptar, então ⌘ Space abre o Spotlight, ⌃ Space troca a fonte de entrada e
+⌥ Space é o atalho padrão de Raycast e Alfred (e um espaço inflexível em campo
+de texto), tudo no app da frente ao mesmo tempo. Engolir a tecla é o
+`CGEventTap` que o I1 recusou por poder congelar a entrada do sistema inteiro.
+Se um dia entrar, é spec própria: o tap, a fila que não pode atrasar, e o
+teste de que o Space não chega ao app da frente. O autor deixou para depois.
+*Evidência:* pedido do autor, 2026-09-04 · `.vibeflow/prds/gatilho-por-captura.md`
+(anti-escopo) · `.vibeflow/decisions.md` (2026-09-01)
+
 ---
 
 ## 4. UI — o que dá para ver
@@ -434,7 +450,13 @@ abertura exige `botão direito → Abrir`. O OpenQuack tem o mesmo problema e
 documenta assim.
 *Evidência:* `CLAUDE.md` · [openquack](https://github.com/larryxiao/openquack)
 
-### A2 · Ninguém além do autor instalou do zero — P
+### A2 · Ninguém além do autor instalou do zero · SUPERADO em 04/09
+Superado pela realidade: várias pessoas instalaram (relato do autor,
+2026-09-04). O que fica deste item é o A1, o pacote sem compilar, e o relato de
+um colega parado em "Invalid manifest" (PackageDescription anterior à 6 na hora
+de compilar), ainda sem causa raiz fechada.
+
+O texto original, para o registro:
 O caminho completo (clone → `build-app.sh` → `install.sh` → permissões → modelo)
 nunca foi exercitado por outra pessoa. Cada suposição não testada aí é um
 abandono na primeira tentativa. A forma barata: alguém do teu time num Mac

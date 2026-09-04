@@ -93,8 +93,8 @@ migration for a gain no user sees. And the app transcribes Portuguese only
 
 ## State
 
-Works end to end: ~600 ms per dictation with the model warm, 154 tests. Nobody
-besides the author has ever installed it.
+Works end to end: ~600 ms per dictation with the model warm, 160 tests. Several
+people besides the author have installed it, as of 2026-09-04.
 
 One thing is missing: **a distributable package that does not require
 compiling**. Every installation still compiles on its own machine. Open at

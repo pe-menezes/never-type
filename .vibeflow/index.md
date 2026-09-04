@@ -128,6 +128,7 @@ patterns:
 - **Cada ditado bloqueia uma thread do pool cooperativo por ~600 ms.**
 - **A chave de assinatura é alcançável por processo local** — risco documentado e
   aceito; sem conserto com certificado local.
-- **Ninguém além do autor instalou este projeto do zero.**
+- **Toda instalação ainda compila na máquina de quem instala** (backlog A1).
+  Várias pessoas já percorreram esse caminho (relato do autor, 2026-09-04).
 - Doc comment em `TextInjector.pending` mistura dois assuntos (geração e
   indexação por pasteboard) num bloco só.
