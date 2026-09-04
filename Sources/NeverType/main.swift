@@ -561,7 +561,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func chooseTrigger(_ sender: NSMenuItem) {
         guard let id = sender.representedObject as? String,
               let option = HotkeyMonitor.Trigger.named(id),
-              option.keyCode != monitor.trigger.keyCode else { return }
+              option != monitor.trigger else { return }
         monitor.trigger = option
         UserDefaults.standard.set(id, forKey: Self.triggerKey)
         endOrphanRecording("the trigger key changed while recording")
@@ -778,9 +778,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func hotkeyMenu() -> NSMenu {
         let keyMenu = NSMenu()
-        for option in HotkeyMonitor.Trigger.all {
+        for option in HotkeyMonitor.Trigger.menuChoices(current: monitor.trigger) {
             let line = action(option.label, #selector(chooseTrigger(_:)))
-            line.state = option.keyCode == monitor.trigger.keyCode ? .on : .off
+            line.state = option == monitor.trigger ? .on : .off
             line.representedObject = option.id
             keyMenu.addItem(line)
         }
