@@ -112,10 +112,6 @@ patterns:
 
 ## Known Issues / Tech Debt
 
-- **O painel de captura mantém uma cópia inline da devolução de foco**
-  (`TriggerCapturePanel.swift`, `windowWillClose`), e o comentário dele ainda
-  diz que a janela do vocabulário esconde o app. `FocusHandback` existe desde o
-  hotfix de 2026-09-04; consolidar é o H20 do backlog.
 - **Orçamento sugerido vs realidade observada.** A regra dá ≤4 arquivos para um
   projeto de 17 fontes, e é razoável para manutenção. As quatro partes
   implementadas precisaram de 5 a 9 arquivos cada, porque construíam do zero.

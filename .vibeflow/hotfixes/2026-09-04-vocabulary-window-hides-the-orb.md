@@ -85,3 +85,8 @@ itself; forgets the app after giving the focus back.
 - The by-hand check of the orb staying after closing the vocabulary window
   waits for the author's next install; the mechanism is the one the author
   confirmed on the capture panel on 2026-09-03.
+- Later on 2026-09-04, outside this call: the panel was consolidated onto
+  `FocusHandback` (`remember()` in `show`, `giveBack()` in `windowWillClose`),
+  its stale comment went, and the text oracle in `FocusHandbackTests` now
+  reads both windows. `NSApp.hide(` no longer appears anywhere in
+  `Sources/NeverType/`.

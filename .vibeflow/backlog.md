@@ -798,7 +798,12 @@ lançamento, com `refreshHoverHint()` dentro. O DoD 5 daquela spec exige
 auditoria confere. A tecla de mãos-livres tem o mesmo ponto único,
 `setHandsFreeTrigger(_:)`. O U5, ver o tooltip aparecer, continua aberto.
 
-### H20 · O painel de captura mantém uma cópia inline da devolução de foco · P
+### ✅ H20 · O painel de captura mantém uma cópia inline da devolução de foco · FEITO em 04/09
+Fechado no mesmo dia: o painel passou a usar `FocusHandback.remember()` e
+`giveBack()`, o comentário desatualizado saiu, e o oráculo de texto de
+`FocusHandbackTests` lê as duas janelas.
+
+O texto original, para o registro:
 `TriggerCapturePanel.swift` (`windowWillClose`) lembra o app da frente e o ativa
 ao fechar, o mesmo que `FocusHandback` faz desde o hotfix de 2026-09-04, e o
 comentário dele ainda diz que a janela do vocabulário esconde o app com

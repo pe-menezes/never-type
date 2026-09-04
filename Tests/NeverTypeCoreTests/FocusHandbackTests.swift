@@ -13,23 +13,31 @@ import Testing
 @Suite("Focus hand-back")
 struct FocusHandbackTests {
 
-    private static var vocabularyWindowSource: String {
+    /// The two windows of the app, by path from this file.
+    private static let windows = [
+        "Sources/NeverType/VocabularyWindow.swift",
+        "Sources/NeverType/TriggerCapturePanel.swift",
+    ]
+
+    private static func source(of path: String) -> String {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-        let file = root.appendingPathComponent("Sources/NeverType/VocabularyWindow.swift")
+        let file = root.appendingPathComponent(path)
         return (try? String(contentsOf: file, encoding: .utf8)) ?? ""
     }
 
-    @Test("the vocabulary window hands the focus back without hiding the app")
-    func vocabularyWindowDoesNotHideTheApp() {
-        let source = Self.vocabularyWindowSource
-        #expect(!source.isEmpty, "VocabularyWindow.swift was not found from \(#filePath)")
-        #expect(!source.contains("NSApp.hide("),
-                "NSApp.hide hides every window of the app, the orb included")
-        #expect(source.contains("FocusHandback"),
-                "the window has to give the focus back through FocusHandback")
+    @Test("every window hands the focus back through FocusHandback, without hiding the app")
+    func windowsDoNotHideTheApp() {
+        for path in Self.windows {
+            let source = Self.source(of: path)
+            #expect(!source.isEmpty, "\(path) was not found from \(#filePath)")
+            #expect(!source.contains("NSApp.hide("),
+                    "\(path): NSApp.hide hides every window of the app, the orb included")
+            #expect(source.contains("FocusHandback"),
+                    "\(path): the window has to give the focus back through FocusHandback")
+        }
     }
 
     // The rule itself, with the system calls replaced.

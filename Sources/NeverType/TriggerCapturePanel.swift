@@ -31,9 +31,8 @@ final class TriggerCapturePanel: NSObject, NSWindowDelegate {
     private var idleHint: Task<Void, Never>?
     /// Accepted with a caveat: waits for the button, then becomes the trigger.
     private var pending: Trigger?
-    /// The app that was in front when the panel opened, to hand the focus
-    /// back to on close.
-    private var previousApp: NSRunningApplication?
+    /// Where the focus goes back to when the panel closes.
+    private let focus = FocusHandback()
     private var onChosen: ((Trigger) -> Void)?
     private var onClosed: (() -> Void)?
 
@@ -55,7 +54,7 @@ final class TriggerCapturePanel: NSObject, NSWindowDelegate {
         capture = TriggerCapture(purpose: purpose)
         pending = nil
         // Read before activating: afterwards the app in front is this one.
-        previousApp = NSWorkspace.shared.frontmostApplication
+        focus.remember()
         instruction.stringValue = TriggerCapture.Prompt.instruction(for: purpose)
         status.stringValue = ""
         hideUseButton()
@@ -191,16 +190,10 @@ final class TriggerCapturePanel: NSObject, NSWindowDelegate {
         closed?()
         // Give the focus back: an accessory app that stays active after
         // closing its window leaves the user not knowing where the keyboard
-        // goes. The vocabulary window does it with `NSApp.hide(nil)`, and that
-        // hides every window of this app, the orb included: after choosing a
-        // key the orb was gone until the next recording (seen on 2026-09-03).
-        // Handing the activation to the app that was in front returns the
-        // focus and leaves the orb where it was; macOS 14 lets the active app
-        // do that. Hiding stays as the fallback for when there is no such app.
-        let previous = previousApp
-        previousApp = nil
-        if let previous, previous.activate(from: .current, options: []) { return }
-        NSApp.hide(nil)
+        // goes. This panel is where hiding the app was first seen taking the
+        // orb with it (2026-09-03); `FocusHandback` says why, and what it does
+        // instead.
+        focus.giveBack()
     }
 
     // MARK: - Building
