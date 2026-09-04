@@ -14,11 +14,30 @@ concurrency:
 
 jobs:
   build-and-test:
-    name: Build and test (${{ matrix.os }})
+    name: Build and test (${{ matrix.label }})
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-15, macos-26]
+        include:
+          - os: macos-15
+            label: macos-15
+          - os: macos-26
+            label: macos-26
+          # The toolchain docs/INSTALL.md sends people to, which nothing else
+          # here covers: both runners default to a full Xcode newer than the
+          # Command Line Tools on a machine that has not updated them. PR #6
+          # passed on the two jobs above and did not build on Swift 6.0.3, and
+          # the colleague who hit it found out by installing (docs/pitfalls.md).
+          #
+          # Xcode 16 carries Swift 6.0.0, the floor build-app.sh enforces and
+          # the manifest's own swift-tools-version. A red here means the floor
+          # is wrong and the number in build-app.sh and both INSTALL mirrors has
+          # to move, which is the answer we want out of a job, not out of a
+          # person's terminal.
+          - os: macos-15
+            label: macos-15, Swift 6.0 floor
+            xcode: "16"
+            expect_swift: "6.0"
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     env:
@@ -31,6 +50,36 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Select Xcode ${{ matrix.xcode }}
+        if: matrix.xcode
+        run: |
+          app="/Applications/Xcode_${{ matrix.xcode }}.app"
+          if [ ! -d "$app" ]; then
+            echo "::error::$app is not on this runner image. Present:"
+            ls -d /Applications/Xcode*.app
+            exit 1
+          fi
+          sudo xcode-select -s "$app"
+
+      # docs/pitfalls.md: "it compiles here" without the compiler and the SDK
+      # written down is not reproducible. The report that produced this job had
+      # to say "the Swift version on the CI images was not measured: the run log
+      # does not print it". It prints it now, on every job.
+      - name: Record the toolchain
+        env:
+          EXPECT_SWIFT: ${{ matrix.expect_swift }}
+        run: |
+          xcode-select -p
+          swift --version
+          echo "SDK $(xcrun --show-sdk-version)"
+          if [ -n "$EXPECT_SWIFT" ]; then
+            got="$(swift --version 2>&1 | sed -n 's/.*Swift version \([0-9][0-9.]*\).*/\1/p')"
+            case "$got" in
+              "$EXPECT_SWIFT"|"$EXPECT_SWIFT".*) echo "pinned toolchain is Swift $got, as intended" ;;
+              *) echo "::error::this job exists to test Swift $EXPECT_SWIFT.x and got $got; the pin needs updating"; exit 1 ;;
+            esac
+          fi
 
       - name: Test warning fingerprint counter
         run: python3 scripts/test-count-swift-warnings.py
