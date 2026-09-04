@@ -760,6 +760,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             historyCount: history.entries.count,
             triggerLabel: monitor.trigger.label,
             handsFreeEnabled: monitor.handsFreeEnabled,
+            handsFreeKeyLabel: monitor.handsFreeTrigger?.label,
             startsAtLogin: loginState == .on,
             loginItemNeedsApproval: loginState == .needsApproval)
 
@@ -795,11 +796,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             item.submenu = hotkeyMenu()
             return item
 
-        // Off, the title stops advertising a gesture that no longer locks.
-        case .handsFree(let enabled):
-            let item = NSMenuItem(title: enabled ? "Hands-free: double tap" : "Hands-free: off",
-                                  action: nil,
-                                  keyEquivalent: "")
+        // Off, the title stops advertising a gesture that no longer locks. On,
+        // it names the second key when there is one: until 2026-09-04 it kept
+        // saying "double tap" with a key chosen, and the key was only found by
+        // opening the submenu.
+        case .handsFree(let enabled, let key):
+            let title: String
+            if !enabled {
+                title = "Hands-free: off"
+            } else if let key {
+                title = "Hands-free: double tap or \(key)"
+            } else {
+                title = "Hands-free: double tap"
+            }
+            let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
             item.submenu = handsFreeMenu(enabled: enabled)
             return item
 

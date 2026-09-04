@@ -41,6 +41,11 @@ public enum MenuLayout {
         /// Whether two taps lock the recording. Off, the key only records while
         /// it is held.
         public let handsFreeEnabled: Bool
+        /// The second key's name, `Trigger.label`, or nil with none chosen.
+        /// Read from the monitor at every rebuild, the same as `triggerLabel`:
+        /// the title is where the gesture is taught, and a title that kept
+        /// saying "double tap" with a key chosen taught half of the way in.
+        public let handsFreeKeyLabel: String?
         /// `LoginItem.State` flattened into the two answers the menu draws: the
         /// checkmark, and whether macOS is the one holding it off. The
         /// three-state enum stays in `LoginItem`, and this file stays free of
@@ -54,6 +59,7 @@ public enum MenuLayout {
                     historyCount: Int,
                     triggerLabel: String,
                     handsFreeEnabled: Bool,
+                    handsFreeKeyLabel: String? = nil,
                     startsAtLogin: Bool,
                     loginItemNeedsApproval: Bool) {
             self.microphoneAuthorized = microphoneAuthorized
@@ -62,6 +68,7 @@ public enum MenuLayout {
             self.historyCount = historyCount
             self.triggerLabel = triggerLabel
             self.handsFreeEnabled = handsFreeEnabled
+            self.handsFreeKeyLabel = handsFreeKeyLabel
             self.startsAtLogin = startsAtLogin
             self.loginItemNeedsApproval = loginItemNeedsApproval
         }
@@ -79,7 +86,10 @@ public enum MenuLayout {
         /// taught: a menu you have to open to learn the menu exists reaches
         /// nobody who has not opened it.
         case hotkey(trigger: String)
-        case handsFree(enabled: Bool)
+        /// Carries the second key for the same reason `hotkey` carries the
+        /// first. Nil with none chosen, and nil with the mode off: the title
+        /// then says "off", and a key it does not listen to is not taught.
+        case handsFree(enabled: Bool, key: String? = nil)
         case vocabulary
         case copyLastTranscription
         case history(count: Int)
@@ -123,7 +133,8 @@ public enum MenuLayout {
         }
 
         rows.append(.hotkey(trigger: conditions.triggerLabel))
-        rows.append(.handsFree(enabled: conditions.handsFreeEnabled))
+        rows.append(.handsFree(enabled: conditions.handsFreeEnabled,
+                               key: conditions.handsFreeEnabled ? conditions.handsFreeKeyLabel : nil))
         rows.append(.vocabulary)
 
         // The block appears with the first transcription and the submenu with

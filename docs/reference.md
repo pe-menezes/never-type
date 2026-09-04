@@ -217,8 +217,9 @@ Quit NeverType             ⌘Q
   separator comes the second key. While none is chosen, the item is **Choose a
   hands-free key…**. With one chosen, the submenu shows the line `Tap Right ⌥
   to lock, tap again to finish`, then **Change hands-free key…** and **Remove
-  hands-free key**. The title says `double tap` whether or not a second key is
-  set. Turned off, the item reads **Hands-free: off** and the submenu keeps one
+  hands-free key**, and the title reads **Hands-free: double tap or Right ⌥**,
+  so both ways in are taught from the menu itself. Turned off, the item reads
+  **Hands-free: off** and the submenu keeps one
   line, `Right ⌘ only records while held`. The second key stays saved and does
   nothing until the mode is on again. The choice is saved. This is the way out
   for somebody who locked by accident: turning it off ends the recording that
