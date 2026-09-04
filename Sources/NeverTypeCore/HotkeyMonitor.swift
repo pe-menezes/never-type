@@ -39,16 +39,18 @@ public final class HotkeyMonitor {
         /// Maximum interval between the two taps.
         public static let tapWindow: TimeInterval = 0.30
 
-        public enum Input {
+        public enum Input: Equatable {
             case down(TimeInterval)
             case up(TimeInterval)
             /// Regular key, which during the hold means "this was a shortcut".
             case otherKey
             case escape
             case timeout
-            /// The hands-free key went down: lock, or finish if already locked.
-            /// Its release never arrives here; holding that key means nothing.
-            case toggle
+            /// The hands-free key went down. It asks; the release decides.
+            case toggleDown
+            /// The hands-free key came up with no regular key in between: lock,
+            /// or finish if it was already locked.
+            case toggleUp
         }
 
         public enum Action: Equatable {
@@ -68,11 +70,21 @@ public final class HotkeyMonitor {
             case awaitingSecondTap
             /// Hands-free: records without the key held.
             case latched
-            /// A toggle asked to start. `resolveStart` turns the accepted start
-            /// into the lock, and a refused one back into idle. Transient: the
-            /// app resolves the start in the same main-actor turn, so no other
-            /// input ever lands here.
+            /// A toggle asked to start. `resolveStart` moves an accepted start
+            /// on to `.armingLatch`, and a refused one back to idle. Transient:
+            /// the app resolves the start in the same main-actor turn, so no
+            /// other input ever lands here.
             case startingLatched
+            /// Recording, with the hands-free key still down. Its release locks
+            /// and a regular key cancels, the same rule the trigger's own hold
+            /// has. Without this state the key locked on its press, and a
+            /// shortcut that starts with it (⌃C with Left ⌃ chosen) opened a
+            /// locked recording that no later key could cancel.
+            case armingLatch
+            /// Locked, with the hands-free key down again. Its release finishes,
+            /// and a regular key puts the gesture back to `.latched`: the key
+            /// was a shortcut, not the end of the dictation.
+            case armingFinish
         }
 
         private(set) var state: State = .idle
@@ -94,7 +106,18 @@ public final class HotkeyMonitor {
             self.handsFree = handsFree
         }
 
-        public var isLatched: Bool { state == .latched }
+        /// Locked, the key held for the finishing tap included: the recording
+        /// runs with no key holding it open either way.
+        public var isLatched: Bool { state == .latched || state == .armingFinish }
+
+        /// True while the gesture in flight is holding the hands-free key.
+        ///
+        /// What a change of that key abandons. A locked recording is not in
+        /// this set: every way out of `.latched` is key-agnostic, so the lock
+        /// survives a key that changes under it.
+        public var isHoldingHandsFreeKey: Bool {
+            state == .startingLatched || state == .armingLatch || state == .armingFinish
+        }
 
         /// Resolves whether the app accepted the `.start` action, and returns
         /// what follows from that.
@@ -103,20 +126,20 @@ public final class HotkeyMonitor {
         /// there lets the following release arm the hands-free double-tap path for
         /// a recording that never existed.
         ///
-        /// A start asked by the hands-free key locks only once it is accepted.
-        /// Returning `[.start, .latch]` from the toggle would make the app play
-        /// the lock tone and show the locked pill over a recording that never
-        /// began, on the day Accessibility, the microphone or the recorder
-        /// refuse. The order "only lock what started" is a rule, so it lives
-        /// here, in the pure type, where it has a test.
+        /// A start asked by the hands-free key arms the lock only once it is
+        /// accepted. Moving straight to a locked state from the toggle would
+        /// make the app play the lock tone and show the locked pill over a
+        /// recording that never began, on the day Accessibility, the microphone
+        /// or the recorder refuse. The order "only lock what started" is a
+        /// rule, so it lives here, in the pure type, where it has a test.
         public mutating func resolveStart(accepted: Bool) -> [Action] {
             guard accepted else {
                 reset()
                 return []
             }
             guard state == .startingLatched else { return [] }
-            state = .latched
-            return [.latch]
+            state = .armingLatch
+            return []
         }
 
         /// Abandons a gesture whose `.start` action was refused by the app.
@@ -129,7 +152,7 @@ public final class HotkeyMonitor {
             // Off, the hands-free key is as dead as the double tap: a key that
             // locks with the mode off would contradict the line the submenu
             // shows then, "only records while held".
-            if case .toggle = input, !handsFree { return [] }
+            if !handsFree, input == .toggleDown || input == .toggleUp { return [] }
 
             switch (state, input) {
 
@@ -182,27 +205,55 @@ public final class HotkeyMonitor {
             case (.latched, .otherKey):
                 return []
 
-            // The hands-free key, from rest: ask to start, and lock once the
-            // app says the recording began (see `resolveStart`).
-            case (.idle, .toggle):
+            // The hands-free key, from rest: ask to start, and arm the lock
+            // once the app says the recording began (see `resolveStart`).
+            case (.idle, .toggleDown):
                 state = .startingLatched
                 return [.start]
 
             // The hands-free key while the trigger is held, or inside the
-            // second-tap window: lock without the second tap.
-            case (.holding, .toggle):
+            // second-tap window: the recording is already running, so only the
+            // lock is armed. No second tap needed.
+            case (.holding, .toggleDown):
+                state = .armingLatch
+                return []
+
+            case (.awaitingSecondTap, .toggleDown):
+                state = .armingLatch
+                return [.disarmTimeout]
+
+            // The release is what locks, and only if nothing came in between.
+            case (.armingLatch, .toggleUp):
                 state = .latched
                 return [.latch]
 
-            case (.awaitingSecondTap, .toggle):
-                state = .latched
-                return [.disarmTimeout, .latch]
+            // A regular key while the hands-free key is down means the two were
+            // a shortcut, the same reading the trigger's own hold has. Without
+            // this, ⌃C with Left ⌃ chosen opened a locked recording that no
+            // later key could cancel, and the microphone stayed open.
+            case (.armingLatch, .otherKey), (.armingLatch, .escape):
+                state = .idle
+                return [.cancel]
 
-            // Locked, the hands-free key finishes, the same as a tap on the
-            // trigger.
-            case (.latched, .toggle):
+            // Locked, the hands-free key asks to finish, and its release
+            // decides.
+            case (.latched, .toggleDown):
+                state = .armingFinish
+                return []
+
+            case (.armingFinish, .toggleUp):
                 state = .idle
                 return [.finish]
+
+            // Locked, a regular key does not cancel, so a shortcut using this
+            // key only takes the finish back. The recording stays locked.
+            case (.armingFinish, .otherKey):
+                state = .latched
+                return []
+
+            case (.armingFinish, .escape):
+                state = .idle
+                return [.cancel]
 
             case (.startingLatched, _):
                 return []
@@ -374,9 +425,19 @@ public final class HotkeyMonitor {
     public var handsFreeTrigger: Trigger? {
         didSet {
             guard handsFreeTrigger != oldValue else { return }
+            // Only a gesture holding this key is abandoned by the change. A
+            // locked recording is not: every way out of it, the trigger's tap
+            // and Esc, works without this key, so resetting would throw away a
+            // dictation that the change cannot affect.
+            guard latch.isHoldingHandsFreeKey else { return }
             resetGesture()
         }
     }
+
+    /// True while the gesture in flight is holding the hands-free key. Whoever
+    /// changes that key reads this first: it is what says whether a recording
+    /// was left with no way to end it.
+    public var isHoldingHandsFreeKey: Bool { latch.isHoldingHandsFreeKey }
 
     /// Whether two taps lock the recording, switchable from the menu.
     ///
@@ -509,10 +570,11 @@ public final class HotkeyMonitor {
             apply(latch.handle(event.keyCode == 53 ? .escape : .otherKey))
             return
         }
-        // The hands-free key's press is the tap, and its release means
-        // nothing: holding it has no meaning.
+        // Both edges of the hands-free key reach the machine: the press asks,
+        // and the release decides. A regular key in between means the two were
+        // a shortcut.
         if let handsFreeTrigger, let down = Self.press(of: handsFreeTrigger, in: event) {
-            if down { apply(latch.handle(.toggle)) }
+            apply(latch.handle(down ? .toggleDown : .toggleUp))
             return
         }
         if let down = Self.press(of: trigger, in: event) {

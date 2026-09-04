@@ -29,8 +29,10 @@ public struct TriggerCapture: Sendable {
         /// own mask, which the rule looks up.
         case flagsChanged(keyCode: UInt16, rawFlags: UInt)
         case keyDown(keyCode: UInt16)
-        /// `NSEvent.buttonNumber + 1`, as people count.
-        case mouseDown(button: Int)
+        /// `NSEvent.buttonNumber + 1`, as people count, with the modifier
+        /// flags held as the click landed: a click with a modifier is a
+        /// combination, and the PRD leaves those out.
+        case mouseDown(button: Int, rawFlags: UInt)
         case mouseUp(button: Int)
         case rightMouseDown
     }
@@ -54,7 +56,7 @@ public struct TriggerCapture: Sendable {
             case .everyCapitalLetter:
                 return "Not ⇧: every capital letter would start a recording."
             case .everyShortcut:
-                return "Not Left ⌘: every shortcut would start a recording. Right ⌘ works."
+                return "Not Left ⌘: every shortcut would start a recording."
             case .togglesKeyboardState:
                 return "Not Caps Lock: it toggles the keyboard state and cannot be held."
             case .secondaryClick:
@@ -164,12 +166,12 @@ public struct TriggerCapture: Sendable {
             state = .idle
             return keyCode == Self.escape ? .cancelled : .refused(.reachesFrontApp)
 
-        case .mouseDown(let button):
+        case .mouseDown(let button, let rawFlags):
             guard let trigger = Trigger.mouseButton(button) else {
                 state = .idle
                 return .refused(.secondaryClick)
             }
-            guard case .idle = state else {
+            guard case .idle = state, !Self.anyModifierHeld(in: rawFlags) else {
                 state = .idle
                 return .refused(.reachesFrontApp)
             }
@@ -205,6 +207,10 @@ public struct TriggerCapture: Sendable {
         switch (state, down) {
         case (.idle, true):
             if let refusal = Self.refusal(for: key) { return .refused(refusal) }
+            // Another modifier was already down, from before the panel opened
+            // or from a chord: the two together are a combination, and the app
+            // in front gets them too.
+            if Self.anyModifierHeld(in: rawFlags & ~mask) { return .refused(.reachesFrontApp) }
             state = .holding(key)
             return .waiting
 
@@ -243,6 +249,19 @@ public struct TriggerCapture: Sendable {
         return nil
     }
 
+    /// Whether any side modifier is set in these flags.
+    ///
+    /// The eight of ⌘ ⌥ ⌃ ⇧ only. Fn stays out on purpose: some keyboards
+    /// report `.function` on keys that have nothing to do with it, and reading
+    /// it here would refuse every press on those machines, with no way around
+    /// it from inside the app.
+    private static func anyModifierHeld(in rawFlags: UInt) -> Bool {
+        Trigger.modifiers.contains { candidate in
+            guard candidate != .fn, case .modifier(_, let mask) = candidate.source else { return false }
+            return rawFlags & mask != 0
+        }
+    }
+
     private static func caveat(for trigger: Trigger) -> Caveat? {
         if trigger == .fn { return .fnSystemAction }
         if trigger == .leftOption { return .leftOptionAccents }
@@ -264,7 +283,12 @@ extension TriggerCapture.Input {
         // `buttonNumber` counts from zero; the rule and the labels count from
         // one. The same conversion as `HotkeyMonitor.handle`.
         case .otherMouseDown:
-            self = .mouseDown(button: event.buttonNumber + 1)
+            self = .mouseDown(button: event.buttonNumber + 1, rawFlags: event.modifierFlags.rawValue)
+        // The primary click reaches the rule only from the global monitor, so
+        // the buttons in the panel still work. Without this case its refusal
+        // was a branch no event could produce.
+        case .leftMouseDown:
+            self = .mouseDown(button: 1, rawFlags: event.modifierFlags.rawValue)
         case .otherMouseUp:
             self = .mouseUp(button: event.buttonNumber + 1)
         case .rightMouseDown:

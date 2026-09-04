@@ -484,6 +484,13 @@ final class RecordingOverlay {
 
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false
+        // The orb survives `NSApp.hide(nil)` as well, which hides every window
+        // that lets it. Closing the vocabulary window used to go through hide
+        // and took the orb with it until the next recording (2026-09-03).
+        // `FocusHandback` stopped calling hide on the ordinary path, and this
+        // line covers the paths nobody controls: the Hide command, ⌘H, and the
+        // hand-back's own fallback.
+        panel.canHide = false
         panel.isMovable = false
         panel.backgroundColor = .clear
         panel.isOpaque = false

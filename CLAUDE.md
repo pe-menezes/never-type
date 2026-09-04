@@ -1,9 +1,10 @@
 # NeverType
 
 Voice dictation with local transcription on macOS, Portuguese only. Holding the
-key (Right ⌘ by default; any modifier, Fn or an extra mouse button, chosen from
-the menu by pressing it) records, releasing transcribes, two taps or a second
-key lock into hands-free, and the text is inserted wherever the cursor is.
+key (Right ⌘ by default; a supported modifier, Fn or an extra mouse button,
+chosen from the menu by pressing it) records, releasing transcribes, two taps
+or a second key lock into hands-free, and the text is inserted wherever the
+cursor is.
 **No network calls at run time**: it is the constraint that justifies the
 project's existence, and there is a DoD check verifying it in the code and in
 the binary.
@@ -60,7 +61,7 @@ afterwards.
 After that:
 
 ```bash
-swift build && swift test     # 154 tests
+swift build && swift test     # 169 tests
 bash scripts/install.sh       # installs into /Applications
 bash scripts/bench.sh         # measures latency and quality per model
 ```
@@ -93,7 +94,7 @@ migration for a gain no user sees. And the app transcribes Portuguese only
 
 ## State
 
-Works end to end: ~600 ms per dictation with the model warm, 160 tests. Several
+Works end to end: ~600 ms per dictation with the model warm, 169 tests. Several
 people besides the author have installed it, as of 2026-09-04.
 
 One thing is missing: **a distributable package that does not require

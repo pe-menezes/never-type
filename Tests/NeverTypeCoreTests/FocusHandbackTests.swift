@@ -28,6 +28,9 @@ struct FocusHandbackTests {
         return (try? String(contentsOf: file, encoding: .utf8)) ?? ""
     }
 
+    /// The call sites, not the name: both files mention `FocusHandback` in
+    /// prose, so a test that looked for the word alone stayed green with the
+    /// wiring pulled out.
     @Test("every window hands the focus back through FocusHandback, without hiding the app")
     func windowsDoNotHideTheApp() {
         for path in Self.windows {
@@ -35,8 +38,12 @@ struct FocusHandbackTests {
             #expect(!source.isEmpty, "\(path) was not found from \(#filePath)")
             #expect(!source.contains("NSApp.hide("),
                     "\(path): NSApp.hide hides every window of the app, the orb included")
-            #expect(source.contains("FocusHandback"),
-                    "\(path): the window has to give the focus back through FocusHandback")
+            #expect(source.contains("FocusHandback()"),
+                    "\(path): the window has to own a FocusHandback")
+            #expect(source.contains("focus.remember()"),
+                    "\(path): the app in front has to be read before this one activates")
+            #expect(source.contains("focus.giveBack()"),
+                    "\(path): closing has to hand the focus back")
         }
     }
 
@@ -50,6 +57,7 @@ struct FocusHandbackTests {
         let handback = FocusHandback(frontmost: { 4242 },
                                      activate: { activated.append($0); return true },
                                      hide: { hidden = true },
+                                     isActive: { true },
                                      own: 1)
         handback.remember()
         #expect(handback.giveBack())
@@ -61,12 +69,14 @@ struct FocusHandbackTests {
     @MainActor
     func hidesAsTheFallback() {
         var hidden = 0
-        let nothing = FocusHandback(frontmost: { nil }, activate: { _ in true }, hide: { hidden += 1 }, own: 1)
+        let nothing = FocusHandback(frontmost: { nil }, activate: { _ in true },
+                                    hide: { hidden += 1 }, isActive: { true }, own: 1)
         nothing.remember()
         #expect(!nothing.giveBack())
         #expect(hidden == 1, "with nobody to give the focus to, hiding is still the way out")
 
-        let refused = FocusHandback(frontmost: { 4242 }, activate: { _ in false }, hide: { hidden += 1 }, own: 1)
+        let refused = FocusHandback(frontmost: { 4242 }, activate: { _ in false },
+                                    hide: { hidden += 1 }, isActive: { true }, own: 1)
         refused.remember()
         #expect(!refused.giveBack())
         #expect(hidden == 2, "the system refused the activation, and the fallback took over")
@@ -80,6 +90,7 @@ struct FocusHandbackTests {
         let handback = FocusHandback(frontmost: { 7 },
                                      activate: { activated.append($0); return true },
                                      hide: { hidden = true },
+                                     isActive: { true },
                                      own: 7)
         handback.remember()
         #expect(!handback.giveBack())
@@ -94,10 +105,30 @@ struct FocusHandbackTests {
         let handback = FocusHandback(frontmost: { 4242 },
                                      activate: { activated.append($0); return true },
                                      hide: {},
+                                     isActive: { true },
                                      own: 1)
         handback.remember()
         _ = handback.giveBack()
         _ = handback.giveBack()
         #expect(activated == [4242], "a second close without a new open has nothing remembered")
+    }
+
+    /// With this app no longer in front, the person has already moved on. Both
+    /// answers would be wrong: activating pulls them out of where they went,
+    /// and hiding takes the orb for a window that was not holding the focus.
+    @Test("does nothing when this app is no longer the one in front")
+    @MainActor
+    func staysOutOfTheWayWhenNotActive() {
+        var activated: [pid_t] = []
+        var hidden = false
+        let handback = FocusHandback(frontmost: { 4242 },
+                                     activate: { activated.append($0); return true },
+                                     hide: { hidden = true },
+                                     isActive: { false },
+                                     own: 1)
+        handback.remember()
+        #expect(handback.giveBack())
+        #expect(activated.isEmpty)
+        #expect(!hidden)
     }
 }

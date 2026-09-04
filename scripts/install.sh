@@ -127,9 +127,9 @@ cat <<'MSG'
   key can lock with one tap: "Choose a hands-free key…" under "Hands-free".
 
   In the menu bar menu: the key (the three quick picks Right ⌘, Right ⌥ and
-  Right ⌃, or any modifier, Fn or an extra mouse button through "Other key or
-  mouse button…", which takes the next press) and the sounds are under
-  "Hotkey"; the latest transcriptions under "Copy Last Transcription" and
+  Right ⌃, or another supported modifier, Fn or an extra mouse button through
+  "Other key or mouse button…", which takes the next press) and the sounds are
+  under "Hotkey"; the latest transcriptions under "Copy Last Transcription" and
   "History", where clicking copies and "Clear History" deletes the file; terms
   and replacements under "Vocabulary…". Clicking the floating orb opens that
   same menu, which is how you reach it in full screen. Holding Option as it

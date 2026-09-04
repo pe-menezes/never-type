@@ -23,6 +23,11 @@ struct TriggerCaptureTests {
         .flagsChanged(keyCode: code(of: key), rawFlags: mask(of: key))
     }
 
+    /// A click on an extra button, with nothing held.
+    private func click(_ button: Int) -> C.Input {
+        .mouseDown(button: button, rawFlags: 0)
+    }
+
     /// `.flagsChanged` with the bit cleared: the release.
     private func release(_ key: T) -> C.Input {
         .flagsChanged(keyCode: code(of: key), rawFlags: 0)
@@ -49,7 +54,7 @@ struct TriggerCaptureTests {
 
         capture = C(purpose: .pushToTalk)
         let button4 = try #require(T.mouseButton(4))
-        #expect(capture.handle(.mouseDown(button: 4)) == .waiting)
+        #expect(capture.handle(click(4)) == .waiting)
         #expect(capture.handle(.mouseUp(button: 4)) == .acceptedWithCaveat(button4, .clickReachesFrontApp))
     }
 
@@ -97,13 +102,39 @@ struct TriggerCaptureTests {
         #expect(capture.handle(.keyDown(keyCode: 53)) == .cancelled)
     }
 
-    @Test("the secondary click is refused")
-    func secondaryClickRefused() {
+    /// The primary click reaches the rule from the global monitor, so this
+    /// refusal is a branch a real click produces. The secondary one arrives
+    /// under its own event type.
+    @Test("the primary and secondary clicks are refused")
+    func mainClicksRefused() {
         var capture = C(purpose: .pushToTalk)
         #expect(capture.handle(.rightMouseDown) == .refused(.secondaryClick))
-        #expect(capture.handle(.mouseDown(button: 2)) == .refused(.secondaryClick),
-                "if a main button ever arrived as a mouse input")
-        #expect(capture.handle(.mouseDown(button: 1)) == .refused(.secondaryClick))
+        #expect(capture.handle(click(1)) == .refused(.secondaryClick), "the primary click")
+        #expect(capture.handle(click(2)) == .refused(.secondaryClick))
+    }
+
+    /// A modifier held from before the panel opened makes the next press a
+    /// combination, and the app in front would get both.
+    @Test("a modifier already held when the panel opens refuses the next key")
+    func modifierHeldBeforeTheCaptureRefuses() {
+        var capture = C(purpose: .pushToTalk)
+        // ⌥ went down before the panel opened, so its own event never arrived;
+        // Right ⌘ goes down with both bits set.
+        let both = mask(of: .rightOption) | mask(of: .rightCommand)
+        #expect(capture.handle(.flagsChanged(keyCode: code(of: .rightCommand), rawFlags: both))
+                == .refused(.reachesFrontApp))
+        #expect(capture.handle(release(.rightCommand)) == .waiting,
+                "the release of a refused key accepts nothing")
+    }
+
+    /// The PRD leaves modified clicks out for the same reason it leaves
+    /// combinations out.
+    @Test("a click with a modifier held is refused")
+    func modifiedClickRefused() {
+        var capture = C(purpose: .pushToTalk)
+        #expect(capture.handle(.mouseDown(button: 3, rawFlags: mask(of: .rightCommand)))
+                == .refused(.reachesFrontApp))
+        #expect(capture.handle(.mouseUp(button: 3)) == .waiting, "nothing was held to accept")
     }
 
     @Test("for hands-free, the push-to-talk key is refused")

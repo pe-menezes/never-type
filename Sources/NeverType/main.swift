@@ -594,10 +594,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard trigger != monitor.handsFreeTrigger else { return }
         // The panel already refuses the trigger for this role. A saved value
         // edited by hand could still name it, and one press cannot mean both.
+        // The value goes with the refusal: left on disk it would say the same
+        // thing at every launch, and become live the day the trigger changes.
         if let trigger, trigger == monitor.trigger {
-            log("hands-free key ignored: \(trigger.label) is the trigger")
+            UserDefaults.standard.removeObject(forKey: Self.handsFreeTriggerKey)
+            log("hands-free key discarded: \(trigger.label) is the trigger")
             return
         }
+        // Read before the change: the monitor only abandons a gesture that is
+        // holding this key, and that is the only case with a recording left
+        // with no way to end it.
+        let abandonsAGesture = monitor.isHoldingHandsFreeKey
         monitor.handsFreeTrigger = trigger
         if let trigger {
             UserDefaults.standard.set(trigger.id, forKey: Self.handsFreeTriggerKey)
@@ -606,7 +613,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             UserDefaults.standard.removeObject(forKey: Self.handsFreeTriggerKey)
             log("hands-free key removed")
         }
-        endOrphanRecording("the hands-free key changed while recording")
+        if abandonsAGesture {
+            endOrphanRecording("the hands-free key changed while its own gesture was in flight")
+        }
     }
 
     /// Opens the capture panel with the trigger switched off. Pressing the
@@ -614,6 +623,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// monitor is stopped for as long as the panel is open, and whatever
     /// gesture was in flight goes with it, the same as a switch from the
     /// submenu. `onClosed` switches it back on from every way out of the panel.
+    ///
+    /// A recording in progress ends here, hands-free included: with the monitor
+    /// stopped, no key could finish it or discard it, so leaving it running
+    /// would leave the microphone open with no way out. `docs/reference.md`
+    /// says so next to the panel.
     private func openCapturePanel(purpose: TriggerCapture.Purpose,
                                   onChosen: @escaping (HotkeyMonitor.Trigger) -> Void) {
         endOrphanRecording("a trigger is being chosen")
@@ -1047,7 +1061,8 @@ extension AppDelegate: NSMenuDelegate {
 let app = NSApplication.shared
 let delegate = AppDelegate()
 app.delegate = delegate
-// Accessory: no Dock icon. Lives in the menu bar; the only windows are the pill
-// (an `NSPanel`, in RecordingOverlay) and the vocabulary one (VocabularyWindow).
+// Accessory: no Dock icon. Lives in the menu bar. The windows are the pill (an
+// `NSPanel`, in RecordingOverlay), the vocabulary one (VocabularyWindow) and
+// the panel that captures a key (TriggerCapturePanel).
 app.setActivationPolicy(.accessory)
 app.run()

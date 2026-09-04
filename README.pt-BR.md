@@ -25,13 +25,14 @@ marca do NeverType. Os três traços se movem com a voz, inclusive em mãos-livr
 e viram pontos móveis ao lado do mesmo cursor enquanto o texto é escrito.
 
 O menu da barra oferece ⌘, ⌥ e ⌃ direitos como escolhas rápidas, e **Other key
-or mouse button…** deixa você apertar a tecla que quiser: qualquer modificador
-dos dois lados, Fn ou um botão do mouse a partir do terceiro. O que não pode ser
-a tecla é recusado na hora, com o motivo na tela. Uma segunda tecla trava o
-mãos-livres com um toque. O menu também guarda as últimas 30 transcrições e um
-vocabulário customizado. Um clique no círculo abre esse mesmo menu, que é como
-se chega nele em tela cheia. O [`docs/reference.md`](docs/reference.md) passa
-por cada item, inclusive a tabela de teclas aceitas e recusadas.
+or mouse button…** deixa você apertar a tecla que quiser: um modificador dos
+dois lados, Fn ou um botão do mouse a partir do terceiro. O que não pode ser a
+tecla é recusado na hora, com o motivo na tela, ⇧ e ⌘ esquerdo entre eles. Uma
+segunda tecla trava o mãos-livres com um toque. O menu também guarda as últimas
+30 transcrições e um vocabulário customizado. Um clique no círculo abre esse
+mesmo menu, que é como se chega nele em tela cheia. O
+[`docs/reference.md`](docs/reference.md) passa por cada item, inclusive a tabela
+de teclas aceitas e recusadas.
 
 ## Requisitos
 
@@ -95,7 +96,7 @@ binário e o que ninguém rodou.
 
 ```bash
 bash scripts/build-app.sh     # compila o whisper.cpp em vendor/
-swift build && swift test     # 154 testes, em swift-testing
+swift build && swift test     # 169 testes, em swift-testing
 ```
 
 O `vendor/` não é versionado. Sem ele o build falha com `could not build

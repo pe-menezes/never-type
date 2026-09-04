@@ -33,8 +33,24 @@ segunda tecla; o orb fica na tela ao fechar a janela do vocabulário (hotfix).
 **Falta:** usar no dia a dia com uma tecla fora das três (o autor está em ⌥
 direito com ⌘ direito para mãos-livres, desde 2026-09-04); um teclado de
 terceiros que trate Fn no firmware, para ver a dica dos 5 s aparecer de verdade;
-um mouse com o botão 4 remapeado pelo software do fabricante; abrir e fechar a
-janela do vocabulário e ver o orb ficar; abrir o PR.
+um mouse com o botão 4 remapeado pelo software do fabricante. O orb ficando ao
+fechar a janela do vocabulário foi conferido em 2026-09-04, e o PR é o #6.
+
+**A revisão do PR #6 (2026-09-04) achou sete defeitos, todos corrigidos no
+mesmo branch.** O que mais importava: com um modificador como tecla de
+mãos-livres, todo atalho que começa por ele (`⌃C` com ⌃ esquerdo) abria uma
+gravação travada que nenhuma tecla seguinte cancelava, e o microfone ficava
+aberto sem teto. A tecla passou a pedir na descida e decidir na soltura, com
+tecla comum no meio cancelando, a mesma regra que o gatilho já tinha. Os outros
+seis: o fallback do hand-back ainda escondia o orb (`canHide = false` no painel
+do orb fecha todos os caminhos, ⌘H incluído); reabrir o painel para o outro
+papel mantinha a regra e o callback do primeiro; a dica de 5 s sobrescrevia uma
+recusa; a instrução de mãos-livres era cortada (547 px num rótulo de 428 com uma
+linha); o clique principal era recusado no texto e inalcançável no código; e
+**Remove hands-free key** descartava uma gravação travada que a mudança não
+podia afetar. Mais duas do Copilot: um modificador já segurado quando o painel
+abre, e um clique com modificador, os dois aceitos como se fossem puros.
+*Evidência:* PR #6, revisão de 2026-09-04 · 169 testes em 18 suítes
 Specs: `.vibeflow/specs/gatilho-por-captura-part-1.md` a `-4.md` ·
 PRD: `.vibeflow/prds/gatilho-por-captura.md`
 

@@ -20,16 +20,22 @@ public final class FocusHandback {
     private let frontmost: (@MainActor () -> pid_t?)?
     private let activate: (@MainActor (pid_t) -> Bool)?
     private let hide: (@MainActor () -> Void)?
+    private let isActive: (@MainActor () -> Bool)?
     private let own: pid_t
     private var remembered: pid_t?
 
+    /// Every system call enters as a parameter with a default, so the tests
+    /// exercise each branch without activating or hiding anything. `own` is
+    /// this process, the one app the hand-back must never activate.
     public init(frontmost: (@MainActor () -> pid_t?)? = nil,
                 activate: (@MainActor (pid_t) -> Bool)? = nil,
                 hide: (@MainActor () -> Void)? = nil,
+                isActive: (@MainActor () -> Bool)? = nil,
                 own: pid_t = ProcessInfo.processInfo.processIdentifier) {
         self.frontmost = frontmost
         self.activate = activate
         self.hide = hide
+        self.isActive = isActive
         self.own = own
     }
 
@@ -45,9 +51,16 @@ public final class FocusHandback {
     /// itself remembered, or with an activation the system refused. Forgets the
     /// app either way: a stale one would send the focus to a window the person
     /// left long ago.
+    ///
+    /// With this app no longer in front there is nothing to hand back, and
+    /// doing it anyway would pull the person out of wherever they went while
+    /// the window was open. `activate` reports that the request was allowed,
+    /// which is not a promise that the app comes forward; there is no call that
+    /// promises more.
     @discardableResult
     public func giveBack() -> Bool {
         defer { remembered = nil }
+        guard (isActive ?? Self.systemIsActive)() else { return true }
         if let pid = remembered, pid != own, (activate ?? Self.systemActivate)(pid) {
             return true
         }
@@ -65,5 +78,9 @@ public final class FocusHandback {
 
     private static func systemHide() {
         NSApp.hide(nil)
+    }
+
+    private static func systemIsActive() -> Bool {
+        NSApp.isActive
     }
 }

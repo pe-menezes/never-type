@@ -7,8 +7,9 @@ what it is, what it requires and how to install it.
 
 - Hold the key, speak, release. Any regular key, or Esc, pressed during the hold
   cancels and discards the audio.
-- The key is any modifier on either side, Fn, or a mouse button from the third
-  on. A modifier pressed on its own is inert for the application in front and
+- The key is a modifier on either side, Fn, or a mouse button from the third
+  on. Not every modifier: ⇧ and Left ⌘ are refused, and the table under
+  [Choosing the key](#choosing-the-key) says why. A modifier pressed on its own is inert for the application in front and
   for the system, which lets NeverType observe it in listen mode without
   intercepting the event. A mouse button is listened to the same way, and its
   click still reaches the app in front: in a browser, button 4 is Back. A
@@ -31,9 +32,13 @@ what it is, what it requires and how to install it.
 - A second key can lock hands-free with one tap. **Choose a hands-free key…**,
   in the Hands-free submenu, opens the same panel for it: one tap locks the
   recording, the next tap finishes and transcribes, Esc discards, and the
-  trigger's own tap finishes as well. The tap also works while the trigger is
+  trigger's own tap finishes as well. The press asks and the release decides,
+  so a regular key in between cancels, the rule the trigger's own hold has:
+  with Left ⌃ chosen, pressing ⌃C is a shortcut and not the start of a locked
+  dictation. Locked, the same shortcut only takes the finish back, since typing
+  never ends a hands-free dictation. The tap also works while the trigger is
   still held: hold Right ⌥, speak, tap Right ⌘, and the recording is locked
-  without a release and without a second tap. That is the chord this app can
+  without releasing the trigger and without a second tap. That is the chord this app can
   offer. A chord with a regular key, ⌘ Space or ⌥ Space, would reach the app
   in front (Spotlight, Raycast, Alfred, a non-breaking space), since the app
   listens without intercepting. The panel refuses the trigger for that
@@ -60,13 +65,13 @@ button from the third on. Esc closes.` The next press decides:
 
 | Answer | Keys | What the panel says |
 |---|---|---|
-| Accepted | Right ⌘, Right ⌥, Right ⌃, Left ⌃, a mouse button from the third on | |
+| Accepted | Right ⌘, Right ⌥, Right ⌃, Left ⌃ | |
 | Accepted with a caveat | Fn | Fn also opens the emoji picker unless System Settings > Keyboard sets "Press 🌐 key to" to "Do Nothing". Some keyboards handle Fn on their own, and macOS never sees it. |
 | Accepted with a caveat | Left ⌥ | On a US layout, Left ⌥ types the accents, and every accent would start a recording. |
 | Accepted with a caveat | A mouse button | The click still reaches the app in front: in a browser, button 4 is Back. A button remapped by the mouse software never reaches NeverType. |
-| Refused | A regular key, or a combination | One key on its own. A regular key or a combination would also reach the app in front. |
+| Refused | A regular key, a combination, or a click with a modifier held | One key on its own. A regular key or a combination would also reach the app in front. |
 | Refused | ⇧, either side | Not ⇧: every capital letter would start a recording. |
-| Refused | Left ⌘ | Not Left ⌘: every shortcut would start a recording. Right ⌘ works. |
+| Refused | Left ⌘ | Not Left ⌘: every shortcut would start a recording. |
 | Refused | Caps Lock | Not Caps Lock: it toggles the keyboard state and cannot be held. |
 | Refused | The primary or secondary click | Not the primary or secondary click. A mouse button from the third on works. |
 
@@ -74,12 +79,15 @@ A modifier is accepted on its release, and only if nothing else was pressed in
 between: a combination is refused. An accepted key closes the panel and takes
 effect at once. A caveat waits for the **Use <key>** button (Return confirms)
 before the key counts. A refusal leaves the panel waiting for the next press.
-Esc closes it with nothing changed. Five seconds with no press at all show
+Esc closes it without choosing a key. Five seconds with no press at all show
 `Nothing arrived. Some keyboards handle Fn on their own, and a button remapped
 by the mouse software never reaches NeverType. Esc closes.` While the panel is
 open the current key does not record: the log says `capture panel open:
 trigger monitor off`, and `capture panel closed: trigger monitor back on` on
-the way out. Closing the panel gives the focus back to the app you were in.
+the way out. Opening the panel also ends a recording in progress, hands-free
+included: with the monitor stopped no key could finish it or discard it, so it
+would leave the microphone open with no way out. Closing the panel gives the
+focus back to the app you were in, and the orb stays where it was.
 
 The refused keys are refused because of what a false start costs: pressing the
 trigger switches the microphone on, plays the start tone and shows the pill,

@@ -1,7 +1,7 @@
 import Testing
 @testable import NeverTypeCore
 
-// One file per unit. Until 2026-09-01 both suites here sat in
+// One file per unit. Until 2026-09-03 both suites here sat in
 // `AudioRecorderTests.swift`, where nobody looking for a hotkey test by file
 // name would find them (backlog H5).
 
@@ -266,58 +266,142 @@ struct LatchTests {
         #expect(latch.handle(.timeout) == [], "no window was ever armed to expire")
     }
 
-    // The hands-free key: one tap locks, the next finishes.
+    // The hands-free key: press asks, release decides.
 
     /// The lock waits for the app to say the recording began. Without that
     /// order, a refused start (no Accessibility, no microphone, a recorder
     /// error) would play the lock tone and show the locked pill over nothing.
-    @Test("a toggle from idle asks to start, and the accepted start locks")
+    @Test("a toggle from idle asks to start, and the release locks")
     func toggleFromIdleStartsThenLocks() {
         var latch = L()
-        #expect(latch.handle(.toggle) == [.start])
+        #expect(latch.handle(.toggleDown) == [.start])
         #expect(!latch.isLatched, "nothing is locked before the app answers")
-        #expect(latch.resolveStart(accepted: true) == [.latch])
+        #expect(latch.resolveStart(accepted: true) == [], "the release is what locks")
+        #expect(!latch.isLatched)
+        #expect(latch.handle(.toggleUp) == [.latch])
         #expect(latch.isLatched)
-        #expect(latch.handle(.up(0.1)) == [], "a release cannot finish a locked recording")
+        #expect(latch.handle(.up(0.4)) == [], "a release cannot finish a locked recording")
     }
 
     @Test("a refused start after a toggle leaves nothing armed")
     func refusedStartAfterToggleLeavesIdle() {
         var latch = L()
-        _ = latch.handle(.toggle)
+        _ = latch.handle(.toggleDown)
         #expect(latch.resolveStart(accepted: false) == [])
         #expect(!latch.isLatched)
+        #expect(latch.handle(.toggleUp) == [], "the release of a refused start does nothing")
         #expect(latch.handle(.down(1)) == [.start], "the next press is a fresh attempt")
         #expect(latch.handle(.up(1 + L.tapThreshold + 0.1)) == [.finish], "and it ends as an ordinary hold")
     }
 
-    @Test("a toggle while holding locks without the second tap")
+    /// The defect this rule exists for. With a modifier as the hands-free key,
+    /// every shortcut that starts with it reaches the monitor alone first. On
+    /// the press-locks rule the recording started, locked, and then ignored the
+    /// letter, because a locked recording is not cancelled by typing: the
+    /// microphone stayed open with no cap.
+    @Test("a regular key while the hands-free key is held cancels, as in a shortcut")
+    func regularKeyDuringTheHandsFreeKeyCancels() {
+        var latch = L()
+        #expect(latch.handle(.toggleDown) == [.start])
+        _ = latch.resolveStart(accepted: true)
+        #expect(latch.handle(.otherKey) == [.cancel], "⌃C, with Left ⌃ as the hands-free key")
+        #expect(!latch.isLatched)
+        #expect(latch.handle(.toggleUp) == [], "the release lands in idle and locks nothing")
+    }
+
+    @Test("Esc while the hands-free key is held cancels too")
+    func escapeDuringTheHandsFreeKeyCancels() {
+        var latch = L()
+        _ = latch.handle(.toggleDown)
+        _ = latch.resolveStart(accepted: true)
+        #expect(latch.handle(.escape) == [.cancel])
+        #expect(!latch.isLatched)
+    }
+
+    @Test("a toggle while holding locks on the release, without the second tap")
     func toggleWhileHoldingLocks() {
         var latch = L()
         _ = latch.handle(.down(0))
-        #expect(latch.handle(.toggle) == [.latch])
+        #expect(latch.handle(.toggleDown) == [], "the recording is already running")
+        #expect(latch.handle(.toggleUp) == [.latch])
         #expect(latch.isLatched)
         #expect(latch.handle(.up(0.5)) == [], "the trigger's release cannot finish a locked recording")
     }
 
-    @Test("a toggle while waiting for the second tap locks and disarms the timer")
+    @Test("a regular key cancels the chord too, the same as a plain hold")
+    func regularKeyDuringTheChordCancels() {
+        var latch = L()
+        _ = latch.handle(.down(0))
+        _ = latch.handle(.toggleDown)
+        #expect(latch.handle(.otherKey) == [.cancel])
+        #expect(!latch.isLatched)
+    }
+
+    @Test("a toggle while waiting for the second tap disarms the timer and locks on the release")
     func toggleWhileWaitingLocksAndDisarms() {
         var latch = L()
         _ = latch.handle(.down(0))
         _ = latch.handle(.up(0.05))
-        #expect(latch.handle(.toggle) == [.disarmTimeout, .latch])
+        #expect(latch.handle(.toggleDown) == [.disarmTimeout])
+        #expect(latch.handle(.toggleUp) == [.latch])
         #expect(latch.isLatched)
         #expect(latch.handle(.timeout) == [], "the disarmed window cannot expire")
     }
 
-    @Test("a toggle while locked finishes")
+    @Test("a toggle while locked finishes on the release")
     func toggleWhileLockedFinishes() {
         var latch = L()
-        _ = latch.handle(.toggle)
+        _ = latch.handle(.toggleDown)
         _ = latch.resolveStart(accepted: true)
-        #expect(latch.handle(.toggle) == [.finish])
+        _ = latch.handle(.toggleUp)
+        #expect(latch.handle(.toggleDown) == [], "the press asks")
+        #expect(latch.isLatched, "still locked while the key is down")
+        #expect(latch.handle(.toggleUp) == [.finish])
         #expect(!latch.isLatched)
-        #expect(latch.handle(.up(0.2)) == [], "the hands-free key's own release is ignored")
+    }
+
+    /// Locked, a regular key does not cancel, and a shortcut that uses the
+    /// hands-free key must not end the dictation either: it only takes the
+    /// finish back.
+    @Test("a shortcut with the hands-free key while locked keeps the lock")
+    func shortcutWhileLockedKeepsTheLock() {
+        var latch = L()
+        _ = latch.handle(.toggleDown)
+        _ = latch.resolveStart(accepted: true)
+        _ = latch.handle(.toggleUp)
+
+        _ = latch.handle(.toggleDown)
+        #expect(latch.handle(.otherKey) == [], "⌃C while locked")
+        #expect(latch.isLatched)
+        #expect(latch.handle(.toggleUp) == [], "the release no longer finishes")
+        #expect(latch.isLatched, "the dictation the mode exists to allow is still running")
+    }
+
+    @Test("Esc while the hands-free key is held for the finish discards")
+    func escapeWhileFinishPendingDiscards() {
+        var latch = L()
+        _ = latch.handle(.toggleDown)
+        _ = latch.resolveStart(accepted: true)
+        _ = latch.handle(.toggleUp)
+        _ = latch.handle(.toggleDown)
+        #expect(latch.handle(.escape) == [.cancel])
+        #expect(!latch.isLatched)
+    }
+
+    /// What a change of the hands-free key abandons, and what it does not.
+    @Test("only a gesture holding the hands-free key counts as holding it")
+    func holdingTheHandsFreeKeyIsOnlyItsOwnGesture() {
+        var latch = L()
+        #expect(!latch.isHoldingHandsFreeKey, "idle")
+
+        _ = latch.handle(.down(0))
+        #expect(!latch.isHoldingHandsFreeKey, "the trigger's hold is not this key")
+
+        _ = latch.handle(.toggleDown)
+        #expect(latch.isHoldingHandsFreeKey, "arming the lock")
+
+        _ = latch.handle(.toggleUp)
+        #expect(!latch.isHoldingHandsFreeKey, "locked, and every way out is key-agnostic")
     }
 
     /// Off, the mode leaves the table for the second key as well: a key that
@@ -325,11 +409,12 @@ struct LatchTests {
     @Test("with hands-free off the toggle does nothing")
     func handsFreeOffIgnoresTheToggle() {
         var latch = L(handsFree: false)
-        #expect(latch.handle(.toggle) == [], "idle")
+        #expect(latch.handle(.toggleDown) == [], "idle")
+        #expect(latch.handle(.toggleUp) == [])
         #expect(latch.resolveStart(accepted: true) == [], "nothing was starting")
         #expect(!latch.isLatched)
         _ = latch.handle(.down(0))
-        #expect(latch.handle(.toggle) == [], "holding")
+        #expect(latch.handle(.toggleDown) == [], "holding")
         #expect(latch.handle(.up(0.5)) == [.finish], "the hold ends as before")
     }
 }

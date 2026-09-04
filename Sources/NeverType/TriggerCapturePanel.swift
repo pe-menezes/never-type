@@ -7,8 +7,9 @@ import NeverTypeCore
 /// Draws and forwards, nothing else: `TriggerCapture` decides, and every
 /// sentence on screen comes from there. The second window of an accessory app,
 /// after the vocabulary one, and it follows the two rules that one learned:
-/// activate before showing, so the keyboard reaches it, and hide the app on
-/// close, so the focus goes back to where the person was.
+/// activate before showing, so the keyboard reaches it, and hand the focus back
+/// on close, through `FocusHandback`, so the person returns to where they were
+/// with the orb still on screen.
 ///
 /// Two monitors, the same pair as `HotkeyMonitor`. A mouse button pressed with
 /// the pointer over another app's window is delivered to that app, and only
@@ -44,17 +45,20 @@ final class TriggerCapturePanel: NSObject, NSWindowDelegate {
     func show(purpose: TriggerCapture.Purpose,
               onChosen: @escaping (Trigger) -> Void,
               onClosed: @escaping () -> Void) {
-        if let window, window.isVisible {
-            NSApp.activate(ignoringOtherApps: true)
-            window.makeKeyAndOrderFront(nil)
-            return
-        }
+        // Everything is rebuilt on every call, even with the panel already
+        // open. The menu stays reachable while it is, so the other role can be
+        // asked for from under it; an early return here kept the first role's
+        // rule and callback, and the key pressed for hands-free became the
+        // trigger.
+        let wasVisible = window?.isVisible == true
         self.onChosen = onChosen
         self.onClosed = onClosed
         capture = TriggerCapture(purpose: purpose)
         pending = nil
-        // Read before activating: afterwards the app in front is this one.
-        focus.remember()
+        // Read before activating, and only on the way in: afterwards the app in
+        // front is this one, so a second `show` on an open panel would remember
+        // NeverType itself.
+        if !wasVisible { focus.remember() }
         instruction.stringValue = TriggerCapture.Prompt.instruction(for: purpose)
         status.stringValue = ""
         hideUseButton()
@@ -67,14 +71,23 @@ final class TriggerCapturePanel: NSObject, NSWindowDelegate {
         // gets no keyboard.
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
-        window.center()
+        if !wasVisible { window.center() }
     }
 
     // MARK: - Listening
 
     private func startListening() {
         stopListening()
-        let mask: NSEvent.EventTypeMask = [.flagsChanged, .keyDown, .otherMouseDown, .otherMouseUp, .rightMouseDown]
+        // Two masks, because the two monitors see different things. A key goes
+        // to the key window, which is this panel, so the keyboard belongs to
+        // the local monitor alone: with the panel open behind another app, a
+        // solo modifier tapped in that app would otherwise choose the trigger
+        // and close the panel with nothing on screen to explain it. Every click
+        // is global, since a click over another app's window is delivered
+        // there. The primary click is the exception the local monitor cannot
+        // take: it is how the buttons in this panel are pressed.
+        let global: NSEvent.EventTypeMask = [.otherMouseDown, .otherMouseUp, .rightMouseDown, .leftMouseDown]
+        let local: NSEvent.EventTypeMask = [.flagsChanged, .keyDown, .otherMouseDown, .otherMouseUp, .rightMouseDown]
         // `assumeIsolated`, and not `Task { @MainActor in }`, on purpose.
         //
         // AppKit delivers these events on the main thread: the monitors are
@@ -83,7 +96,7 @@ final class TriggerCapturePanel: NSObject, NSWindowDelegate {
         // release it spoiled, turning a refused combination into an accepted
         // key. The synchronous call preserves arrival order. The same two
         // reasons as `HotkeyMonitor.start()`.
-        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: mask) { [weak self] event in
+        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: global) { [weak self] event in
             MainActor.assumeIsolated { _ = self?.handle(event) }
         }
         // The local monitor sees what is dispatched to this app, which with the
@@ -91,13 +104,13 @@ final class TriggerCapturePanel: NSObject, NSWindowDelegate {
         // refused key that went on to the window would beep, and the panel has
         // already said what it had to say. An event born in another app never
         // comes this way, so nothing of anyone else's is swallowed.
-        localMonitor = NSEvent.addLocalMonitorForEvents(matching: mask) { [weak self] event in
+        localMonitor = NSEvent.addLocalMonitorForEvents(matching: local) { [weak self] event in
             // `assumeIsolated` can only return a `Sendable` value, and `NSEvent`
             // is not one: the answer crosses as a Bool, and the event stays out.
             let consumed = MainActor.assumeIsolated { self?.handle(event) ?? false }
             return consumed ? nil : event
         }
-        restartIdleHint()
+        armIdleHint()
     }
 
     private func stopListening() {
@@ -114,7 +127,12 @@ final class TriggerCapturePanel: NSObject, NSWindowDelegate {
         guard var capture, let input = TriggerCapture.Input(event) else { return false }
         let verdict = capture.handle(input)
         self.capture = capture
-        restartIdleHint()
+        // The hint answers a panel nothing ever reached, so the first event
+        // retires it for good. Restarting it here overwrote a refusal five
+        // seconds later with a sentence about firmware and mouse software that
+        // had nothing to do with what the person had just pressed.
+        idleHint?.cancel()
+        idleHint = nil
         render(verdict)
         return true
     }
@@ -122,7 +140,7 @@ final class TriggerCapturePanel: NSObject, NSWindowDelegate {
     /// Five seconds of nothing gets a sentence. A `Task` and a sleep, so that
     /// the hop back to the main actor is checked by the compiler, and the two
     /// monitors stay the only `assumeIsolated` in this file.
-    private func restartIdleHint() {
+    private func armIdleHint() {
         idleHint?.cancel()
         idleHint = Task { [weak self] in
             try? await Task.sleep(for: .seconds(TriggerCapture.Prompt.idleDelay))
@@ -200,7 +218,7 @@ final class TriggerCapturePanel: NSObject, NSWindowDelegate {
 
     private func makeWindow() -> NSPanel {
         let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 460, height: 212),
+            contentRect: NSRect(x: 0, y: 0, width: 460, height: 232),
             styleMask: [.titled, .closable],
             backing: .buffered, defer: false)
         panel.title = TriggerCapture.Prompt.title
@@ -212,17 +230,20 @@ final class TriggerCapturePanel: NSObject, NSWindowDelegate {
         // would look like it gave up.
         panel.hidesOnDeactivate = false
 
+        // Two lines, because one does not hold the hands-free sentence: at 13
+        // pt semibold it measures 547 px against the label's 428, and what was
+        // cut was `tap again to finish`, the half that teaches the gesture.
         instruction.font = .systemFont(ofSize: 13, weight: .semibold)
-        instruction.frame = NSRect(x: 16, y: 172, width: 428, height: 22)
-        instruction.maximumNumberOfLines = 1
+        instruction.frame = NSRect(x: 16, y: 178, width: 428, height: 40)
+        instruction.maximumNumberOfLines = 2
 
         accepts.font = .systemFont(ofSize: 11)
         accepts.textColor = .secondaryLabelColor
-        accepts.frame = NSRect(x: 16, y: 134, width: 428, height: 34)
+        accepts.frame = NSRect(x: 16, y: 138, width: 428, height: 34)
         accepts.maximumNumberOfLines = 2
 
         status.font = .systemFont(ofSize: 12)
-        status.frame = NSRect(x: 16, y: 58, width: 428, height: 70)
+        status.frame = NSRect(x: 16, y: 54, width: 428, height: 76)
         status.maximumNumberOfLines = 4
 
         useButton.target = self

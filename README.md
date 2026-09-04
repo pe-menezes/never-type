@@ -25,11 +25,12 @@ mark. Its three bars move with the voice while listening, including hands-free,
 then collapse into moving dots beside the unchanged cursor while writing text.
 
 The menu bar menu offers Right ⌘, ⌥ and ⌃ as quick picks, and **Other key or
-mouse button…** lets you press the key you want: any modifier on either side,
-Fn, or a mouse button from the third on. What cannot be the key is refused on
-the spot, with the reason on screen. A second key can lock hands-free with one
-tap. The menu also holds the last 30 transcriptions and a custom vocabulary.
-Clicking the orb opens that same menu, which is how you reach it in full screen.
+mouse button…** lets you press the key you want: a modifier on either side, Fn,
+or a mouse button from the third on. What cannot be the key is refused on the
+spot, with the reason on screen, ⇧ and Left ⌘ among them. A second key can lock
+hands-free with one tap. The menu also holds the last 30 transcriptions and a
+custom vocabulary. Clicking the orb opens that same menu, which is how you reach
+it in full screen.
 [`docs/reference.md`](docs/reference.md) goes through every item, including the
 table of accepted and refused keys.
 
@@ -97,7 +98,7 @@ binary side, and what nobody has run.
 
 ```bash
 bash scripts/build-app.sh     # compiles whisper.cpp into vendor/
-swift build && swift test     # 154 tests, in swift-testing
+swift build && swift test     # 169 tests, in swift-testing
 ```
 
 `vendor/` is not versioned. Without it the build fails with `could not build
