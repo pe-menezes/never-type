@@ -24,6 +24,20 @@ Registrado e confirmado pelo macOS na tua máquina.
 `Modelo:` no menu para fechar a medição de boot frio.
 Spec: `.vibeflow/specs/abrir-com-o-sistema.md`
 
+### ✅ F2 · Gatilho por captura
+Implementado entre 2026-09-01 e 2026-09-04 no branch `trigger-capture`, em
+quatro partes auditadas PASS. Qualquer modificador, Fn ou botão extra do mouse,
+escolhido apertando; segunda tecla de mãos-livres; o título do menu nomeia a
+segunda tecla; o orb fica na tela ao fechar a janela do vocabulário (hotfix).
+
+**Falta:** usar no dia a dia com uma tecla fora das três (o autor está em ⌥
+direito com ⌘ direito para mãos-livres, desde 2026-09-04); um teclado de
+terceiros que trate Fn no firmware, para ver a dica dos 5 s aparecer de verdade;
+um mouse com o botão 4 remapeado pelo software do fabricante; abrir e fechar a
+janela do vocabulário e ver o orb ficar; abrir o PR.
+Specs: `.vibeflow/specs/gatilho-por-captura-part-1.md` a `-4.md` ·
+PRD: `.vibeflow/prds/gatilho-por-captura.md`
+
 ---
 
 ## 1. Defeitos que podem estragar o trabalho de alguém
@@ -316,6 +330,20 @@ só tem tempo de uso no ⌘ direito, que é o padrão.
 *Evidência:* pedido do autor em uso, 2026-08-29 · `HotkeyMonitor.swift:140-150` ·
 commit `1479a4b`
 
+**Continuação, 2026-09-01 a 2026-09-04, branch `trigger-capture`.** Quem testou
+pediu a própria tecla, o gesto de apertar para escolher e um botão do mouse.
+PRD em `.vibeflow/prds/gatilho-por-captura.md`, quatro specs
+(`gatilho-por-captura-part-1` a `-4`) e quatro auditorias PASS em
+`.vibeflow/audits/`. O que entrou: `Trigger` com os nove modificadores, Fn e
+botão extra do mouse, identificador em disco compatível (parte 1); a regra
+`TriggerCapture` e o painel que aceita a próxima tecla, com recusa e ressalva
+na tela e o gatilho suspenso enquanto ele está aberto (parte 2); a segunda
+tecla de mãos-livres, toque trava e toque encerra (parte 3); a documentação nos
+dois idiomas, `CLAUDE.md` e o "How to use" do `install.sh` (parte 4). Os três
+checks de hardware da parte 1 (botão do meio, Fn, lado esquerdo) e os roteiros
+das partes 2 e 3 foram feitos pelo autor em 2026-09-03 e 2026-09-04. Ainda de
+olho: o item F2.
+
 ---
 
 ## 4. UI — o que dá para ver
@@ -550,7 +578,13 @@ docs da auditoria de 29/08 (R45); o arquivo agora só tem a forma certa.
 *Evidência:* `grep -n 'limitações' README.md` em 29/08/2026 — todas as
 ocorrências com `#limitações-conhecidas`
 
-### H5 · "Um arquivo por unidade" já não descreve os testes — P
+### ✅ H5 · "Um arquivo por unidade" já não descreve os testes · FEITO em 03/09
+Resolvido pelo segundo lado: as suítes "Hotkey trigger" e "Hands-free latch"
+saíram de `AudioRecorderTests.swift` para `HotkeyMonitorTests.swift` na parte 1
+do gatilho por captura (commit `c41cb69`), e a convenção continua valendo como
+está. `AudioRecorderTests.swift` ficou com as três suítes de áudio.
+
+O texto original, para o registro:
 `conventions.md:44` diz "swift-testing, **um arquivo por unidade**". O
 `AudioRecorderTests.swift` tem **cinco** suítes: "Conversão de áudio" (5 testes,
 L8), "Trigger da hotkey" (4, L102), "Ciclo do arquivo de gravação" (7, L146),
@@ -655,7 +689,14 @@ quebrou e por quê, com o custo medido, e os três se qualificam.
 *Evidência:* auditoria de 01/09/2026 (§7, §8, L3) · corpo do PR #5 ·
 `docs/pitfalls.md` (hoje sem nenhum dos três)
 
-### H15 · `.vibeflow/index.md` desatualizado depois desta branch · P
+### ✅ H15 · `.vibeflow/index.md` desatualizado depois desta branch · FEITO em 04/09
+Fechado pelo `/vibeflow:teach` de 2026-09-04: a contagem passou a 160 testes em
+18 suítes, a linha do `HotkeyMonitor.swift` descreve o gatilho de hoje (qualquer
+modificador, Fn, mouse, trava desligável, segunda tecla), entraram as linhas de
+`TriggerCapture.swift`, `TriggerCapturePanel.swift` e `FocusHandback.swift`, e
+"Known Issues" ganhou a cópia inline da devolução de foco no painel (H20).
+
+O texto original, para o registro:
 A linha 31 diz "109 testes em swift-testing", e são **132 em 16 suítes**, medidos
 fora do sandbox em 01/09/2026 com
 `swift test --disable-xctest --enable-swift-testing`.
@@ -671,7 +712,13 @@ de `analyze`. A auditoria de 01/09 afirmou que elas ficam dentro de marcadores
 *Evidência:* auditoria de 01/09/2026 (§7, L8) · `.vibeflow/index.md:31` e `:87` ·
 contagem medida fora do sandbox em 01/09/2026
 
-### H16 · O interruptor de mãos-livres não tem registro em `.vibeflow/decisions.md` · P
+### ✅ H16 · O interruptor de mãos-livres não tem registro em `.vibeflow/decisions.md` · FEITO em 04/09
+`.vibeflow/decisions.md` foi criado em 2026-09-04 com três entradas: a devolução
+de foco (hotfix do orb), o gatilho escolhido apertando (parte 1 a 3 do gatilho
+por captura) e o interruptor de mãos-livres, este com a razão que estava em
+`HotkeyMonitor.swift` e o custo da preferência permanente.
+
+O texto original, para o registro:
 O pedido de 01/09 era mostrar que a trava existe, para quem nunca descobriu o
 duplo toque. A entrega inclui desligar a trava, com superfície própria e
 permanente: chave `handsFree` no `UserDefaults`
@@ -743,9 +790,33 @@ gravidade baixa hoje, e ligado ao U5: o tooltip é justamente o canal que ningu�
 viu funcionando.
 *Evidência:* auditoria de 01/09/2026 (§3 `estado-consultado`, §7)
 
+**Fechado pelo desenho da parte 2 (2026-09-03).** O segundo caminho chegou, o
+painel de captura, e a resposta foi um ponto único: `setTrigger(_:)` em
+`main.swift`, chamado pelos quick picks, pelo painel e pela restauração do
+lançamento, com `refreshHoverHint()` dentro. O DoD 5 daquela spec exige
+`grep -c "monitor.trigger = " Sources/NeverType/main.swift` igual a 1, e a
+auditoria confere. A tecla de mãos-livres tem o mesmo ponto único,
+`setHandsFreeTrigger(_:)`. O U5, ver o tooltip aparecer, continua aberto.
+
+### H20 · O painel de captura mantém uma cópia inline da devolução de foco · P
+`TriggerCapturePanel.swift` (`windowWillClose`) lembra o app da frente e o ativa
+ao fechar, o mesmo que `FocusHandback` faz desde o hotfix de 2026-09-04, e o
+comentário dele ainda diz que a janela do vocabulário esconde o app com
+`NSApp.hide`, o que deixou de ser verdade nesse hotfix. Trocar a cópia por
+`FocusHandback.remember()` e `giveBack()` é um arquivo e nenhum teste novo: o
+oráculo de texto de `FocusHandbackTests` pode passar a cobrir o painel também.
+*Evidência:* `.vibeflow/hotfixes/2026-09-04-vocabulary-window-hides-the-orb.md`
+(Deviations) · `Sources/NeverType/TriggerCapturePanel.swift`, `windowWillClose`
+
 ---
 
 ## Decidido e fechado
+
+- **O gatilho é escolhido apertando, dentro do modo escuta**, e a segunda tecla
+  de mãos-livres vem da mesma tabela. Contexto e alternativas descartadas em
+  `.vibeflow/decisions.md` (2026-09-01).
+- **Devolver o foco é ativar o app anterior**, com `NSApp.hide` só como
+  fallback, porque `hide` esconde o orb. `.vibeflow/decisions.md` (2026-09-04).
 
 - **Não fazer parada automática por silêncio.** Pausa não significa fim: é comum
   ficar em silêncio no meio do ditado enquanto se lê alguma coisa, e um corte

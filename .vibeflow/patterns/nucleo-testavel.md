@@ -131,3 +131,16 @@ Cada uma dessas separações nasceu de um defeito real, não de gosto:
   interferirem um no outro — os testes paralelos expuseram na hora. Hoje é
   indexado por `NSPasteboard.Name`. Estado que pertence a um recurso é indexado
   por ele, não guardado no tipo.
+
+## Manual Corrections
+
+- **Dois exemplos novos do padrão (2026-09-01 a 2026-09-04).** `TriggerCapture`
+  é a regra pura do painel de captura: o painel traduz `NSEvent` em `Input` e
+  desenha o `Verdict`, e os nove casos da tabela de teclas rodam sem teclado,
+  mouse ou janela (`TriggerCaptureTests.swift`). `FocusHandback` recebe as três
+  chamadas de sistema (app da frente, ativar, esconder) por parâmetro com
+  padrão, a mesma forma de `TextInjector.insert(secureInput:)`, e cada ramo tem
+  teste (`FocusHandbackTests.swift`).
+- **Janela no alvo executável.** O que fica fora do alcance do teste é a janela
+  em si; ver "Janela no alvo executável tem oráculo de texto" em
+  `conventions.md`.

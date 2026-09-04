@@ -20,15 +20,17 @@ Os artefatos pesados (`models/`, `vendor/`, `fixtures/`,
 
 ## Structural Units
 
-- **`Sources/NeverTypeCore/`** — captura e conversão de áudio, tecla global (com
-  a trava de mãos-livres e as três teclas oferecidas), transcrição, inserção de
-  texto, vocabulário, histórico de transcrições, tons do retorno auditivo e login
-  item. É o que tem teste.
+- **`Sources/NeverTypeCore/`**: captura e conversão de áudio, gatilho global
+  (qualquer modificador dos dois lados, Fn ou botão extra do mouse, escolhido
+  apertando; trava de mãos-livres por duplo toque ou por uma segunda tecla), a
+  regra de captura da tecla, a devolução do foco ao fechar janela, transcrição,
+  inserção de texto, vocabulário, histórico de transcrições, tons do retorno
+  auditivo e login item. É o que tem teste.
 - **`Sources/NeverType/`** — `NSApplication` acessória, ícone de bandeja, painel
   flutuante de gravação, janela do vocabulário, ator dono do modelo. Orquestra,
   não decide.
 - **`Sources/CWhisper/`** — module map apontando para `vendor/whisper`.
-- **`Tests/NeverTypeCoreTests/`**: 109 testes em swift-testing.
+- **`Tests/NeverTypeCoreTests/`**: 160 testes em 18 suítes, swift-testing.
 - **`scripts/`** — bancada de latência, build e assinatura, instalação,
   verificação e atualização.
 - **`docs/`** — armadilhas encontradas e a escolha do modelo, com os números.
@@ -84,13 +86,16 @@ patterns:
 | `Sources/NeverTypeCore/AudioRecorder.swift` | `Resampler`, `RecordingSink` e o gravador; fila serial dona do estado |
 | `Sources/NeverTypeCore/Transcriber.swift` | `ModelStore` e a ponte com o whisper.cpp; enumeração de backends |
 | `Sources/NeverTypeCore/TextInjector.swift` | Inserção via área de transferência, com retrato e devolução |
-| `Sources/NeverTypeCore/HotkeyMonitor.swift` | O gatilho: push-to-talk, trava de mãos-livres por duplo toque, as três teclas oferecidas |
+| `Sources/NeverTypeCore/HotkeyMonitor.swift` | O gatilho: push-to-talk com qualquer modificador, Fn ou botão extra do mouse; trava por duplo toque ou pela segunda tecla, desligável no menu; `Trigger` com a tabela das nove teclas e o identificador em disco |
+| `Sources/NeverTypeCore/TriggerCapture.swift` | A regra pura do painel de captura: aceito, com ressalva ou recusado, com o texto de cada resposta |
+| `Sources/NeverTypeCore/FocusHandback.swift` | Devolve o foco ao app anterior ao fechar uma janela, sem esconder o orb (hotfix de 2026-09-04) |
 | `Sources/NeverTypeCore/Vocabulary.swift` | Termos (viram `initial_prompt`) e substituições determinísticas |
 | `Sources/NeverTypeCore/TranscriptHistory.swift` | As últimas 30 transcrições, com teto e escrita atômica |
 | `Sources/NeverTypeCore/Tone.swift` | Gera os WAV do retorno auditivo, com envelope contra o estalo |
 | `Sources/NeverTypeCore/LoginItem.swift` | Abrir com o sistema, com a guarda de caminho antes de registrar |
 | `Sources/NeverType/RecordingOverlay.swift` | Indicador que sobrevive a apps em tela cheia |
 | `Sources/NeverType/VocabularyWindow.swift` | As duas listas do vocabulário, em abas editáveis |
+| `Sources/NeverType/TriggerCapturePanel.swift` | O painel que espera a próxima tecla ou botão: os dois monitores, a linha de status, a dica de 5 s |
 | `scripts/build-app.sh` | Compila o whisper estático, monta o bundle, assina com identidade estável |
 | `scripts/setup-bench.sh` | Constrói os modelos ggml a partir do CDN da OpenAI |
 | `scripts/bench.sh` | Mede latência e qualidade por modelo |
@@ -107,6 +112,10 @@ patterns:
 
 ## Known Issues / Tech Debt
 
+- **O painel de captura mantém uma cópia inline da devolução de foco**
+  (`TriggerCapturePanel.swift`, `windowWillClose`), e o comentário dele ainda
+  diz que a janela do vocabulário esconde o app. `FocusHandback` existe desde o
+  hotfix de 2026-09-04; consolidar é o H20 do backlog.
 - **Orçamento sugerido vs realidade observada.** A regra dá ≤4 arquivos para um
   projeto de 17 fontes, e é razoável para manutenção. As quatro partes
   implementadas precisaram de 5 a 9 arquivos cada, porque construíam do zero.
