@@ -115,6 +115,23 @@ struct HotkeyTriggerTests {
         let middle = try #require(T.mouseButton(3))
         #expect(T.menuChoices(current: middle) == T.all + [middle])
     }
+
+    /// One press cannot mean both. The capture panel refuses the trigger for
+    /// the hands-free role, and the three quick picks never go through the
+    /// panel, so the monitor itself has to keep the two apart.
+    @Test("choosing the hands-free key as the trigger clears the hands-free key")
+    @MainActor
+    func choosingTheHandsFreeKeyAsTheTriggerClearsIt() {
+        let monitor = HotkeyMonitor()
+        monitor.handsFreeTrigger = .rightOption
+        monitor.trigger = .rightOption
+        #expect(monitor.handsFreeTrigger == nil)
+        #expect(monitor.trigger == .rightOption, "the trigger wins; it is the key the person just picked")
+
+        monitor.handsFreeTrigger = .rightControl
+        monitor.trigger = .rightCommand
+        #expect(monitor.handsFreeTrigger == .rightControl, "a different key is left alone")
+    }
 }
 
 
@@ -140,7 +157,7 @@ struct LatchTests {
         var latch = L()
         #expect(latch.handle(.down(0)) == [.start])
 
-        latch.resolveStart(accepted: false)
+        _ = latch.resolveStart(accepted: false)
 
         #expect(latch.handle(.up(0.08)) == [])
         #expect(latch.handle(.down(0.12)) == [.start],
@@ -247,5 +264,72 @@ struct LatchTests {
         #expect(latch.handle(.up(0.2)) == [.finish])
         #expect(!latch.isLatched)
         #expect(latch.handle(.timeout) == [], "no window was ever armed to expire")
+    }
+
+    // The hands-free key: one tap locks, the next finishes.
+
+    /// The lock waits for the app to say the recording began. Without that
+    /// order, a refused start (no Accessibility, no microphone, a recorder
+    /// error) would play the lock tone and show the locked pill over nothing.
+    @Test("a toggle from idle asks to start, and the accepted start locks")
+    func toggleFromIdleStartsThenLocks() {
+        var latch = L()
+        #expect(latch.handle(.toggle) == [.start])
+        #expect(!latch.isLatched, "nothing is locked before the app answers")
+        #expect(latch.resolveStart(accepted: true) == [.latch])
+        #expect(latch.isLatched)
+        #expect(latch.handle(.up(0.1)) == [], "a release cannot finish a locked recording")
+    }
+
+    @Test("a refused start after a toggle leaves nothing armed")
+    func refusedStartAfterToggleLeavesIdle() {
+        var latch = L()
+        _ = latch.handle(.toggle)
+        #expect(latch.resolveStart(accepted: false) == [])
+        #expect(!latch.isLatched)
+        #expect(latch.handle(.down(1)) == [.start], "the next press is a fresh attempt")
+        #expect(latch.handle(.up(1 + L.tapThreshold + 0.1)) == [.finish], "and it ends as an ordinary hold")
+    }
+
+    @Test("a toggle while holding locks without the second tap")
+    func toggleWhileHoldingLocks() {
+        var latch = L()
+        _ = latch.handle(.down(0))
+        #expect(latch.handle(.toggle) == [.latch])
+        #expect(latch.isLatched)
+        #expect(latch.handle(.up(0.5)) == [], "the trigger's release cannot finish a locked recording")
+    }
+
+    @Test("a toggle while waiting for the second tap locks and disarms the timer")
+    func toggleWhileWaitingLocksAndDisarms() {
+        var latch = L()
+        _ = latch.handle(.down(0))
+        _ = latch.handle(.up(0.05))
+        #expect(latch.handle(.toggle) == [.disarmTimeout, .latch])
+        #expect(latch.isLatched)
+        #expect(latch.handle(.timeout) == [], "the disarmed window cannot expire")
+    }
+
+    @Test("a toggle while locked finishes")
+    func toggleWhileLockedFinishes() {
+        var latch = L()
+        _ = latch.handle(.toggle)
+        _ = latch.resolveStart(accepted: true)
+        #expect(latch.handle(.toggle) == [.finish])
+        #expect(!latch.isLatched)
+        #expect(latch.handle(.up(0.2)) == [], "the hands-free key's own release is ignored")
+    }
+
+    /// Off, the mode leaves the table for the second key as well: a key that
+    /// locks with the mode off would contradict "only records while held".
+    @Test("with hands-free off the toggle does nothing")
+    func handsFreeOffIgnoresTheToggle() {
+        var latch = L(handsFree: false)
+        #expect(latch.handle(.toggle) == [], "idle")
+        #expect(latch.resolveStart(accepted: true) == [], "nothing was starting")
+        #expect(!latch.isLatched)
+        _ = latch.handle(.down(0))
+        #expect(latch.handle(.toggle) == [], "holding")
+        #expect(latch.handle(.up(0.5)) == [.finish], "the hold ends as before")
     }
 }

@@ -46,6 +46,9 @@ public final class HotkeyMonitor {
             case otherKey
             case escape
             case timeout
+            /// The hands-free key went down: lock, or finish if already locked.
+            /// Its release never arrives here; holding that key means nothing.
+            case toggle
         }
 
         public enum Action: Equatable {
@@ -65,6 +68,11 @@ public final class HotkeyMonitor {
             case awaitingSecondTap
             /// Hands-free: records without the key held.
             case latched
+            /// A toggle asked to start. `resolveStart` turns the accepted start
+            /// into the lock, and a refused one back into idle. Transient: the
+            /// app resolves the start in the same main-actor turn, so no other
+            /// input ever lands here.
+            case startingLatched
         }
 
         private(set) var state: State = .idle
@@ -88,14 +96,27 @@ public final class HotkeyMonitor {
 
         public var isLatched: Bool { state == .latched }
 
-        /// Resolves whether the app accepted the `.start` action.
+        /// Resolves whether the app accepted the `.start` action, and returns
+        /// what follows from that.
         ///
         /// A rejected start has already moved the state to `.holding`. Leaving it
         /// there lets the following release arm the hands-free double-tap path for
         /// a recording that never existed.
-        public mutating func resolveStart(accepted: Bool) {
-            guard !accepted else { return }
-            reset()
+        ///
+        /// A start asked by the hands-free key locks only once it is accepted.
+        /// Returning `[.start, .latch]` from the toggle would make the app play
+        /// the lock tone and show the locked pill over a recording that never
+        /// began, on the day Accessibility, the microphone or the recorder
+        /// refuse. The order "only lock what started" is a rule, so it lives
+        /// here, in the pure type, where it has a test.
+        public mutating func resolveStart(accepted: Bool) -> [Action] {
+            guard accepted else {
+                reset()
+                return []
+            }
+            guard state == .startingLatched else { return [] }
+            state = .latched
+            return [.latch]
         }
 
         /// Abandons a gesture whose `.start` action was refused by the app.
@@ -105,6 +126,11 @@ public final class HotkeyMonitor {
         }
 
         public mutating func handle(_ input: Input) -> [Action] {
+            // Off, the hands-free key is as dead as the double tap: a key that
+            // locks with the mode off would contradict the line the submenu
+            // shows then, "only records while held".
+            if case .toggle = input, !handsFree { return [] }
+
             switch (state, input) {
 
             case (.idle, .down(let t)):
@@ -154,6 +180,31 @@ public final class HotkeyMonitor {
             // typing is just typing — and cancelling a long dictation because of
             // that would lose precisely what the mode exists to allow.
             case (.latched, .otherKey):
+                return []
+
+            // The hands-free key, from rest: ask to start, and lock once the
+            // app says the recording began (see `resolveStart`).
+            case (.idle, .toggle):
+                state = .startingLatched
+                return [.start]
+
+            // The hands-free key while the trigger is held, or inside the
+            // second-tap window: lock without the second tap.
+            case (.holding, .toggle):
+                state = .latched
+                return [.latch]
+
+            case (.awaitingSecondTap, .toggle):
+                state = .latched
+                return [.disarmTimeout, .latch]
+
+            // Locked, the hands-free key finishes, the same as a tap on the
+            // trigger.
+            case (.latched, .toggle):
+                state = .idle
+                return [.finish]
+
+            case (.startingLatched, _):
                 return []
 
             default:
@@ -300,6 +351,29 @@ public final class HotkeyMonitor {
     public var trigger: Trigger {
         didSet {
             guard trigger != oldValue else { return }
+            // One press cannot mean both. The capture panel refuses the
+            // trigger for the hands-free role, but the three quick picks never
+            // go through the panel: without this line, picking the hands-free
+            // key as the trigger would leave one key that both starts a hold
+            // and locks, and the press meant to lock would be the press that
+            // starts the hold.
+            if handsFreeTrigger == trigger { handsFreeTrigger = nil }
+            resetGesture()
+        }
+    }
+
+    /// The optional second trigger: one tap locks hands-free, the next
+    /// finishes. Nil means none, which is the default.
+    ///
+    /// Changing it resets the state machine for the same reason switching the
+    /// trigger does: a gesture in flight belongs to the rule that started it.
+    /// Without the reset, a lock started by the old key would wait for a
+    /// finishing tap that the new key never sends as `.toggle` of the same
+    /// gesture. Whoever changes it ends the recording that the abandoned
+    /// gesture was holding open (`setHandsFreeTrigger`, in `main.swift`).
+    public var handsFreeTrigger: Trigger? {
+        didSet {
+            guard handsFreeTrigger != oldValue else { return }
             resetGesture()
         }
     }
@@ -408,28 +482,41 @@ public final class HotkeyMonitor {
     }
 
 
-    private func handle(_ event: NSEvent) {
-        switch event.type {
-        case .flagsChanged:
-            guard case .modifier(let keyCode, let deviceMask) = trigger.source,
-                  event.keyCode == keyCode else { return }
-            let down = (event.modifierFlags.rawValue & deviceMask) != 0
-            apply(latch.handle(down ? .down(event.timestamp) : .up(event.timestamp)))
-        case .otherMouseDown, .otherMouseUp:
-            // `buttonNumber` counts from zero and people count from one, so the
-            // middle button is 2 here and "Mouse button 3" everywhere else. This
-            // is the one place the two meet. A regular key during the hold still
-            // cancels, the same rule as for a key, so the state machine stays
-            // untouched.
-            guard case .mouseButton(let number) = trigger.source,
-                  event.buttonNumber + 1 == number else { return }
-            let down = event.type == .otherMouseDown
-            apply(latch.handle(down ? .down(event.timestamp) : .up(event.timestamp)))
-        case .keyDown:
-            // 53 is Escape. In hands-free it is the only way out without transcribing.
-            apply(latch.handle(event.keyCode == 53 ? .escape : .otherKey))
+    /// Whether the event is this trigger's press (true), its release (false),
+    /// or somebody else's (nil).
+    private static func press(of trigger: Trigger, in event: NSEvent) -> Bool? {
+        switch (event.type, trigger.source) {
+        case (.flagsChanged, .modifier(let keyCode, let deviceMask)):
+            guard event.keyCode == keyCode else { return nil }
+            return (event.modifierFlags.rawValue & deviceMask) != 0
+        // `buttonNumber` counts from zero and people count from one, so the
+        // middle button is 2 here and "Mouse button 3" everywhere else. This
+        // is the one place the two meet.
+        case (.otherMouseDown, .mouseButton(let number)), (.otherMouseUp, .mouseButton(let number)):
+            guard event.buttonNumber + 1 == number else { return nil }
+            return event.type == .otherMouseDown
         default:
-            break
+            return nil
+        }
+    }
+
+    private func handle(_ event: NSEvent) {
+        if event.type == .keyDown {
+            // 53 is Escape. In hands-free it is the only way out without
+            // transcribing. A regular key during a mouse-button hold cancels
+            // too, the same rule as for a key, so the state machine stays
+            // untouched.
+            apply(latch.handle(event.keyCode == 53 ? .escape : .otherKey))
+            return
+        }
+        // The hands-free key's press is the tap, and its release means
+        // nothing: holding it has no meaning.
+        if let handsFreeTrigger, let down = Self.press(of: handsFreeTrigger, in: event) {
+            if down { apply(latch.handle(.toggle)) }
+            return
+        }
+        if let down = Self.press(of: trigger, in: event) {
+            apply(latch.handle(down ? .down(event.timestamp) : .up(event.timestamp)))
         }
     }
 
@@ -438,7 +525,7 @@ public final class HotkeyMonitor {
             switch action {
             case .start:
                 let accepted = onEvent?(.pressed) ?? false
-                latch.resolveStart(accepted: accepted)
+                apply(latch.resolveStart(accepted: accepted))
             case .finish: _ = onEvent?(.released)
             case .cancel: _ = onEvent?(.cancelled)
             case .latch:  _ = onEvent?(.latched)
