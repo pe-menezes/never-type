@@ -72,10 +72,10 @@ mais velho do que o build precisa, e o que o build imprime então não nomeia na
 útil. Confira também a versão:
 
 ```bash
-swift --version   # 6.0 ou mais novo
+swift --version   # 6.0.3 ou mais novo
 ```
 
-Abaixo de 6.0 elas precisam ser atualizadas, e isso é **PARE E PEÇA**. O build
+Abaixo de 6.0.3 elas precisam ser atualizadas, e isso é **PARE E PEÇA**. O build
 recusa antes, dizendo a versão que achou e de qual toolchain ela veio.
 
 ### cmake

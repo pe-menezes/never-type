@@ -72,10 +72,10 @@ older than the build needs, and what the build prints then names nothing useful.
 Check the version as well:
 
 ```bash
-swift --version   # 6.0 or later
+swift --version   # 6.0.3 or later
 ```
 
-Below 6.0 they have to be updated, which is a **STOP AND ASK**. The build
+Below 6.0.3 they have to be updated, which is a **STOP AND ASK**. The build
 refuses first, naming the version it found and the toolchain it came from.
 
 ### cmake
