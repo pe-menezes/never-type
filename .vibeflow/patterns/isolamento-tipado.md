@@ -106,3 +106,15 @@ guard flock(fd, LOCK_EX | LOCK_NB) == 0 else {
   simultâneos passavam ambos, 3 de 3.
 - **`deinit { stop() }` em tipo `@MainActor`.** `deinit` é `nonisolated` e não
   pode tocar estado da main actor. Quem cria, encerra.
+
+## Manual Corrections
+
+- **`onEvent` devolve `Bool` desde 29/08:** `(@MainActor (Event) -> Bool)?`,
+  para o monitor saber se o `.pressed` virou gravação e zerar a máquina quando
+  não virou. O trecho dentro dos marcadores ainda mostra `-> Void`.
+- **Segundo lugar com `assumeIsolated` justificado (2026-09-03):** os dois
+  monitores de `TriggerCapturePanel.swift`, pelas mesmas duas razões de
+  `HotkeyMonitor.start()`. `assumeIsolated` só devolve valor `Sendable`, e
+  `NSEvent` não é: a resposta do monitor local cruza como `Bool` ("consumido")
+  e o evento fica fora do bloco. A dica de 5 s do painel usa `Task` com
+  `Task.sleep`, sem `Timer` e sem `assumeIsolated`.

@@ -180,6 +180,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let vocabulary = Vocabulary(
         url: logURL.deletingLastPathComponent().appendingPathComponent("vocabulario.json"))
     private lazy var vocabularyWindow = VocabularyWindow(vocabulary: vocabulary)
+    private let capturePanel = TriggerCapturePanel()
 
     private let history = TranscriptHistory(
         url: logURL.deletingLastPathComponent().appendingPathComponent("historico.json"))
@@ -248,8 +249,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlay.menu = menu
 
         if let saved = HotkeyMonitor.Trigger.named(UserDefaults.standard.string(forKey: Self.triggerKey)) {
-            monitor.trigger = saved
+            setTrigger(saved)
         }
+        setHandsFreeTrigger(HotkeyMonitor.Trigger.named(UserDefaults.standard.string(forKey: Self.handsFreeTriggerKey)))
         monitor.handsFreeEnabled = Self.handsFreeIsOn
         monitor.onEvent = { [weak self] event in self?.handle(event) ?? false }
         recorder.onLevel = { [weak self] level in self?.overlay.push(level: level) }
@@ -519,6 +521,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private static let triggerKey = "trigger"
     private static let handsFreeKey = "handsFree"
+    private static let handsFreeTriggerKey = "handsFreeTrigger"
 
     /// On by default, because locking with two taps is what the app has always
     /// done. A preference arriving to turn a working gesture off would be a
@@ -555,18 +558,104 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         vocabularyWindow.show()
     }
 
+    @objc private func chooseTrigger(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String,
+              let option = HotkeyMonitor.Trigger.named(id) else { return }
+        setTrigger(option)
+    }
+
+    /// The one place the trigger changes. The three quick picks, the capture
+    /// panel and the launch restore all come through here, so the title, the
+    /// submenu and the tooltip cannot disagree about the key in use: a second
+    /// path would leave the tooltip naming the wrong key with no sign of it.
+    ///
     /// The key already chosen is left alone. Picking it again would rewrite the
     /// same value and, through `endOrphanRecording`, throw away a hands-free
     /// recording that nothing about the app had changed.
-    @objc private func chooseTrigger(_ sender: NSMenuItem) {
-        guard let id = sender.representedObject as? String,
-              let option = HotkeyMonitor.Trigger.named(id),
-              option.keyCode != monitor.trigger.keyCode else { return }
-        monitor.trigger = option
-        UserDefaults.standard.set(id, forKey: Self.triggerKey)
+    private func setTrigger(_ trigger: HotkeyMonitor.Trigger) {
+        guard trigger != monitor.trigger else { return }
+        let handsFreeKey = monitor.handsFreeTrigger
+        monitor.trigger = trigger
+        UserDefaults.standard.set(trigger.id, forKey: Self.triggerKey)
+        // The monitor clears the hands-free key when the two coincide. What is
+        // on disk has to follow, and the person has to hear about it.
+        if handsFreeKey != nil, monitor.handsFreeTrigger == nil {
+            UserDefaults.standard.removeObject(forKey: Self.handsFreeTriggerKey)
+            log("hands-free key removed: it is now the trigger")
+        }
         endOrphanRecording("the trigger key changed while recording")
         refreshHoverHint()
-        log("trigger is now \(option.label)")
+        log("trigger is now \(trigger.label)")
+    }
+
+    /// The one place the hands-free key changes: the panel, the Remove item
+    /// and the launch restore all come through here. Nil means none.
+    private func setHandsFreeTrigger(_ trigger: HotkeyMonitor.Trigger?) {
+        guard trigger != monitor.handsFreeTrigger else { return }
+        // The panel already refuses the trigger for this role. A saved value
+        // edited by hand could still name it, and one press cannot mean both.
+        // The value goes with the refusal: left on disk it would say the same
+        // thing at every launch, and become live the day the trigger changes.
+        if let trigger, trigger == monitor.trigger {
+            UserDefaults.standard.removeObject(forKey: Self.handsFreeTriggerKey)
+            log("hands-free key discarded: \(trigger.label) is the trigger")
+            return
+        }
+        // Read before the change: the monitor only abandons a gesture that is
+        // holding this key, and that is the only case with a recording left
+        // with no way to end it.
+        let abandonsAGesture = monitor.isHoldingHandsFreeKey
+        monitor.handsFreeTrigger = trigger
+        if let trigger {
+            UserDefaults.standard.set(trigger.id, forKey: Self.handsFreeTriggerKey)
+            log("hands-free key is now \(trigger.label)")
+        } else {
+            UserDefaults.standard.removeObject(forKey: Self.handsFreeTriggerKey)
+            log("hands-free key removed")
+        }
+        if abandonsAGesture {
+            endOrphanRecording("the hands-free key changed while its own gesture was in flight")
+        }
+    }
+
+    /// Opens the capture panel with the trigger switched off. Pressing the
+    /// current key to choose it again would otherwise start a dictation, so the
+    /// monitor is stopped for as long as the panel is open, and whatever
+    /// gesture was in flight goes with it, the same as a switch from the
+    /// submenu. `onClosed` switches it back on from every way out of the panel.
+    ///
+    /// A recording in progress ends here, hands-free included: with the monitor
+    /// stopped, no key could finish it or discard it, so leaving it running
+    /// would leave the microphone open with no way out. `docs/reference.md`
+    /// says so next to the panel.
+    private func openCapturePanel(purpose: TriggerCapture.Purpose,
+                                  onChosen: @escaping (HotkeyMonitor.Trigger) -> Void) {
+        endOrphanRecording("a trigger is being chosen")
+        monitor.stop()
+        log("capture panel open: trigger monitor off")
+        capturePanel.show(
+            purpose: purpose,
+            onChosen: onChosen,
+            onClosed: { [weak self] in
+                self?.monitor.start()
+                self?.log("capture panel closed: trigger monitor back on")
+            })
+    }
+
+    @objc private func chooseOtherTrigger() {
+        openCapturePanel(purpose: .pushToTalk) { [weak self] trigger in
+            self?.setTrigger(trigger)
+        }
+    }
+
+    @objc private func chooseHandsFreeTrigger() {
+        openCapturePanel(purpose: .handsFree(pushToTalk: monitor.trigger)) { [weak self] trigger in
+            self?.setHandsFreeTrigger(trigger)
+        }
+    }
+
+    @objc private func removeHandsFreeTrigger() {
+        setHandsFreeTrigger(nil)
     }
 
     @objc private func toggleHandsFree() {
@@ -685,6 +774,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             historyCount: history.entries.count,
             triggerLabel: monitor.trigger.label,
             handsFreeEnabled: monitor.handsFreeEnabled,
+            handsFreeKeyLabel: monitor.handsFreeTrigger?.label,
             startsAtLogin: loginState == .on,
             loginItemNeedsApproval: loginState == .needsApproval)
 
@@ -720,11 +810,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             item.submenu = hotkeyMenu()
             return item
 
-        // Off, the title stops advertising a gesture that no longer locks.
-        case .handsFree(let enabled):
-            let item = NSMenuItem(title: enabled ? "Hands-free: double tap" : "Hands-free: off",
-                                  action: nil,
-                                  keyEquivalent: "")
+        // Off, the title stops advertising a gesture that no longer locks. On,
+        // it names the second key when there is one: until 2026-09-04 it kept
+        // saying "double tap" with a key chosen, and the key was only found by
+        // opening the submenu.
+        case .handsFree(let enabled, let key):
+            let title: String
+            if !enabled {
+                title = "Hands-free: off"
+            } else if let key {
+                title = "Hands-free: double tap or \(key)"
+            } else {
+                title = "Hands-free: double tap"
+            }
+            let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
             item.submenu = handsFreeMenu(enabled: enabled)
             return item
 
@@ -778,12 +877,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func hotkeyMenu() -> NSMenu {
         let keyMenu = NSMenu()
-        for option in HotkeyMonitor.Trigger.all {
+        for option in HotkeyMonitor.Trigger.menuChoices(current: monitor.trigger) {
             let line = action(option.label, #selector(chooseTrigger(_:)))
-            line.state = option.keyCode == monitor.trigger.keyCode ? .on : .off
+            line.state = option == monitor.trigger ? .on : .off
             line.representedObject = option.id
             keyMenu.addItem(line)
         }
+        keyMenu.addItem(.separator())
+        keyMenu.addItem(action("Other key or mouse button…", #selector(chooseOtherTrigger)))
         keyMenu.addItem(.separator())
         let soundItem = action("Sounds", #selector(toggleSound))
         soundItem.state = Feedback.isEnabled ? .on : .off
@@ -810,6 +911,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             submenu.addItem(disabled("Double-tap \(monitor.trigger.label) to lock"))
             submenu.addItem(disabled("Tap once to finish · Esc discards"))
             submenu.addItem(disabled("Typing does not cancel while locked"))
+            submenu.addItem(.separator())
+            // The second key, a toggle: one tap locks, the next finishes. Off,
+            // these items go with the mode, since a key that locks with the
+            // mode off would contradict the line the submenu shows then.
+            if let key = monitor.handsFreeTrigger {
+                submenu.addItem(disabled("Tap \(key.label) to lock, tap again to finish"))
+                submenu.addItem(action("Change hands-free key…", #selector(chooseHandsFreeTrigger)))
+                submenu.addItem(action("Remove hands-free key", #selector(removeHandsFreeTrigger)))
+            } else {
+                submenu.addItem(action("Choose a hands-free key…", #selector(chooseHandsFreeTrigger)))
+            }
         } else {
             submenu.addItem(disabled("\(monitor.trigger.label) only records while held"))
         }
@@ -949,7 +1061,8 @@ extension AppDelegate: NSMenuDelegate {
 let app = NSApplication.shared
 let delegate = AppDelegate()
 app.delegate = delegate
-// Accessory: no Dock icon. Lives in the menu bar; the only windows are the pill
-// (an `NSPanel`, in RecordingOverlay) and the vocabulary one (VocabularyWindow).
+// Accessory: no Dock icon. Lives in the menu bar. The windows are the pill (an
+// `NSPanel`, in RecordingOverlay), the vocabulary one (VocabularyWindow) and
+// the panel that captures a key (TriggerCapturePanel).
 app.setActivationPolicy(.accessory)
 app.run()

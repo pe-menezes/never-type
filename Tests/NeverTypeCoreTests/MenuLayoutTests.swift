@@ -24,6 +24,7 @@ struct MenuLayoutTests {
                             history: Int = 0,
                             trigger: String = "Right ⌘",
                             handsFree: Bool = true,
+                            handsFreeKey: String? = nil,
                             startsAtLogin: Bool = false,
                             needsApproval: Bool = false) -> MenuLayout.Conditions {
         MenuLayout.Conditions(microphoneAuthorized: microphone,
@@ -32,6 +33,7 @@ struct MenuLayoutTests {
                               historyCount: history,
                               triggerLabel: trigger,
                               handsFreeEnabled: handsFree,
+                              handsFreeKeyLabel: handsFreeKey,
                               startsAtLogin: startsAtLogin,
                               loginItemNeedsApproval: needsApproval)
     }
@@ -192,6 +194,22 @@ struct MenuLayoutTests {
             .startAtLogin(enabled: false),
             .quit,
         ])
+    }
+
+    /// The second key reaches the title for the same reason the first does.
+    /// Off, the key is not taught: the mode does not listen to it, and the
+    /// title says so instead.
+    @Test("the hands-free key reaches the item that names it")
+    func theHandsFreeKeyReachesTheItem() {
+        let none = MenuLayout.rows(for: conditions())
+        let chosen = MenuLayout.rows(for: conditions(handsFreeKey: "Right ⌥"))
+        let off = MenuLayout.rows(for: conditions(handsFree: false, handsFreeKey: "Right ⌥"))
+
+        #expect(none.contains(.handsFree(enabled: true, key: nil)))
+        #expect(chosen.contains(.handsFree(enabled: true, key: "Right ⌥")),
+                "the menu was built with Right ⌥ as the hands-free key and the line did not carry it")
+        #expect(off.contains(.handsFree(enabled: false, key: nil)),
+                "off, the title says off; the key stays with the monitor")
     }
 
     /// The summary under Option is the double tap's. Without the double tap it

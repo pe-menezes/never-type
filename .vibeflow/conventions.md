@@ -140,3 +140,15 @@ Sempre por estrutura, nunca por texto de log. Ver `patterns/verificacao-estrutur
   condicional. Não confunda verde com cobertura.
 - Os fixtures são gravações de quem desenvolve e não são versionados. A suíte de
   transcrição é pulada quando eles não existem — verde não significa cobertura.
+
+## Team Conventions
+
+- **Janela no alvo executável tem oráculo de texto.** `Sources/NeverType/` não
+  é importável pelo alvo de teste, então o comportamento de uma janela não tem
+  teste direto. O que o teste enxerga é o texto do arquivo: `FocusHandbackTests`
+  (2026-09-04) lê `VocabularyWindow.swift` e recusa `NSApp.hide(`, o oráculo que
+  ficou vermelho antes do hotfix e verde depois. A regra por trás vai para
+  `NeverTypeCore` com as chamadas de sistema entrando por parâmetro
+  (`FocusHandback`), e é ela que ganha os testes de comportamento. O oráculo de
+  texto guarda a ligação entre os dois; o comportamento em si é verificado de
+  olho e registrado no doc do hotfix.

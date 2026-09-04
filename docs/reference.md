@@ -7,10 +7,16 @@ what it is, what it requires and how to install it.
 
 - Hold the key, speak, release. Any regular key, or Esc, pressed during the hold
   cancels and discards the audio.
-- The menu offers three keys, ⌘, ⌥ and ⌃ on the right side, and only those. A
-  modifier pressed on its own is inert for the application in front and for the
-  system, which lets NeverType observe the key in listen mode without
-  intercepting the event.
+- The key is a modifier on either side, Fn, or a mouse button from the third
+  on. Not every modifier: ⇧ and Left ⌘ are refused, and the table under
+  [Choosing the key](#choosing-the-key) says why. A modifier pressed on its own is inert for the application in front and
+  for the system, which lets NeverType observe it in listen mode without
+  intercepting the event. A mouse button is listened to the same way, and its
+  click still reaches the app in front: in a browser, button 4 is Back. A
+  button remapped by the mouse software never reaches NeverType, and neither
+  does Fn on a keyboard that handles it in firmware. The menu keeps three quick
+  picks, Right ⌘, ⌥ and ⌃, and the rest is chosen by pressing it, in the panel
+  described under [Choosing the key](#choosing-the-key).
 - Switching keys in the middle of a hold discards that hold.
 - Two taps lock into hands-free, and the recording continues with the key up.
   One tap finishes and transcribes, Esc discards, and a regular key leaves the
@@ -23,6 +29,25 @@ what it is, what it requires and how to install it.
   one. Switching it while a recording is running discards that
   recording, because the gesture holding it open goes with the switch. The same
   happens if you change the key mid-recording.
+- A second key can lock hands-free with one tap. **Choose a hands-free key…**,
+  in the Hands-free submenu, opens the same panel for it: one tap locks the
+  recording, the next tap finishes and transcribes, Esc discards, and the
+  trigger's own tap finishes as well. The press asks and the release decides,
+  so a regular key in between cancels, the rule the trigger's own hold has:
+  with Left ⌃ chosen, pressing ⌃C is a shortcut and not the start of a locked
+  dictation. Locked, the same shortcut only takes the finish back, since typing
+  never ends a hands-free dictation. The tap also works while the trigger is
+  still held: hold Right ⌥, speak, tap Right ⌘, and the recording is locked
+  without releasing the trigger and without a second tap. That is the chord this app can
+  offer. A chord with a regular key, ⌘ Space or ⌥ Space, would reach the app
+  in front (Spotlight, Raycast, Alfred, a non-breaking space), since the app
+  listens without intercepting. The panel refuses the trigger for that
+  role (`That is the push-to-talk key. Pick another one for hands-free.`), and
+  picking the hands-free key as the trigger from the quick picks removes it,
+  with `hands-free key removed: it is now the trigger` in the log. The choice
+  is saved and comes back on the next launch. With hands-free off, the second
+  key does nothing and its items leave the submenu. The choice stays saved and
+  waits for the mode to come back.
 - An empty transcription is dropped. The app writes one line to the log and
   leaves the history as it was.
 - Bluetooth headsets go into narrowband HFP (8 kHz) when the microphone opens,
@@ -30,6 +55,44 @@ what it is, what it requires and how to install it.
   (`upsamplesFromBluetoothHandsFreeRate`, in
   `Tests/NeverTypeCoreTests/AudioRecorderTests.swift`). Recognition on 8 kHz
   audio is worse, and the Mac's own microphone avoids the downgrade.
+
+### Choosing the key
+
+**Other key or mouse button…**, in the Hotkey submenu, opens a panel titled
+`Choose the trigger`. It says `Press the key or mouse button to hold while you
+dictate.` and, under that, `A modifier key on either side, Fn, or a mouse
+button from the third on. Esc closes.` The next press decides:
+
+| Answer | Keys | What the panel says |
+|---|---|---|
+| Accepted | Right ⌘, Right ⌥, Right ⌃, Left ⌃ | |
+| Accepted with a caveat | Fn | Fn also opens the emoji picker unless System Settings > Keyboard sets "Press 🌐 key to" to "Do Nothing". Some keyboards handle Fn on their own, and macOS never sees it. |
+| Accepted with a caveat | Left ⌥ | On a US layout, Left ⌥ types the accents, and every accent would start a recording. |
+| Accepted with a caveat | A mouse button | The click still reaches the app in front: in a browser, button 4 is Back. A button remapped by the mouse software never reaches NeverType. |
+| Refused | A regular key, a combination, or a click with a modifier held | One key on its own. A regular key or a combination would also reach the app in front. |
+| Refused | ⇧, either side | Not ⇧: every capital letter would start a recording. |
+| Refused | Left ⌘ | Not Left ⌘: every shortcut would start a recording. |
+| Refused | Caps Lock | Not Caps Lock: it toggles the keyboard state and cannot be held. |
+| Refused | The primary or secondary click | Not the primary or secondary click. A mouse button from the third on works. |
+
+A modifier is accepted on its release, and only if nothing else was pressed in
+between: a combination is refused. An accepted key closes the panel and takes
+effect at once. A caveat waits for the **Use <key>** button (Return confirms)
+before the key counts. A refusal leaves the panel waiting for the next press.
+Esc closes it without choosing a key. Five seconds with no press at all show
+`Nothing arrived. Some keyboards handle Fn on their own, and a button remapped
+by the mouse software never reaches NeverType. Esc closes.` While the panel is
+open the current key does not record: the log says `capture panel open:
+trigger monitor off`, and `capture panel closed: trigger monitor back on` on
+the way out. Opening the panel also ends a recording in progress, hands-free
+included: with the monitor stopped no key could finish it or discard it, so it
+would leave the microphone open with no way out. Closing the panel gives the
+focus back to the app you were in, and the orb stays where it was.
+
+The refused keys are refused because of what a false start costs: pressing the
+trigger switches the microphone on, plays the start tone and shows the pill,
+and the cancel plays the discard tone. A key that is part of typing or of
+everyday shortcuts would do all of that on each of them.
 
 ## The floating pill
 
@@ -154,15 +217,24 @@ Quit NeverType             ⌘Q
 
 - **Hotkey: Right ⌘**: the title carries the key in use, so the line teaches the
   gesture to somebody who opened the menu for something else. The submenu offers
-  Right ⌘, ⌥ and ⌃, with a check on the current one. The choice is saved and
-  comes back on the next launch.
+  Right ⌘, ⌥ and ⌃ as quick picks, with a check on the current one. A key
+  chosen through the panel that is not one of the three shows up as a fourth
+  line, checked. Under a separator, **Other key or mouse button…** opens the
+  panel described in [Choosing the key](#choosing-the-key). The choice is
+  saved and comes back on the next launch.
 - **Sounds**: a toggle in the same submenu, on by default, for whoever works in
   a shared room. The volume is fixed.
 - **Hands-free: double tap**: the submenu holds the switch, on by default, and
   three lines of instruction under it: `Double-tap Right ⌘ to lock`, `Tap once
-  to finish · Esc discards`, `Typing does not cancel while locked`. Turned off,
-  the item reads **Hands-free: off** and the submenu keeps one line,
-  `Right ⌘ only records while held`. The choice is saved. This is the way out
+  to finish · Esc discards`, `Typing does not cancel while locked`. Under a
+  separator comes the second key. While none is chosen, the item is **Choose a
+  hands-free key…**. With one chosen, the submenu shows the line `Tap Right ⌥
+  to lock, tap again to finish`, then **Change hands-free key…** and **Remove
+  hands-free key**, and the title reads **Hands-free: double tap or Right ⌥**,
+  so both ways in are taught from the menu itself. Turned off, the item reads
+  **Hands-free: off** and the submenu keeps one
+  line, `Right ⌘ only records while held`. The second key stays saved and does
+  nothing until the mode is on again. The choice is saved. This is the way out
   for somebody who locked by accident: turning it off ends the recording that
   was running.
 - **Vocabulary…**: opens the vocabulary window, with two tabs (**Vocabulary**,
@@ -313,7 +385,7 @@ across rebuilds.
 | Model | Whisper `large-v3-turbo`, quantized (q5_0), 547 MB. Loaded once at launch and warmed up on one second of silence, so each dictation pays the inference alone |
 | Engine | [whisper.cpp](https://github.com/ggml-org/whisper.cpp), statically compiled, Metal backend |
 | Capture | `AVAudioEngine`, converted to 16 kHz mono |
-| Global key | `NSEvent` global monitor in listen mode, and the event still reaches the application |
+| Global key | `NSEvent` global monitor in listen mode, for the modifier keys and the extra mouse buttons alike, and the event still reaches the application |
 | Insertion | clipboard + synthetic ⌘V, with the focused element checked first |
 | Language | `"pt"`, fixed in `Transcriber.swift`. Another language means editing that line and rebuilding |
 

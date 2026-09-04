@@ -1,14 +1,16 @@
 # NeverType
 
 Voice dictation with local transcription on macOS, Portuguese only. Holding the
-key (Right ⌘ by default; Right ⌥ or ⌃ from the menu) records, releasing
-transcribes, two taps lock into hands-free, and the text is inserted wherever
-the cursor is. **No network calls at run time**: it is the constraint that
-justifies the project's existence, and there is a DoD check verifying it in the
-code and in the binary.
+key (Right ⌘ by default; a supported modifier, Fn or an extra mouse button,
+chosen from the menu by pressing it) records, releasing transcribes, two taps
+or a second key lock into hands-free, and the text is inserted wherever the
+cursor is.
+**No network calls at run time**: it is the constraint that justifies the
+project's existence, and there is a DoD check verifying it in the code and in
+the binary.
 
-Accessory menu bar app (no Dock; the only windows are the floating pill and the
-vocabulary one). macOS 14+, Apple Silicon.
+Accessory menu bar app (no Dock; the only windows are the floating pill, the
+vocabulary one and the panel that captures the key). macOS 14+, Apple Silicon.
 Swift 6 with strict concurrency, SwiftPM, **no Xcode**: Command Line Tools only.
 
 ## Before writing code, read
@@ -59,7 +61,7 @@ afterwards.
 After that:
 
 ```bash
-swift build && swift test     # 109 tests
+swift build && swift test     # 169 tests
 bash scripts/install.sh       # installs into /Applications
 bash scripts/bench.sh         # measures latency and quality per model
 ```
@@ -92,8 +94,8 @@ migration for a gain no user sees. And the app transcribes Portuguese only
 
 ## State
 
-Works end to end: ~600 ms per dictation with the model warm, 109 tests. Nobody
-besides the author has ever installed it.
+Works end to end: ~600 ms per dictation with the model warm, 169 tests. Several
+people besides the author have installed it, as of 2026-09-04.
 
 One thing is missing: **a distributable package that does not require
 compiling**. Every installation still compiles on its own machine. Open at

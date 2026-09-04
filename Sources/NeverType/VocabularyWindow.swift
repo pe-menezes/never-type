@@ -14,6 +14,8 @@ import NeverTypeCore
 final class VocabularyWindow: NSObject, NSWindowDelegate, NSTableViewDataSource, NSTableViewDelegate {
     private let vocabulary: Vocabulary
     private var window: NSWindow?
+    /// Where the focus goes back to when the window closes.
+    private let focus = FocusHandback()
     private var termsTable: NSTableView!
     private var replacementsTable: NSTableView!
 
@@ -30,6 +32,10 @@ final class VocabularyWindow: NSObject, NSWindowDelegate, NSTableViewDataSource,
         terms = vocabulary.terms
         replacements = vocabulary.replacements
 
+        // Read before activating, and only when the window is not already
+        // open: afterwards the app in front is this one, and a second `show`
+        // on an open window would remember NeverType itself.
+        if self.window?.isVisible != true { focus.remember() }
         let window = self.window ?? makeWindow()
         self.window = window
         termsTable.reloadData()
@@ -225,7 +231,9 @@ final class VocabularyWindow: NSObject, NSWindowDelegate, NSTableViewDataSource,
     func windowWillClose(_ notification: Notification) {
         persist()
         // Give the focus back: an accessory app that stays active after closing
-        // its window leaves the user not knowing where the keyboard goes.
-        NSApp.hide(nil)
+        // its window leaves the user not knowing where the keyboard goes. Until
+        // 2026-09-04 this hid the whole app, and the orb went with it until the
+        // next recording. `FocusHandback` says why, and what it does instead.
+        focus.giveBack()
     }
 }
