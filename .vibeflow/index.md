@@ -30,7 +30,7 @@ Os artefatos pesados (`models/`, `vendor/`, `fixtures/`,
   flutuante de gravação, janela do vocabulário, ator dono do modelo. Orquestra,
   não decide.
 - **`Sources/CWhisper/`** — module map apontando para `vendor/whisper`.
-- **`Tests/NeverTypeCoreTests/`**: 171 testes em 20 suítes, swift-testing.
+- **`Tests/NeverTypeCoreTests/`**: 179 testes em 22 suítes, swift-testing.
 - **`scripts/`** — bancada de latência, build e assinatura, instalação,
   verificação e atualização.
 - **`docs/`** — armadilhas encontradas e a escolha do modelo, com os números.
@@ -125,7 +125,11 @@ patterns:
   desconhecido colam, de propósito. Falta uso real (backlog D2).
 - **`IsSecureEventInputEnabled` é flag global da sessão**, não "campo de senha em
   foco". Qualquer processo pode ligá-la e esquecer de desligar.
-- **Cada ditado bloqueia uma thread do pool cooperativo por ~600 ms.**
+- **Cada ditado bloqueia uma thread do pool cooperativo pela transcrição
+  inteira.** ~600 ms num ditado curto, e 13 s num de 404 s: o
+  `TranscriptionService` chama `whisper_full` de forma síncrona dentro do
+  ator. O número subiu em 05/09/2026, quando o ditado longo passou a
+  funcionar de verdade.
 - **A chave de assinatura é alcançável por processo local** — risco documentado e
   aceito; sem conserto com certificado local.
 - **Toda instalação ainda compila na máquina de quem instala** (backlog A1).

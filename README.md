@@ -97,7 +97,7 @@ two commands for the binary side, and what nobody has run.
   ([`docs/model-choice.md`](docs/model-choice.md)).
 - A dictation past 30 s pays for a second Whisper window: 31 s measured 1299 ms,
   and from there the wait grows by roughly a second per window: 404 s of speech
-  took 13 s. Nothing on screen reports progress while that runs.
+  took 13 s. The orb's border fills as a progress ring while it works.
 - A Bluetooth headset records at 8 kHz, which macOS switches to when the
   microphone opens, and recognition gets worse. The Mac's own microphone avoids
   the downgrade.
@@ -109,7 +109,7 @@ two commands for the binary side, and what nobody has run.
 
 ```bash
 bash scripts/build-app.sh     # compiles whisper.cpp into vendor/
-swift build && swift test     # 171 tests, in swift-testing
+swift build && swift test     # 179 tests, in swift-testing
 ```
 
 `vendor/` is not versioned. Without it the build fails with `could not build

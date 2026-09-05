@@ -101,8 +101,9 @@ Model choice had nothing to do with that, and it is worth saying plainly: every
 model on this bench would have dropped the same windows.
 
 What is left is the wait, and it is real. 404 s of speech costs about 13 s, close
-to a second per window. The app sets no duration limit and shows no progress
-while a long transcription runs.
+to a second per window. The app sets no duration limit, and since 2026-09-05 it
+draws whisper's own progress on the orb's border while a long transcription
+runs.
 
 ## A finding that remains open
 

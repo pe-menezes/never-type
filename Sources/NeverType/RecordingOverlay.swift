@@ -264,18 +264,37 @@ final class PillView: NSView {
     var state: OverlayState = .idle {
         didSet {
             activity.state = state
-            setAccessibilityValue(state.accessibilityValue)
-            // Leaving the state clears the ring. Otherwise the next dictation
-            // opens with the previous one's arc already drawn, which reads as a
-            // transcription that started before the person finished speaking.
-            if state != .transcribing { progress = 0 }
+            // Entering a state clears the ring, not only leaving one. What a
+            // late update did without this is written down in
+            // `TranscriptionProgress`, along with the ordering rule.
+            progress.reset()
+            announce()
             needsDisplay = true
         }
     }
 
-    /// How far the transcription got, 0 to 1. Only drawn while writing.
-    var progress: Double = 0 {
-        didSet { if progress != oldValue { needsDisplay = true } }
+    /// How far the transcription got. The rule it obeys lives in Core, where it
+    /// has behavior tests: `TranscriptionProgress`.
+    private(set) var progress = TranscriptionProgress()
+
+    /// Whisper's own scale, 0 to 100. Redraws only when something moved.
+    func advance(progress percent: Int) {
+        guard self.progress.advance(percent: percent) else { return }
+        announce()
+        needsDisplay = true
+    }
+
+    /// VoiceOver hears what the ring shows.
+    ///
+    /// The value used to stay "Writing" for the whole transcription. On a 404 s
+    /// dictation that is 13 s of a screen reader repeating one word while
+    /// everyone else could see how far it had got.
+    private func announce() {
+        guard state == .transcribing, let spoken = progress.spoken else {
+            setAccessibilityValue(state.accessibilityValue)
+            return
+        }
+        setAccessibilityValue("\(state.accessibilityValue), \(spoken)")
     }
 
     /// Reborn on every press. Outside a press its answer is not read.
@@ -373,12 +392,12 @@ final class PillView: NSView {
         // Clockwise from the top, which is where a reader expects a clock to
         // start. Radius matches `path` exactly: a rounded rect whose corner
         // radius is half its height is already a circle.
-        guard state == .transcribing, progress > 0 else { return }
+        guard state == .transcribing, progress.fraction > 0 else { return }
         let ring = NSBezierPath()
         ring.appendArc(withCenter: NSPoint(x: drawingBounds.midX, y: drawingBounds.midY),
                        radius: radius,
                        startAngle: 90,
-                       endAngle: 90 - 360 * min(1, progress),
+                       endAngle: 90 - 360 * progress.fraction,
                        clockwise: true)
         NSColor.white.withAlphaComponent(0.55).setStroke()
         ring.lineWidth = 1.5
@@ -492,7 +511,7 @@ final class RecordingOverlay {
 
     /// Whisper's own progress, 0 to 100, drawn on the orb's border.
     func progress(percent: Int) {
-        pill?.progress = Double(percent) / 100
+        pill?.advance(progress: percent)
     }
 
     func hide() {

@@ -25,9 +25,10 @@ Não é melhor escrever não assim, né? Não é melhor escrever não assim, né
 E aí, eu já resolvi. eu vou fazer o meu nome. e eu vou te dar um pouco.
 ```
 
-Reproduzido fora do app com `whisper-cli` na mesma lib estática, mesmo modelo
-(`large-v3-turbo-q5_0`), greedy e 4 threads, sobre 460 s de fala pt-BR com 60
-marcadores numerados. A única variável entre as duas rodadas é a flag:
+Reproduzido fora do app com o `whisper-cli` do Homebrew, que liga em
+`libwhisper.1.dylib` 1.8.4 e **não** é a estática 1.9.2 que o app usa. Mesmo
+modelo (`large-v3-turbo-q5_0`), greedy e 4 threads, sobre 460 s de fala pt-BR
+com 60 marcadores numerados. A única variável entre as duas rodadas é a flag:
 
 | rodada | palavras certas de 1120 | marcadores | parede |
 |---|---|---|---|
@@ -107,7 +108,7 @@ dispara o fallback de temperatura. No teste da suíte, 26,4 s vermelho contra
 - [x] `LongDictationTests.swift` vermelho antes da correção pelas duas faces do
   defeito (13 de 60 marcadores ausentes, "Marcador número 51" nove vezes
   seguidas) e verde depois.
-- [x] `swift test` verde: 171 testes em 20 suítes, contra 169 em 18 antes.
+- [x] `swift test` verde: 179 testes em 22 suítes, contra 169 em 18 antes.
   Parede 38,9 s, porque as três transcrições longas rodam em paralelo.
 - [x] O defeito também é vermelho em fala gravada, não só na sintetizada:
   `RecordedLongDictationTests` deu 2,7 caracteres por segundo com a flag ligada
@@ -139,6 +140,13 @@ reproduction: real
 verification: red-green
 
 ## Deviations
+- Correção de fato no `Symptom`, feita depois da revisão do PR #10. A frase
+  dizia que a tabela exploratória saiu "da mesma lib estática", e não saiu:
+  `otool -L $(command -v whisper-cli)` mostra `libwhisper.1.dylib` 1.8.4, do
+  Homebrew. A estática 1.9.2 é a que os testes Swift exercitam, então a
+  verificação que fecha o hotfix está no lugar certo. A tabela do `Symptom`
+  segue válida como isolamento de uma variável, medida noutro binário, e agora
+  diz qual.
 - O áudio do ditado real de 358,8 s não existe mais. `last.wav` guarda só o
   último ditado e já tinha sido sobrescrito quando a investigação começou; o que
   sobrou foi o texto em `historico.json` e as linhas do log. Daí as duas
@@ -198,8 +206,12 @@ verification: red-green
     13 s no áudio desta fixture. **Feito no mesmo dia.** O
     `progress_callback` do whisper agora chega ao orb pela borda dele, que
     vira anel de progresso enquanto escreve. O teste longo lê os mesmos
-    números e exige que subam e cheguem ao fim; o desenho em si não tem
-    teste, porque `PillView` vive no alvo executável e a suíte é do
-    `NeverTypeCore`.
+    números e exige que subam e cheguem ao fim. Depois da revisão do PR #10 a
+    regra do anel saiu da view e virou `TranscriptionProgress`, no
+    `NeverTypeCore`, com sete testes de comportamento, mais o oráculo de texto
+    que mantém a view ligada a ela, como manda a convenção "Janela no alvo
+    executável tem oráculo de texto". O desenho em si continua sem teste e
+    **ainda não foi visto de olho**: fica pendente até um ditado longo no app
+    instalado.
   - `docs/model-choice.md` diz que acima de duas janelas ninguém mediu. Agora
     foi medido, e a seção merece a correção.

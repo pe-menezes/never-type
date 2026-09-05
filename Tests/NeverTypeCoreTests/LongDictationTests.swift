@@ -95,27 +95,52 @@ private func longDictationFixture() throws -> URL? {
 
     // `say` writes AIFF at the voice's own rate; `afconvert` brings it to the
     // 16 kHz mono the recorder produces and the model consumes.
-    guard run("/usr/bin/say", ["-v", fixtureVoice, "-r", "175", "-o", aiff.path, "-f", script.path]),
-          run("/usr/bin/afconvert", ["-f", "WAVE", "-d", "LEI16@16000", "-c", "1", aiff.path, wav.path])
-    else {
+    let failure = run("/usr/bin/say", ["-v", fixtureVoice, "-r", "175", "-o", aiff.path, "-f", script.path])
+        ?? run("/usr/bin/afconvert", ["-f", "WAVE", "-d", "LEI16@16000", "-c", "1", aiff.path, wav.path])
+    if let failure {
+        // The script file is what marks the WAV as current. Removing it means
+        // the next run synthesizes again instead of trusting a partial file.
         try? FileManager.default.removeItem(at: script)
-        return nil
+        try? FileManager.default.removeItem(at: aiff)
+        throw FixtureError.synthesisFailed(failure)
     }
     try? FileManager.default.removeItem(at: aiff)
     return wav
 }
 
-/// Runs a tool and answers whether it succeeded. Output goes nowhere on
-/// purpose: `say` is chatty and neither command says anything useful here.
-private func run(_ tool: String, _ arguments: [String]) -> Bool {
+/// Carries the tool's own words to the test, instead of a shrug.
+enum FixtureError: Error, CustomStringConvertible {
+    case synthesisFailed(String)
+    public var description: String {
+        switch self {
+        case .synthesisFailed(let detail): "could not synthesize the fixture: \(detail)"
+        }
+    }
+}
+
+/// Runs a tool and answers with its stderr when it fails.
+///
+/// The first version sent both streams to `nullDevice`, and a failed synthesis
+/// then reached the test as "could not synthesize the fixture" and nothing
+/// else. `conventions.md` forbids that for a command that can fail: whoever
+/// runs the suite on a machine without the voice, or with a full disk, needs
+/// the sentence the tool actually printed.
+private func run(_ tool: String, _ arguments: [String]) -> String? {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: tool)
     process.arguments = arguments
     process.standardOutput = FileHandle.nullDevice
-    process.standardError = FileHandle.nullDevice
-    do { try process.run() } catch { return false }
+    let errors = Pipe()
+    process.standardError = errors
+    do { try process.run() } catch { return "could not start \(tool): \(error)" }
+    // Read before waiting. A tool that fills the pipe blocks until someone
+    // drains it, and waiting first would deadlock instead of failing.
+    let data = errors.fileHandleForReading.readDataToEndOfFile()
     process.waitUntilExit()
-    return process.terminationStatus == 0
+    guard process.terminationStatus != 0 else { return nil }
+    let tail = String(decoding: data, as: UTF8.self)
+        .split(separator: "\n").suffix(3).joined(separator: " / ")
+    return "\(tool) exited \(process.terminationStatus): \(tail)"
 }
 
 /// Whether the pt-BR voice is installed.
@@ -195,8 +220,7 @@ struct LongDictationTests {
     /// per assertion buys nothing: every reading comes off the same run.
     @Test("speech above 30 s survives the window boundaries whole")
     func longDictationKeepsEveryWindow() throws {
-        let fixture = try #require(try longDictationFixture(),
-                                   "could not synthesize the fixture with `say`")
+        let fixture = try #require(try longDictationFixture())
         let samples = try readWavSamples(fixture)
         #expect(samples.count > 400 * 16_000,
                 "the fixture needs to cross several 30 s windows, it has \(samples.count / 16_000) s")

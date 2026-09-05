@@ -96,7 +96,7 @@ comandos do lado do binário e o que ninguém rodou.
   ([`docs/model-choice.md`](docs/model-choice.md)).
 - Ditado acima de 30 s paga uma segunda janela do Whisper: 31 s mediram 1299 ms,
   e daí em diante a espera cresce cerca de um segundo por janela: 404 s de fala
-  levaram 13 s. Nada na tela informa progresso enquanto isso roda.
+  levaram 13 s. A borda do orb vira um anel de progresso enquanto ele trabalha.
 - Fone Bluetooth grava a 8 kHz, o modo que o macOS liga quando o microfone abre,
   e o reconhecimento piora. O microfone do próprio Mac evita a queda.
 - O app é assinado com um certificado local, então quem já executa código como
@@ -107,7 +107,7 @@ comandos do lado do binário e o que ninguém rodou.
 
 ```bash
 bash scripts/build-app.sh     # compila o whisper.cpp em vendor/
-swift build && swift test     # 171 testes, em swift-testing
+swift build && swift test     # 179 testes, em swift-testing
 ```
 
 O `vendor/` não é versionado. Sem ele o build falha com `could not build

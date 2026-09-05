@@ -112,7 +112,14 @@ for model_path in "${MODELS[@]}"; do
     printf '  %-26s %-24s ' "$model_name" "$fixture_name"
 
     t0=$(now_ms)
-    if ! whisper-cli -m "$model_path" -f "$wav" -l pt -nt >"$txt" 2>"$log"; then
+    # No `-nt` here, on purpose. Its help calls it "do not print timestamps"
+    # and it does more than that: cli.cpp copies it into `wparams.no_timestamps`
+    # (line 1252) as well as into `print_timestamps` (1217). With it on, the
+    # bench measured the decode path the app stopped using on 2026-09-05, which
+    # loses whole 30 s windows above two of them. The label on the flag is why
+    # it looked harmless for so long. The `[00:00.000 --> ...]` prefixes it
+    # leaves behind are stripped where the text is printed.
+    if ! whisper-cli -m "$model_path" -f "$wav" -l pt >"$txt" 2>"$log"; then
       echo "FAILED"
       cat "$log" >&2
       fail "whisper-cli failed on $tag"
@@ -182,11 +189,16 @@ for model_path in "${MODELS[@]}"; do
     fixture_name="$(basename "$wav" .wav)"
     printf '    %s:\n' "$fixture_name"
     txt="$OUT_DIR/${model_name}__${fixture_name}.txt"
+    # Timestamps are stripped before anything reads the text, including the
+    # emptiness test below. A silent clip still gets a `[00:00.000 --> ...]`
+    # line with nothing after it, and testing the raw file would call that a
+    # transcription.
+    body="$(sed -e 's/^\[[^]]*\][[:space:]]*//' -e 's/^[[:space:]]*//' "$txt" 2>/dev/null | grep -v '^$' || true)"
     # An empty transcription is a legitimate bench result (silent audio, a model
     # that recognized nothing) and needs to show up as such — not take the
     # report down.
-    if grep -q '[^[:space:]]' "$txt" 2>/dev/null; then
-      sed 's/^[[:space:]]*//' "$txt" | grep -v '^$' | sed 's/^/      /'
+    if [ -n "$body" ]; then
+      printf '%s\n' "$body" | sed 's/^/      /'
     else
       printf '      \033[1;31m(empty — the model transcribed nothing)\033[0m\n'
     fi
