@@ -71,7 +71,7 @@ of a Portuguese sentence, a business term, and an infrequent verb.
    to typing.
 3. **`large-v3-turbo-q5_0` is what remains**, the only one to pass rule 1.
 
-## Known limit: the ceiling was only measured up to two windows
+## Known limit: what happens above two windows, and what was hiding there
 
 By the bench, the 1500 ms ceiling would **not** survive a dictation that occupies
 more than one window: from the second one on the cost doubles, and turbo (820 ms
@@ -80,17 +80,29 @@ per window) would give 1640 ms. Only `small` would hold two windows.
 In the app the projection did not hold: a 31 s dictation, two windows, measured
 **1299 ms** on 2026-08-28 (`.vibeflow/backlog.md`, L1: five dictations read
 from the app's log, ~614 ms fixed plus ~22 ms per second of speech). Within the
-ceiling. Why the bench projects more than the app measures was not investigated,
-and above two windows nobody has measured.
+ceiling. Why the bench projects more than the app measures was not investigated.
 
 Inside a single window the cost stays nearly flat: the four dictations of that
 same reading, from 1.5 s to 19.4 s of speech, cost 612 to 698 ms. It is a
-working note read off a log, not a reproducible bench. The app sets no duration
-limit and shows no warning when a dictation crosses into a second window.
+working note read off a log, not a reproducible bench.
 
-It is not a defect: dictation is short speech, and under 30 s every model passes
-with room to spare. But it is a real limit, and speaking for more than half a
-minute without releasing the key has a perceptible wait.
+**Until 2026-09-05 this section said that nobody had measured above two windows,
+and that the limit was "not a defect". Both were wrong**, and a defect was living
+in the gap. The app asked whisper for `no_timestamps`, which left the library
+with nothing to compute the window advance from, so it stepped a blind 30 s and
+dropped whole windows of speech. Measured over 460 s of synthesized speech with
+the app's transcription parameters: 645 correct words of 1120 with the flag on,
+1101 with it off. Over 404 s of recorded speech the distance was wider, 19% of
+the words against 98%. The write-up is in
+`.vibeflow/hotfixes/2026-09-05-long-dictation-loses-and-repeats-speech.md`, and
+two regression tests cover it now.
+
+Model choice had nothing to do with that, and it is worth saying plainly: every
+model on this bench would have dropped the same windows.
+
+What is left is the wait, and it is real. 404 s of speech costs about 13 s, close
+to a second per window. The app sets no duration limit and shows no progress
+while a long transcription runs.
 
 ## A finding that remains open
 

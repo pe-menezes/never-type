@@ -330,8 +330,8 @@ the three `Data(contentsOf:)` calls read `vocabulario.json`, `historico.json`
 and a test fixture from disk.
 
 A Definition of Done item on each spec covers the claim, in the sources and in
-the binary. The repository has no CI and keeps no record of either check having
-run.
+the binary. CI builds the app and runs the suite, and it runs neither of those
+two checks, so the repository keeps no record of either having run.
 
 The scripts do download, which is a separate thing. `setup-bench.sh` curls the
 three checkpoints from OpenAI's CDN and the ggml converter, `build-app.sh`

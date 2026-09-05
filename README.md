@@ -11,10 +11,19 @@
 
 <p align="center"><a href="README.pt-BR.md">Português</a></p>
 
+<p align="center">
+  <a href="https://github.com/pe-menezes/never-type/actions/workflows/ci.yml"><img src="https://github.com/pe-menezes/never-type/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+</p>
+
 Hold a key in any application, speak, release, and the text appears where the
 cursor is.
 
 Around 600 ms per dictation with the model warm, on a MacBook Pro M4 Pro.
+
+[`docs/pitfalls.md`](docs/pitfalls.md) records the 28 mistakes this project made,
+each with the cost it was measured to have. [`docs/INSTALL.md`](docs/INSTALL.md)
+is written for a coding agent to execute: send it the link to this repository and
+ask it to follow that file.
 
 ## What it does
 
@@ -76,17 +85,19 @@ vocabulary. **Clear History**, in the menu, deletes the first two. Insertion goe
 through the clipboard, so the text sits there for 0.6 s, marked as concealed,
 before your previous contents come back.
 
-The no-network claim is checked by hand, and the repository has no CI.
-[`docs/reference.md`](docs/reference.md) gives the grep, the two commands for the
-binary side, and what nobody has run.
+The no-network claim is checked by hand. CI builds the app and runs the suite on
+three toolchains, including the oldest one supported, and it runs neither of
+those two checks. [`docs/reference.md`](docs/reference.md) gives the grep, the
+two commands for the binary side, and what nobody has run.
 
 ## Limitations
 
 - Another language means editing `Transcriber.swift` and rebuilding, and quality
   outside Portuguese was never measured
   ([`docs/model-choice.md`](docs/model-choice.md)).
-- A dictation past 30 s pays for a second Whisper window: 31 s measured 1299 ms.
-  Above two windows nobody has measured.
+- A dictation past 30 s pays for a second Whisper window: 31 s measured 1299 ms,
+  and from there the wait grows by roughly a second per window: 404 s of speech
+  took 13 s. Nothing on screen reports progress while that runs.
 - A Bluetooth headset records at 8 kHz, which macOS switches to when the
   microphone opens, and recognition gets worse. The Mac's own microphone avoids
   the downgrade.
@@ -98,13 +109,13 @@ binary side, and what nobody has run.
 
 ```bash
 bash scripts/build-app.sh     # compiles whisper.cpp into vendor/
-swift build && swift test     # 169 tests, in swift-testing
+swift build && swift test     # 171 tests, in swift-testing
 ```
 
 `vendor/` is not versioned. Without it the build fails with `could not build
 Objective-C module 'CWhisper'`, a message that does not say the cause.
 
-- [`docs/pitfalls.md`](docs/pitfalls.md): the 24 things that broke here, with the
+- [`docs/pitfalls.md`](docs/pitfalls.md): the 28 things that broke here, with the
   measured cost of each.
 - [`docs/model-choice.md`](docs/model-choice.md): why `large-v3-turbo`, with the
   numbers.

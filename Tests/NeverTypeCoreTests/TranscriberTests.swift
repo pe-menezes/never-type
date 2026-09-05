@@ -147,7 +147,7 @@ struct TranscriberTests {
     @Test("transcribes a recorded fixture")
     func transcribesRealAudio() throws {
         let fixture = try #require(firstFixture())
-        let samples = try readSamples(fixture)
+        let samples = try readWavSamples(fixture)
         #expect(samples.count > 16_000, "the fixture needs at least 1 s of audio")
 
         let transcriber = try Transcriber()
@@ -169,38 +169,38 @@ struct TranscriberTests {
         let text = try transcriber.transcribe([Float](repeating: 0, count: 16_000))
         #expect(text.count < 200, "silence should not become a paragraph: \(text)")
     }
+}
 
-    /// Walks the RIFF chunks until it finds `data`, instead of assuming 44 bytes.
-    ///
-    /// The ffmpeg fixtures have `data` at exactly 44 bytes, but the WAV the app
-    /// itself writes (via `AVAudioFile`) has it at **4096** — there is a JUNK
-    /// padding chunk. With the fixed offset, pointing the test at a file from the
-    /// app would swallow 4052 bytes of padding as audio and the test would
-    /// **pass** reading the wrong input. The old premise was true by accident of
-    /// the recording tool, not by property of the format.
-    private func readSamples(_ url: URL) throws -> [Float] {
-        let data = try Data(contentsOf: url)
-        var offset = 12   // "RIFF" + size + "WAVE"
-        var dataRange: Range<Int>?
+/// Walks the RIFF chunks until it finds `data`, instead of assuming 44 bytes.
+///
+/// The ffmpeg fixtures have `data` at exactly 44 bytes, but the WAV the app
+/// itself writes (via `AVAudioFile`) has it at **4096**, because there is a
+/// JUNK padding chunk. With the fixed offset, pointing the test at a file from the
+/// app would swallow 4052 bytes of padding as audio and the test would
+/// **pass** reading the wrong input. The old premise was true by accident of
+/// the recording tool, not by property of the format.
+func readWavSamples(_ url: URL) throws -> [Float] {
+    let data = try Data(contentsOf: url)
+    var offset = 12   // "RIFF" + size + "WAVE"
+    var dataRange: Range<Int>?
 
-        func u32(_ at: Int) -> Int {
-            (0..<4).reduce(0) { $0 | Int(data[data.startIndex + at + $1]) << (8 * $1) }
+    func u32(_ at: Int) -> Int {
+        (0..<4).reduce(0) { $0 | Int(data[data.startIndex + at + $1]) << (8 * $1) }
+    }
+
+    while offset + 8 <= data.count {
+        let id = String(decoding: data[(data.startIndex + offset)..<(data.startIndex + offset + 4)], as: UTF8.self)
+        let size = u32(offset + 4)
+        if id == "data" {
+            dataRange = (offset + 8)..<min(offset + 8 + size, data.count)
+            break
         }
+        offset += 8 + size + (size % 2)   // chunks are padded to an even size
+    }
 
-        while offset + 8 <= data.count {
-            let id = String(decoding: data[(data.startIndex + offset)..<(data.startIndex + offset + 4)], as: UTF8.self)
-            let size = u32(offset + 4)
-            if id == "data" {
-                dataRange = (offset + 8)..<min(offset + 8 + size, data.count)
-                break
-            }
-            offset += 8 + size + (size % 2)   // chunks are padded to an even size
-        }
-
-        let range = try #require(dataRange, "'data' chunk not found in \(url.lastPathComponent)")
-        let pcm = Array(data[(data.startIndex + range.lowerBound)..<(data.startIndex + range.upperBound)])
-        return stride(from: 0, to: pcm.count - 1, by: 2).map { i in
-            Float(Int16(bitPattern: UInt16(pcm[i]) | UInt16(pcm[i + 1]) << 8)) / 32768.0
-        }
+    let range = try #require(dataRange, "'data' chunk not found in \(url.lastPathComponent)")
+    let pcm = Array(data[(data.startIndex + range.lowerBound)..<(data.startIndex + range.upperBound)])
+    return stride(from: 0, to: pcm.count - 1, by: 2).map { i in
+        Float(Int16(bitPattern: UInt16(pcm[i]) | UInt16(pcm[i + 1]) << 8)) / 32768.0
     }
 }

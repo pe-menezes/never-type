@@ -239,6 +239,51 @@ toolchain in the install instructions is a second one, and while no job runs it,
 the person installing is the test. A minimum version that no job compiles is a
 guess: this one was read off the manifest and was wrong by three patch releases.
 
+### A Swift 6 compiler can load a PackageDescription older than itself
+
+Reported on 2026-09-01 by someone installing from these instructions. `swift
+build` fails at the manifest, and so does a package whose whole content is
+`print("hi")`:
+
+```
+Invalid manifest
+ld: symbol(s) not found for architecture arm64
+  Package.__allocating_init(... swiftLanguageVersions: [SwiftVersion]? ...)
+```
+
+Two machines, macOS 15.3.1 with CLT 16.4 and macOS 26.5.1 with CLT 26.6. The
+first reading is that Apple's Command Line Tools are broken, and it points at
+the wrong thing. In SwiftPM 6 `SwiftVersion` is a typealias of
+`SwiftLanguageMode`, so a 6.x dylib does export that initializer, mangled under
+the new name. A healthy CLT 26.2 builds the same smoke package here, and the
+manifest object references `swiftLanguageModes`.
+
+The tell is the other error the same person saw, `extra argument
+'swiftLanguageModes'`. It says the compiler loaded a **pre-6 PackageDescription
+from outside the Command Line Tools directory**: a second toolchain on the
+machine, an environment variable (`TOOLCHAINS`, `SWIFT_EXEC`, `SDKROOT`,
+`DEVELOPER_DIR`) or a stale module cache.
+
+Root cause on that machine is still unconfirmed. It is written down anyway,
+because the symptom names the wrong culprit and the next person will read the
+linker error the same way.
+
+`build-app.sh` refuses below Swift 6.0.3 since 2026-09-04, naming the version
+and the `xcode-select -p` path. That guard reads the compiler, so it does
+**not** catch this one: the compiler is fine and the library sitting next to it
+is not. What separates the two:
+
+```bash
+xcode-select -p                                        # which developer dir
+swift --version                                        # compiler version
+env | grep -E 'TOOLCHAINS|SWIFT_EXEC|SDKROOT|DEVELOPER_DIR'
+swift build -vv 2>&1 | grep -i packagedescription      # prints on a manifest compile
+```
+
+**Rule:** a version check on the compiler says nothing about which
+PackageDescription it will load. When a manifest fails on a toolchain that
+should support it, read the environment before blaming the vendor.
+
 ### Query-then-decide is not mutual exclusion
 
 `NSRunningApplication.runningApplications(withBundleIdentifier:)` to guarantee a

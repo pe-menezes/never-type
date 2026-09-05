@@ -172,7 +172,23 @@ public final class Transcriber {
         params.print_realtime = false
         params.print_timestamps = false
         params.print_special = false
-        params.no_timestamps = true
+        // Timestamps stay on, and the text still comes out without them.
+        //
+        // `whisper_full_get_segment_text` returns the segment's text, so no
+        // timestamp reaches the output. What they decide is where the next 30 s
+        // window starts. With `no_timestamps = true` whisper.cpp has nothing to
+        // compute that advance from and steps a blind 30 s, cutting mid
+        // sentence. The next window then opens with no sentence boundary, the
+        // decoder degenerates into repetition, and when confidence drops the
+        // whole window is discarded (`whisper_full_with_state`, v1.9.2).
+        //
+        // Inside a single window nothing changes, which is why this shipped:
+        // every dictation until then was shorter than 30 s. Measured 2026-09-05
+        // over 460 s of speech, same model and same audio: 645 of 1120 words
+        // with it on, 1101 with it off. It was also slower, 23.7 s of wall clock
+        // against 15.2 s, because the repetition loop burns tokens and trips the
+        // temperature fallback.
+        params.no_timestamps = false
         params.n_threads = 4
 
         var text = ""
