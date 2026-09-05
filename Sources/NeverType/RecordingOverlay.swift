@@ -265,8 +265,17 @@ final class PillView: NSView {
         didSet {
             activity.state = state
             setAccessibilityValue(state.accessibilityValue)
+            // Leaving the state clears the ring. Otherwise the next dictation
+            // opens with the previous one's arc already drawn, which reads as a
+            // transcription that started before the person finished speaking.
+            if state != .transcribing { progress = 0 }
             needsDisplay = true
         }
+    }
+
+    /// How far the transcription got, 0 to 1. Only drawn while writing.
+    var progress: Double = 0 {
+        didSet { if progress != oldValue { needsDisplay = true } }
     }
 
     /// Reborn on every press. Outside a press its answer is not read.
@@ -352,6 +361,28 @@ final class PillView: NSView {
         NSColor.white.withAlphaComponent(state == .idle ? 0.10 : 0.17).setStroke()
         path.lineWidth = 1
         path.stroke()
+
+        // The border doubles as the progress ring while writing.
+        //
+        // The orb is 34 px and carries no text, so its outline is the only
+        // surface a number fits on. It was worth adding because the wait grew:
+        // a 404 s dictation spends 13 s here, and before this the only thing on
+        // screen for those 13 s was a dot pulsing at a fixed rate, which says
+        // the app is alive and says nothing about whether it is nearly done.
+        //
+        // Clockwise from the top, which is where a reader expects a clock to
+        // start. Radius matches `path` exactly: a rounded rect whose corner
+        // radius is half its height is already a circle.
+        guard state == .transcribing, progress > 0 else { return }
+        let ring = NSBezierPath()
+        ring.appendArc(withCenter: NSPoint(x: drawingBounds.midX, y: drawingBounds.midY),
+                       radius: radius,
+                       startAngle: 90,
+                       endAngle: 90 - 360 * min(1, progress),
+                       clockwise: true)
+        NSColor.white.withAlphaComponent(0.55).setStroke()
+        ring.lineWidth = 1.5
+        ring.stroke()
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -457,6 +488,11 @@ final class RecordingOverlay {
 
     func transcribing() {
         apply(.transcribing)
+    }
+
+    /// Whisper's own progress, 0 to 100, drawn on the orb's border.
+    func progress(percent: Int) {
+        pill?.progress = Double(percent) / 100
     }
 
     func hide() {

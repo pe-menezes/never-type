@@ -185,10 +185,21 @@ verification: red-green
   169 em 18 suítes para 171 em 20. É consequência direta desta mudança, não
   escopo novo.
 - Achados colaterais, adiados por serem outro assunto:
-  - `carry_initial_prompt` continua `false`, então o vocabulário customizado só
-    ancora a primeira janela. Num ditado longo com nome de sistema interno isso
-    conta. Não medido.
-  - A pílula fica em "Writing" sem progresso durante a transcrição inteira, 13 s
-    no áudio desta fixture. O whisper expõe `progress_callback`.
+  - `carry_initial_prompt` foi medido em 2026-09-05 e **o achado morreu**. A
+    hipótese era que o vocabulário só ancorava a primeira janela. Sobre 415 s
+    com três termos, contando acertos por terço do áudio: sem prompt 0 de 60,
+    com prompt 40 de 40 nos dois termos que o modelo consegue produzir, e
+    distribuído por igual (7/6/7 e 6/7/7). Ligar `carry_initial_prompt` deu
+    resultado idêntico. O `prompt_past` é reconstruído a cada janela a partir do
+    prompt usado, então os termos rolam adiante enquanto couberem no contexto.
+    Não medido: vocabulário grande em áudio muito longo, onde eles podem ser
+    empurrados para fora.
+  - A pílula ficava em "Writing" sem progresso durante a transcrição inteira,
+    13 s no áudio desta fixture. **Feito no mesmo dia.** O
+    `progress_callback` do whisper agora chega ao orb pela borda dele, que
+    vira anel de progresso enquanto escreve. O teste longo lê os mesmos
+    números e exige que subam e cheguem ao fim; o desenho em si não tem
+    teste, porque `PillView` vive no alvo executável e a suíte é do
+    `NeverTypeCore`.
   - `docs/model-choice.md` diz que acima de duas janelas ninguém mediu. Agora
     foi medido, e a seção merece a correção.

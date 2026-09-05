@@ -73,6 +73,17 @@ public enum TranscriberError: Error, CustomStringConvertible {
     }
 }
 
+/// Carries the progress closure across the C boundary.
+///
+/// A `@convention(c)` function pointer cannot capture anything, and whisper
+/// takes the context as a `void *` beside it. This holds one immutable
+/// `@Sendable` closure, which is what lets it be `Sendable` with nothing
+/// asserted by hand.
+private final class ProgressRelay: Sendable {
+    let report: @Sendable (Int) -> Void
+    init(_ report: @escaping @Sendable (Int) -> Void) { self.report = report }
+}
+
 /// Transcribes audio locally, with the model loaded once and kept warm.
 ///
 /// Not safe for concurrent use: the whisper.cpp context must be used serially.
@@ -166,7 +177,9 @@ public final class Transcriber {
     /// `prompt` is whisper's `initial_prompt`: terms the model should expect to
     /// hear. A recognition hint, not a guarantee — the guarantee comes from the
     /// replacement, which runs afterwards and does not go through the model.
-    public func transcribe(_ samples: [Float], prompt: String? = nil) throws -> String {
+    public func transcribe(_ samples: [Float],
+                           prompt: String? = nil,
+                           onProgress: (@Sendable (Int) -> Void)? = nil) throws -> String {
         var params = whisper_full_default_params(WHISPER_SAMPLING_GREEDY)
         params.print_progress = false
         params.print_realtime = false
@@ -191,6 +204,22 @@ public final class Transcriber {
         params.no_timestamps = false
         params.n_threads = 4
 
+        // Progress, from 0 to 100, so a long dictation is not a still dot.
+        //
+        // whisper calls this on the thread that called `whisper_full`, inside
+        // the seek loop, so the relay is read on the same thread that set it up
+        // and dies with the call. Under a second nobody sees the value move. On
+        // the 404 s recording the suite transcribes it runs for 13 s, and until
+        // 2026-09-05 that whole time was a pulsing dot with nothing behind it.
+        let relay = onProgress.map(ProgressRelay.init)
+        if let relay {
+            params.progress_callback_user_data = Unmanaged.passUnretained(relay).toOpaque()
+            params.progress_callback = { _, _, progress, context in
+                guard let context else { return }
+                Unmanaged<ProgressRelay>.fromOpaque(context).takeUnretainedValue().report(Int(progress))
+            }
+        }
+
         var text = ""
         var failure: Int32 = 0
 
@@ -206,15 +235,22 @@ public final class Transcriber {
         }
 
         // The language is fixed: the app transcribes Portuguese only.
-        "pt".withCString { language in
-            params.language = language
-            if let prompt, !prompt.isEmpty {
-                prompt.withCString { hint in
-                    params.initial_prompt = hint
+        //
+        // `withExtendedLifetime` and not a plain local: the relay is reachable
+        // only through a raw pointer inside `params`, so nothing here tells the
+        // compiler it is still in use, and it may be released before the call
+        // that reads it returns.
+        withExtendedLifetime(relay) {
+            "pt".withCString { language in
+                params.language = language
+                if let prompt, !prompt.isEmpty {
+                    prompt.withCString { hint in
+                        params.initial_prompt = hint
+                        run(params)
+                    }
+                } else {
                     run(params)
                 }
-            } else {
-                run(params)
             }
         }
         guard failure == 0 else { throw TranscriberError.inferenceFailed(failure) }

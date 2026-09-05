@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import os
 import Testing
 @testable import NeverTypeCore
 
@@ -187,11 +188,11 @@ private func longestRepeatedRun(in text: String) -> (length: Int, sentence: Stri
 @Suite("Long dictation", .enabled(if: longDictationTestsRunnable()))
 struct LongDictationTests {
 
-    /// One transcription, two assertions.
+    /// One transcription, four assertions.
     ///
-    /// They are two distinct properties and would normally be two tests. They
-    /// share one here because the transcription is ~15 s and running it twice
-    /// buys nothing: both readings come off the same text.
+    /// They are distinct properties and would normally be separate tests. They
+    /// share one here because the transcription is ~15 s and running it again
+    /// per assertion buys nothing: every reading comes off the same run.
     @Test("speech above 30 s survives the window boundaries whole")
     func longDictationKeepsEveryWindow() throws {
         let fixture = try #require(try longDictationFixture(),
@@ -201,7 +202,25 @@ struct LongDictationTests {
                 "the fixture needs to cross several 30 s windows, it has \(samples.count / 16_000) s")
 
         let transcriber = try Transcriber()
-        let text = try transcriber.transcribe(samples)
+
+        // The progress callback is read off the same run. It fires on the
+        // thread that calls `whisper_full`, and the lock is what makes that
+        // checkable by the compiler instead of asserted here.
+        let seen = OSAllocatedUnfairLock<[Int]>(initialState: [])
+        let text = try transcriber.transcribe(samples) { percent in
+            seen.withLock { $0.append(percent) }
+        }
+        let progress = seen.withLock { $0 }
+
+        // The orb draws its ring from these numbers. A run that reports
+        // nothing, or reports going backwards, is a ring that lies for 13 s.
+        let seconds = samples.count / 16_000
+        #expect(progress.count > 1,
+                "whisper reported \(progress.count) progress updates over \(seconds) s of audio")
+        #expect(progress == progress.sorted(),
+                "progress went backwards: \(progress)")
+        #expect((progress.last ?? 0) >= 90,
+                "progress stopped at \(progress.last ?? -1) without reaching the end")
 
         // Six of sixty, a wide margin on both sides of the defect: the broken
         // build lost 27 and the fixed one lost none.
