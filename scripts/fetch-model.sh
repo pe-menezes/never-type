@@ -7,6 +7,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$REPO_ROOT/scripts/model-artifacts.sh"
 MODEL="ggml-large-v3-turbo-q5_0.bin"
 SOURCE="$REPO_ROOT/models/$MODEL"
 DEST_DIR="$HOME/Library/Application Support/NeverType/models"
@@ -25,7 +26,8 @@ fail() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
 is_valid() {
   [ -f "$1" ] && [ "$(head -c 4 "$1" | xxd -p)" = "$GGML_MAGIC_HEX" ] \
-    && [ "$(( $(stat -f%z "$1") / 1048576 ))" -ge "$MODEL_MIN_MB" ]
+    && [ "$(( $(stat -f%z "$1") / 1048576 ))" -ge "$MODEL_MIN_MB" ] \
+    && model_has_receipt "$1"
 }
 
 if is_valid "$DEST"; then
@@ -34,14 +36,19 @@ if is_valid "$DEST"; then
   exit 0
 fi
 
-is_valid "$SOURCE" || fail "could not find a valid $MODEL (ggml magic and at least $MODEL_MIN_MB MB) in models/.
+is_valid "$SOURCE" || fail "could not find a valid $MODEL (ggml magic, at least $MODEL_MIN_MB MB, and matching .sha256 receipt) in models/.
       Run first: bash scripts/setup-bench.sh
       It downloads the checkpoint from OpenAI's CDN and builds the ggml — some
       corporate networks block Hugging Face."
 
 info "Installing the model"
 mkdir -p "$DEST_DIR"
-cp "$SOURCE" "$DEST.partial"
-mv "$DEST.partial" "$DEST"
-is_valid "$DEST" || { rm -f "$DEST"; fail "the copy did not come out valid."; }
+partial="$(mktemp "$DEST_DIR/.model.XXXXXX")"
+trap 'rm -f "$partial" "$partial.sha256"' EXIT
+cp "$SOURCE" "$partial"
+cp "$SOURCE.sha256" "$partial.sha256"
+is_valid "$partial" || fail "the copy did not match the source receipt."
+rm -f "$DEST.sha256"
+mv "$partial" "$DEST"
+mv "$partial.sha256" "$DEST.sha256"
 ok "$(( $(stat -f%z "$DEST") / 1048576 )) MB at $DEST"

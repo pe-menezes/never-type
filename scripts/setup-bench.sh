@@ -12,6 +12,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$REPO_ROOT/scripts/model-artifacts.sh"
 MODELS_DIR="$REPO_ROOT/models"
 BUILD_DIR="$REPO_ROOT/.cache"
 PT_CACHE="$HOME/.cache/whisper"
@@ -20,14 +21,8 @@ CDN="https://openaipublic.azureedge.net/main/whisper/models"
 # Candidates from the spec. Turbo is the favorite; small is the latency floor.
 # Format: ggml-name : openai-name : sha256 (also the path on the CDN) : quant : floor in MB
 #
-# The floor is per model and proportional to the real artifact
-# (docs/pitfalls.md): the magic is right in a truncated file, so only the size
-# catches an interrupted conversion or quantization. Sizes recorded in this
-# repository: turbo-q5_0 is 547 MB (floor 400 — the same the app requires in
-# ModelStore.minimumBytes) and small-q5_1 is 181 MB (floor 130). medium-q5_0's
-# was not recorded; per CLAUDE.md the three add up to 1.2 GB, which puts it
-# between ~420 and ~520 MB, and 400 is below any reading of that. Check:
-# stat -f%z models/ggml-medium-q5_0.bin
+# Size floors reject clearly incomplete output. Completed models also require a
+# matching SHA-256 receipt before reuse; size alone cannot detect truncation.
 MODELS=(
   "large-v3-turbo-q5_0:large-v3-turbo:aff26ae408abcba5fbf8813c21e62b0941638c5f6eebfb145be0c9839262a19a:q5_0:400"
   "medium-q5_0:medium:345ae4da62f9b3d59415adc60127b97c714f32e89e936602e85993674d08dcb1:q5_0:400"
@@ -101,18 +96,9 @@ fi
 
 mkdir -p "$MODELS_DIR" "$PT_CACHE"
 
-# A valid ggml .bin starts with the magic 0x67676d6c. It is written as a
-# little-endian uint32, so the bytes in the file come out reversed: 6c6d6767,
-# which read as text becomes "lmgg", not "ggml". Comparing the hex avoids that
-# trip-up. Checking the magic catches a truncated download and, above all, an
-# HTML error page saved as if it were a model — which is what a filtering proxy
-# returns.
+# ggml's little-endian magic is 6c6d6767 ("lmgg"). Check it with the size
+# floor before generating or verifying a checksum receipt.
 GGML_MAGIC_HEX=6c6d6767
-# The size floor comes from the MODELS table, per model. Until 2026-08-29 it was
-# a single GGML_MIN_MB=50 for all three — which approved a 547 MB turbo stopped
-# at any point above that. The magic alone does not catch a download or a
-# conversion interrupted midway, because the first four bytes would already
-# have arrived.
 is_valid_ggml() {  # <file> <floor in MB>
   [ -f "$1" ] || return 1
   [ "$(head -c 4 "$1" | xxd -p)" = "$GGML_MAGIC_HEX" ] || return 1
@@ -122,7 +108,10 @@ is_valid_ggml() {  # <file> <floor in MB>
 pending=()
 for entry in "${MODELS[@]}"; do
   IFS=':' read -r ggml_name _ _ _ min_mb <<< "$entry"
-  is_valid_ggml "$MODELS_DIR/ggml-${ggml_name}.bin" "$min_mb" || pending+=("$entry")
+  if ! is_valid_ggml "$MODELS_DIR/ggml-${ggml_name}.bin" "$min_mb" \
+      || ! model_has_receipt "$MODELS_DIR/ggml-${ggml_name}.bin"; then
+    pending+=("$entry")
+  fi
 done
 
 if [ ${#pending[@]} -eq 0 ]; then
@@ -161,13 +150,7 @@ if [ ! -s "$CA_BUNDLE" ]; then
 fi
 export SSL_CERT_FILE="$CA_BUNDLE" REQUESTS_CA_BUNDLE="$CA_BUNDLE"
 
-if [ ! -x "$VENV/bin/python" ]; then
-  info "Creating a venv with torch (needed only to convert)"
-  python3 -m venv "$VENV"
-  "$VENV/bin/pip" -q install --upgrade pip
-  "$VENV/bin/pip" -q install torch numpy
-fi
-ok "torch $("$VENV/bin/python" -c 'import torch;print(torch.__version__)')"
+ensure_conversion_python "$VENV" || fail "could not prepare Python dependencies. Check the error above and rerun this script."
 
 # The converter needs the assets from OpenAI's repo (mel filters and tokenizers).
 # Same rigor as the converter right below: the commit is pinned and checked.
@@ -175,15 +158,8 @@ ok "torch $("$VENV/bin/python" -c 'import torch;print(torch.__version__)')"
 # model conversion — if they change without notice, the model comes out
 # different in silence.
 OPENAI_WHISPER_COMMIT="5f86d1d86363843179951550570367b37c5d6f78"
-if [ ! -d "$WHISPER_REPO/whisper/assets" ]; then
-  info "Cloning openai/whisper assets"
-  git clone --depth 1 -q https://github.com/openai/whisper.git "$WHISPER_REPO"
-fi
-got_commit="$(git -C "$WHISPER_REPO" rev-parse HEAD 2>/dev/null || echo unknown)"
-[ "$got_commit" = "$OPENAI_WHISPER_COMMIT" ] || fail "openai/whisper in $WHISPER_REPO is not the expected commit.
-      expected: $OPENAI_WHISPER_COMMIT
-      got:      $got_commit
-      Delete $WHISPER_REPO and run again."
+ensure_pinned_assets "$WHISPER_REPO" https://github.com/openai/whisper.git "$OPENAI_WHISPER_COMMIT" \
+  || fail "could not prepare the pinned openai/whisper assets. Check the error above and rerun."
 
 # Pinned to tag v1.9.2, the same whisper-cpp version Homebrew installs, and
 # checked by checksum. Downloading from `master` and executing it would be
@@ -231,30 +207,27 @@ for entry in "${pending[@]}"; do
     ok "downloaded and verified ($(size_mb "$pt_file") MB)"
   fi
 
-  # 2. .pt -> ggml f16
-  #
-  # The f16 is larger than the quantized one (it takes gigabytes, see below), so
-  # the quantized floor holds for it too: loose, but it catches an interrupted
-  # conversion.
-  f16_dir="$BUILD_DIR/f16-$ggml_name"
-  mkdir -p "$f16_dir"
-  if ! is_valid_ggml "$f16_dir/ggml-model.bin" "$min_mb"; then
-    info "  converting to ggml f16"
-    "$VENV/bin/python" "$CONVERTER" "$pt_file" "$WHISPER_REPO" "$f16_dir" >/dev/null \
-      || fail "conversion of $pt_name failed."
-  fi
+  # Both producers write into temporary locations. A killed conversion must
+  # never become a cached input on the next run.
+  f16_dir="$(mktemp -d "$BUILD_DIR/f16-${ggml_name}.XXXXXX")"
+  out_partial="$(mktemp "$MODELS_DIR/.${ggml_name}.XXXXXX")"
+  trap 'rm -f "$SMOKE_LOG" "${out_partial:-}"; rm -rf "${f16_dir:-}"' EXIT
+  info "  converting to ggml f16"
+  "$VENV/bin/python" "$CONVERTER" "$pt_file" "$WHISPER_REPO" "$f16_dir" >/dev/null \
+    || fail "conversion of $pt_name failed."
   is_valid_ggml "$f16_dir/ggml-model.bin" "$min_mb" \
-    || fail "conversion did not produce a valid ggml (ggml magic and at least $min_mb MB)."
+    || fail "conversion did not produce a valid ggml."
 
-  # 3. f16 -> quantized
   info "  quantizing to $quant"
-  whisper-quantize "$f16_dir/ggml-model.bin" "$out_ggml" "$quant" >/dev/null \
+  whisper-quantize "$f16_dir/ggml-model.bin" "$out_partial" "$quant" >/dev/null \
     || fail "quantization of $ggml_name failed."
-  is_valid_ggml "$out_ggml" "$min_mb" \
-    || { rm -f "$out_ggml"; fail "quantization produced an invalid file (ggml magic and at least $min_mb MB)."; }
-
-  # The f16 is intermediate and takes gigabytes. The .pt stays cached: it is the
-  # origin.
+  is_valid_ggml "$out_partial" "$min_mb" \
+    || fail "quantization produced an invalid file."
+  # Clear the old receipt before replacement: interruption between the two
+  # renames causes a safe rebuild, never approval of unverified bytes.
+  rm -f "$out_ggml.sha256"
+  mv "$out_partial" "$out_ggml"
+  model_write_receipt "$out_ggml" || fail "could not record the model checksum."
   rm -rf "$f16_dir"
   ok "$ggml_name ready ($(size_mb "$out_ggml") MB)"
 done
@@ -267,7 +240,7 @@ missing=0
 for entry in "${MODELS[@]}"; do
   IFS=':' read -r ggml_name _ _ _ min_mb <<< "$entry"
   f="$MODELS_DIR/ggml-${ggml_name}.bin"
-  if is_valid_ggml "$f" "$min_mb"; then
+  if is_valid_ggml "$f" "$min_mb" && model_has_receipt "$f"; then
     printf '  %-26s %5s MB\n' "$ggml_name" "$(size_mb "$f")"
   else
     printf '  %-26s %s\n' "$ggml_name" "MISSING"

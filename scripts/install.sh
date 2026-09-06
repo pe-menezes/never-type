@@ -100,17 +100,19 @@ else
   echo "                                     # requires Homebrew and python3"
   echo "       bash scripts/fetch-model.sh   # validates and installs it in the right place"
   echo
-  echo "     Faster alternative if someone else already has it: copy the file"
-  echo "     into models/ (inside the repository) and run only the second step:"
+  echo "     Faster alternative: copy the model and its .sha256 receipt from a machine"
+  echo "     that ran setup-bench.sh into models/ and run the second step:"
   echo
-  echo "       cp /wherever/it/came/from/$MODEL models/"
+  echo "       cp /wherever/it/came/from/$MODEL /wherever/it/came/from/$MODEL.sha256 models/"
   echo "       bash scripts/fetch-model.sh"
   echo
   echo "     Do not copy straight into $MODEL_DIR/: that skips fetch-model.sh's"
-  echo "     magic and size validation, and a bad file is only refused when the"
-  echo "     app opens — the message shows up in the menu, under \"Model:\" (hold"
-  echo "     Option as you open it), not here."
+  echo "     checksum validation. Older models without receipts must be regenerated."
   echo
+  fail "the app was installed but has no model yet, so it has not been opened.
+      Run bash scripts/setup-bench.sh && bash scripts/fetch-model.sh,
+      then rerun bash scripts/install.sh to open the app and grant permissions."
+
 fi
 
 # --- permissions --------------------------------------------------------------

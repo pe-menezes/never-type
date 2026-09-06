@@ -89,6 +89,9 @@ jobs:
       - name: Test warning fingerprint counter
         run: python3 scripts/test-count-swift-warnings.py
 
+      - name: Test model setup and recovery
+        run: python3 scripts/test-model-artifacts.py
+
       - name: Bootstrap whisper.cpp and build the app
         run: |
           set -o pipefail

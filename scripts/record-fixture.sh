@@ -37,16 +37,15 @@ if [ -z "$NAME" ]; then
   exit 1
 fi
 
-# The original spec's 10–20 s window was revoked: the bench needs short AND long
-# dictation, because Whisper processes in 30 s windows and only the variation
-# reveals that step. What belongs here is a sanity floor and a warning, not a
-# lock.
-if [ "$DURATION" -lt 3 ] || [ "$DURATION" -gt 120 ]; then
-  fail "duration out of the reasonable range for a fixture (requested: ${DURATION}s). Use 3 to 120."
+# Long fixtures exercise transcription across many Whisper windows.
+case "$DURATION" in
+  ''|*[!0-9]*) fail "duration must be a whole number of seconds (3 to 3600)." ;;
+esac
+if [ "$DURATION" -lt 3 ] || [ "$DURATION" -gt 3600 ]; then
+  fail "duration out of range (requested: ${DURATION}s). Use 3 to 3600."
 fi
 if [ "$DURATION" -gt 30 ]; then
-  printf '\033[1;33m  !\033[0m  above 30 s the audio occupies more than one Whisper window.\n'
-  printf '\033[1;33m  !\033[0m  Having one like that in the bench is useful, but it is not typical dictation.\n'
+  printf '\033[1;33m  !\033[0m  This recording spans multiple Whisper windows.\n'
 fi
 
 mkdir -p "$FIXTURES_DIR"
