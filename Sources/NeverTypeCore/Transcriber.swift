@@ -306,7 +306,15 @@ public final class Transcriber {
             let code = whisper_full(context, params, samples, Int32(samples.count))
             guard code == 0 else { failure = code; return }
             let textSegmentCount = whisper_full_n_segments(context)
-            if useVoiceActivityDetection, textSegmentCount > 0 {
+            // Counts whatever VAD found, including nothing.
+            //
+            // This ran only when the decoder had produced text, which made
+            // `voiceActivitySegmentCount == 0` follow from an empty transcript
+            // rather than from VAD. The regression test asserts both, so its
+            // second assertion could not fail on its own. Measured with the
+            // guard removed: 1 s, 3 s and 10 s of zeros each report 0 segments,
+            // and 6.1 s of speech reports 1.
+            if useVoiceActivityDetection {
                 voiceActivitySegmentCount = Int(whisper_full_n_vad_segments(context))
             }
             for i in 0..<textSegmentCount {

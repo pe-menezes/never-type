@@ -28,6 +28,11 @@ GGML_MAGIC_HEX=6c6d6767
 # (docs/pitfalls.md).
 MODEL_MIN_MB=400
 
+# The VAD model that ships inside the bundle. 800 KB for an 864 KB file, the
+# same floor as ModelStore.minimumVoiceActivityBytes in the Swift code.
+VAD_MODEL="ggml-silero-v6.2.0.bin"
+VAD_MIN_KB=800
+
 info() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 ok()   { printf '\033[1;32m  ok\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m  !\033[0m  %s\n' "$*"; }
@@ -65,6 +70,27 @@ if [ -d "$APP" ]; then
     problem "the signature of $APP does not verify:
       ${signature:-no output from codesign}
       Rebuild and reinstall: bash scripts/build-app.sh && bash scripts/install.sh"
+  fi
+  # The VAD model lives inside the bundle, not in Application Support, and the
+  # app refuses to start transcribing without it. Checking only the signature
+  # would call a bundle healthy that fails on the first dictation with
+  # "voice activity model not found".
+  vad="$APP/Contents/Resources/$VAD_MODEL"
+  if [ ! -f "$vad" ]; then
+    problem "the voice activity model is missing at $vad.
+      Rebuild and reinstall: bash scripts/build-app.sh && bash scripts/install.sh"
+  else
+    vad_magic="$(head -c 4 "$vad" | xxd -p)"
+    vad_kb=$(( $(stat -f%z "$vad") / 1024 ))
+    if [ "$vad_magic" != "$GGML_MAGIC_HEX" ]; then
+      problem "the file at $vad is not a ggml: magic $vad_magic, expected $GGML_MAGIC_HEX.
+      Rebuild and reinstall: bash scripts/build-app.sh && bash scripts/install.sh"
+    elif [ "$vad_kb" -lt "$VAD_MIN_KB" ]; then
+      problem "truncated voice activity model: $vad_kb KB, minimum $VAD_MIN_KB KB.
+      Rebuild and reinstall: bash scripts/build-app.sh && bash scripts/install.sh"
+    else
+      ok "voice activity model present ($vad_kb KB)"
+    fi
   fi
 else
   problem "$APP does not exist.
