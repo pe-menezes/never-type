@@ -67,6 +67,61 @@ validate the model (`ModelStore.minimumBytes` in the app, `fetch-model.sh` and
 
 ---
 
+### The installer shipped a two day old binary and everything downstream agreed
+
+`install.sh` compiled only when `build/NeverType.app` was missing:
+
+```bash
+if [ ! -d "$SOURCE" ]; then
+  bash "$REPO_ROOT/scripts/build-app.sh" || fail "the build failed."
+fi
+```
+
+Measured 2026-09-06. Three commits of source changes, `bash scripts/install.sh`,
+and the app in `/Applications` was the bundle built two days earlier. Nothing
+complained. The script quit the running instance, copied, ran `codesign --verify
+--deep --strict`, passed, reopened the app, and printed `done`. The signature
+was valid because the stale bundle was correctly signed.
+
+It is the Don't from `conventions.md`, reusing a compiled artifact because the
+file exists, and it lands on the outcome the `pkill` comment eleven lines below
+is written to prevent: the person keeps running the old binary thinking they
+updated. `update.sh` was never affected, because it calls `build-app.sh`
+explicitly before `install.sh`. The trap is for whoever changes code and runs
+`install.sh` alone, which is the loop `CLAUDE.md` describes.
+
+**Two checks agreed with the wrong answer before one disagreed.** The binary in
+`/Applications` had today's mtime, because `cp` writes one. Its SHA-256 matched
+`build/NeverType.app`, which proved only that a stale artifact matches a copy of
+itself. `strings | grep -c TranscriptionProgress` returned 0, and that looked
+like evidence until the same grep returned 0 on the old binary too: a test that
+answers the same thing in both worlds measures nothing.
+
+What settled it was a **control**. `FocusHandback`, a type that exists in both
+versions, appeared 4 times in the bytes while the new type appeared 0. The
+difference between the two counts is the measurement; either count alone is
+noise.
+
+```bash
+grep -ac NewTypeName  /Applications/App.app/Contents/MacOS/App   # 0
+grep -ac OldTypeName  /Applications/App.app/Contents/MacOS/App   # 4, so the test works
+```
+
+The bundle also stamps `NeverTypeCommit` in `Info.plist`, and it said `c65361e`
+against a HEAD of `0736d3e`. That comparison is one line and would have caught
+it first:
+
+```bash
+[ "$(defaults read /Applications/NeverType.app/Contents/Info.plist NeverTypeCommit)" \
+  = "$(git rev-parse --short HEAD)" ] || echo "installed app is not this checkout"
+```
+
+**Rule:** a build step that can be skipped will be skipped on the run that
+matters. Let the compiler decide whether there is work, instead of guessing from
+a directory's existence: `swift build` with nothing changed costs about 4 s. And
+when checking whether an artifact contains a change, measure a difference
+against a control, never a single count.
+
 ## Concurrency the compiler does not see
 
 ### A closure inside a `@MainActor` method inherits the isolation

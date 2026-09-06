@@ -29,10 +29,22 @@ fail() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
 # --- the app ------------------------------------------------------------------
 
-if [ ! -d "$SOURCE" ]; then
-  info "Compiling (the first time takes a few minutes)"
-  bash "$REPO_ROOT/scripts/build-app.sh" || fail "the build failed."
-fi
+# Always, and not only when build/ is missing.
+#
+# The guard used to be `[ ! -d "$SOURCE" ]`, and a directory left over from an
+# earlier build made this script copy that one to /Applications without
+# compiling anything. Measured 2026-09-06: after three commits of source
+# changes, `install.sh` shipped a bundle from two days before, stamped with the
+# commit from back then, and the app kept running the old binary. It is the
+# Don't from conventions.md, reusing a compiled artifact because the file
+# exists, and it is the same outcome the pkill comment below is written to
+# prevent.
+#
+# Cheap to always run: build-app.sh checks the vendor manifest before touching
+# whisper.cpp, and `swift build` decides for itself whether anything needs
+# compiling. With nothing changed it takes about 4 s.
+info "Compiling (the first build takes a few minutes)"
+bash "$REPO_ROOT/scripts/build-app.sh" || fail "the build failed."
 [ -d "$SOURCE" ] || fail "could not find $SOURCE."
 
 info "Installing into $DEST"

@@ -115,7 +115,7 @@ swift build && swift test     # 179 tests, in swift-testing
 `vendor/` is not versioned. Without it the build fails with `could not build
 Objective-C module 'CWhisper'`, a message that does not say the cause.
 
-- [`docs/pitfalls.md`](docs/pitfalls.md): the 28 things that broke here, with the
+- [`docs/pitfalls.md`](docs/pitfalls.md): the 29 things that broke here, with the
   measured cost of each.
 - [`docs/model-choice.md`](docs/model-choice.md): why `large-v3-turbo`, with the
   numbers.
