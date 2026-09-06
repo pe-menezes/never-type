@@ -8,11 +8,14 @@ public enum DictationAttempt: Equatable, Sendable {
     case startRecording
     case showMicrophoneWarning
     case showAccessibilityWarning
+    case waitForTranscription
 
     public static func decide(
         microphoneAuthorized: Bool,
-        accessibilityAuthorized: Bool
+        accessibilityAuthorized: Bool,
+        isTranscribing: Bool = false
     ) -> Self {
+        guard !isTranscribing else { return .waitForTranscription }
         guard accessibilityAuthorized else { return .showAccessibilityWarning }
         guard microphoneAuthorized else { return .showMicrophoneWarning }
         return .startRecording
