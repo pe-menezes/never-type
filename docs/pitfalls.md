@@ -67,6 +67,61 @@ validate the model (`ModelStore.minimumBytes` in the app, `fetch-model.sh` and
 
 ---
 
+### The installer shipped a two day old binary and everything downstream agreed
+
+`install.sh` compiled only when `build/NeverType.app` was missing:
+
+```bash
+if [ ! -d "$SOURCE" ]; then
+  bash "$REPO_ROOT/scripts/build-app.sh" || fail "the build failed."
+fi
+```
+
+Measured 2026-09-06. Three commits of source changes, `bash scripts/install.sh`,
+and the app in `/Applications` was the bundle built two days earlier. Nothing
+complained. The script quit the running instance, copied, ran `codesign --verify
+--deep --strict`, passed, reopened the app, and printed `done`. The signature
+was valid because the stale bundle was correctly signed.
+
+It is the Don't from `conventions.md`, reusing a compiled artifact because the
+file exists, and it lands on the outcome the `pkill` comment eleven lines below
+is written to prevent: the person keeps running the old binary thinking they
+updated. `update.sh` was never affected, because it calls `build-app.sh`
+explicitly before `install.sh`. The trap is for whoever changes code and runs
+`install.sh` alone, which is the loop `CLAUDE.md` describes.
+
+**Two checks agreed with the wrong answer before one disagreed.** The binary in
+`/Applications` had today's mtime, because `cp` writes one. Its SHA-256 matched
+`build/NeverType.app`, which proved only that a stale artifact matches a copy of
+itself. `strings | grep -c TranscriptionProgress` returned 0, and that looked
+like evidence until the same grep returned 0 on the old binary too: a test that
+answers the same thing in both worlds measures nothing.
+
+What settled it was a **control**. `FocusHandback`, a type that exists in both
+versions, appeared 4 times in the bytes while the new type appeared 0. The
+difference between the two counts is the measurement; either count alone is
+noise.
+
+```bash
+grep -ac NewTypeName  /Applications/App.app/Contents/MacOS/App   # 0
+grep -ac OldTypeName  /Applications/App.app/Contents/MacOS/App   # 4, so the test works
+```
+
+The bundle also stamps `NeverTypeCommit` in `Info.plist`, and it said `c65361e`
+against a HEAD of `0736d3e`. That comparison is one line and would have caught
+it first:
+
+```bash
+[ "$(defaults read /Applications/NeverType.app/Contents/Info.plist NeverTypeCommit)" \
+  = "$(git rev-parse --short HEAD)" ] || echo "installed app is not this checkout"
+```
+
+**Rule:** a build step that can be skipped will be skipped on the run that
+matters. Let the compiler decide whether there is work, instead of guessing from
+a directory's existence: `swift build` with nothing changed costs about 4 s. And
+when checking whether an artifact contains a change, measure a difference
+against a control, never a single count.
+
 ## Concurrency the compiler does not see
 
 ### A closure inside a `@MainActor` method inherits the isolation
@@ -238,6 +293,51 @@ newer than 6.0.3. The boundary was exercised with a fake `swift` on PATH:
 toolchain in the install instructions is a second one, and while no job runs it,
 the person installing is the test. A minimum version that no job compiles is a
 guess: this one was read off the manifest and was wrong by three patch releases.
+
+### A Swift 6 compiler can load a PackageDescription older than itself
+
+Reported on 2026-09-01 by someone installing from these instructions. `swift
+build` fails at the manifest, and so does a package whose whole content is
+`print("hi")`:
+
+```
+Invalid manifest
+ld: symbol(s) not found for architecture arm64
+  Package.__allocating_init(... swiftLanguageVersions: [SwiftVersion]? ...)
+```
+
+Two machines, macOS 15.3.1 with CLT 16.4 and macOS 26.5.1 with CLT 26.6. The
+first reading is that Apple's Command Line Tools are broken, and it points at
+the wrong thing. In SwiftPM 6 `SwiftVersion` is a typealias of
+`SwiftLanguageMode`, so a 6.x dylib does export that initializer, mangled under
+the new name. A healthy CLT 26.2 builds the same smoke package here, and the
+manifest object references `swiftLanguageModes`.
+
+The tell is the other error the same person saw, `extra argument
+'swiftLanguageModes'`. It says the compiler loaded a **pre-6 PackageDescription
+from outside the Command Line Tools directory**: a second toolchain on the
+machine, an environment variable (`TOOLCHAINS`, `SWIFT_EXEC`, `SDKROOT`,
+`DEVELOPER_DIR`) or a stale module cache.
+
+Root cause on that machine is still unconfirmed. It is written down anyway,
+because the symptom names the wrong culprit and the next person will read the
+linker error the same way.
+
+`build-app.sh` refuses below Swift 6.0.3 since 2026-09-04, naming the version
+and the `xcode-select -p` path. That guard reads the compiler, so it does
+**not** catch this one: the compiler is fine and the library sitting next to it
+is not. What separates the two:
+
+```bash
+xcode-select -p                                        # which developer dir
+swift --version                                        # compiler version
+env | grep -E 'TOOLCHAINS|SWIFT_EXEC|SDKROOT|DEVELOPER_DIR'
+swift build -vv 2>&1 | grep -i packagedescription      # prints on a manifest compile
+```
+
+**Rule:** a version check on the compiler says nothing about which
+PackageDescription it will load. When a manifest fails on a toolchain that
+should support it, read the environment before blaming the vendor.
 
 ### Query-then-decide is not mutual exclusion
 

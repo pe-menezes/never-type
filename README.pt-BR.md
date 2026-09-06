@@ -11,10 +11,19 @@
 
 <p align="center"><a href="README.md">English</a></p>
 
+<p align="center">
+  <a href="https://github.com/pe-menezes/never-type/actions/workflows/ci.yml"><img src="https://github.com/pe-menezes/never-type/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+</p>
+
 Segure uma tecla em qualquer aplicativo, fale, solte, e o texto aparece onde o
 cursor está.
 
 Cerca de 600 ms por ditado com o modelo quente, num MacBook Pro M4 Pro.
+
+O [`docs/pitfalls.md`](docs/pitfalls.md) registra os 28 erros que este projeto
+cometeu, cada um com o custo que foi medido. O
+[`docs/INSTALL.md`](docs/INSTALL.md) é escrito para um agente de código executar:
+mande o link deste repositório e peça para ele seguir aquele arquivo.
 
 ## O que faz
 
@@ -75,17 +84,19 @@ vocabulário. O **Clear History**, no menu, apaga os dois primeiros. A inserçã
 passa pela área de transferência, então o texto fica lá por 0,6 s, marcado como
 oculto, antes de o seu conteúdo voltar.
 
-A conferência da alegação de rede é manual, e o repositório não tem CI. O
-[`docs/reference.md`](docs/reference.md) dá o grep, os dois comandos do lado do
-binário e o que ninguém rodou.
+A conferência da alegação de rede é manual. O CI compila o app e roda a suíte em
+três toolchains, incluindo a mais antiga suportada, e não roda nenhuma das duas
+conferências. O [`docs/reference.md`](docs/reference.md) dá o grep, os dois
+comandos do lado do binário e o que ninguém rodou.
 
 ## Limitações
 
 - Outro idioma exige editar o `Transcriber.swift` e recompilar, e a qualidade
   fora do português nunca foi medida
   ([`docs/model-choice.md`](docs/model-choice.md)).
-- Ditado acima de 30 s paga uma segunda janela do Whisper: 31 s mediram 1299 ms.
-  Acima de duas janelas ninguém mediu.
+- Ditado acima de 30 s paga uma segunda janela do Whisper: 31 s mediram 1299 ms,
+  e daí em diante a espera cresce cerca de um segundo por janela: 404 s de fala
+  levaram 13 s. A borda do orb vira um anel de progresso enquanto ele trabalha.
 - Fone Bluetooth grava a 8 kHz, o modo que o macOS liga quando o microfone abre,
   e o reconhecimento piora. O microfone do próprio Mac evita a queda.
 - O app é assinado com um certificado local, então quem já executa código como
@@ -96,13 +107,13 @@ binário e o que ninguém rodou.
 
 ```bash
 bash scripts/build-app.sh     # compila o whisper.cpp em vendor/
-swift build && swift test     # 169 testes, em swift-testing
+swift build && swift test     # 179 testes, em swift-testing
 ```
 
 O `vendor/` não é versionado. Sem ele o build falha com `could not build
 Objective-C module 'CWhisper'`, mensagem que não diz a causa.
 
-- [`docs/pitfalls.md`](docs/pitfalls.md): as 24 coisas que quebraram aqui, com o
+- [`docs/pitfalls.md`](docs/pitfalls.md): as 29 coisas que quebraram aqui, com o
   custo medido de cada uma. Várias passariam em revisão de código.
 - [`docs/model-choice.md`](docs/model-choice.md): por que `large-v3-turbo`, com
   os números.

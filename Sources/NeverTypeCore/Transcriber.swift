@@ -73,6 +73,17 @@ public enum TranscriberError: Error, CustomStringConvertible {
     }
 }
 
+/// Carries the progress closure across the C boundary.
+///
+/// A `@convention(c)` function pointer cannot capture anything, and whisper
+/// takes the context as a `void *` beside it. This holds one immutable
+/// `@Sendable` closure, which is what lets it be `Sendable` with nothing
+/// asserted by hand.
+private final class ProgressRelay: Sendable {
+    let report: @Sendable (Int) -> Void
+    init(_ report: @escaping @Sendable (Int) -> Void) { self.report = report }
+}
+
 /// Transcribes audio locally, with the model loaded once and kept warm.
 ///
 /// Not safe for concurrent use: the whisper.cpp context must be used serially.
@@ -166,14 +177,48 @@ public final class Transcriber {
     /// `prompt` is whisper's `initial_prompt`: terms the model should expect to
     /// hear. A recognition hint, not a guarantee — the guarantee comes from the
     /// replacement, which runs afterwards and does not go through the model.
-    public func transcribe(_ samples: [Float], prompt: String? = nil) throws -> String {
+    public func transcribe(_ samples: [Float],
+                           prompt: String? = nil,
+                           onProgress: (@Sendable (Int) -> Void)? = nil) throws -> String {
         var params = whisper_full_default_params(WHISPER_SAMPLING_GREEDY)
         params.print_progress = false
         params.print_realtime = false
         params.print_timestamps = false
         params.print_special = false
-        params.no_timestamps = true
+        // Timestamps stay on, and the text still comes out without them.
+        //
+        // `whisper_full_get_segment_text` returns the segment's text, so no
+        // timestamp reaches the output. What they decide is where the next 30 s
+        // window starts. With `no_timestamps = true` whisper.cpp has nothing to
+        // compute that advance from and steps a blind 30 s, cutting mid
+        // sentence. The next window then opens with no sentence boundary, the
+        // decoder degenerates into repetition, and when confidence drops the
+        // whole window is discarded (`whisper_full_with_state`, v1.9.2).
+        //
+        // Inside a single window nothing changes, which is why this shipped:
+        // every dictation until then was shorter than 30 s. Measured 2026-09-05
+        // over 460 s of speech, same model and same audio: 645 of 1120 words
+        // with it on, 1101 with it off. It was also slower, 23.7 s of wall clock
+        // against 15.2 s, because the repetition loop burns tokens and trips the
+        // temperature fallback.
+        params.no_timestamps = false
         params.n_threads = 4
+
+        // Progress, from 0 to 100, so a long dictation is not a still dot.
+        //
+        // whisper calls this on the thread that called `whisper_full`, inside
+        // the seek loop, so the relay is read on the same thread that set it up
+        // and dies with the call. Under a second nobody sees the value move. On
+        // the 404 s recording the suite transcribes it runs for 13 s, and until
+        // 2026-09-05 that whole time was a pulsing dot with nothing behind it.
+        let relay = onProgress.map(ProgressRelay.init)
+        if let relay {
+            params.progress_callback_user_data = Unmanaged.passUnretained(relay).toOpaque()
+            params.progress_callback = { _, _, progress, context in
+                guard let context else { return }
+                Unmanaged<ProgressRelay>.fromOpaque(context).takeUnretainedValue().report(Int(progress))
+            }
+        }
 
         var text = ""
         var failure: Int32 = 0
@@ -190,15 +235,22 @@ public final class Transcriber {
         }
 
         // The language is fixed: the app transcribes Portuguese only.
-        "pt".withCString { language in
-            params.language = language
-            if let prompt, !prompt.isEmpty {
-                prompt.withCString { hint in
-                    params.initial_prompt = hint
+        //
+        // `withExtendedLifetime` and not a plain local: the relay is reachable
+        // only through a raw pointer inside `params`, so nothing here tells the
+        // compiler it is still in use, and it may be released before the call
+        // that reads it returns.
+        withExtendedLifetime(relay) {
+            "pt".withCString { language in
+                params.language = language
+                if let prompt, !prompt.isEmpty {
+                    prompt.withCString { hint in
+                        params.initial_prompt = hint
+                        run(params)
+                    }
+                } else {
                     run(params)
                 }
-            } else {
-                run(params)
             }
         }
         guard failure == 0 else { throw TranscriberError.inferenceFailed(failure) }

@@ -264,9 +264,37 @@ final class PillView: NSView {
     var state: OverlayState = .idle {
         didSet {
             activity.state = state
-            setAccessibilityValue(state.accessibilityValue)
+            // Entering a state clears the ring, not only leaving one. What a
+            // late update did without this is written down in
+            // `TranscriptionProgress`, along with the ordering rule.
+            progress.reset()
+            announce()
             needsDisplay = true
         }
+    }
+
+    /// How far the transcription got. The rule it obeys lives in Core, where it
+    /// has behavior tests: `TranscriptionProgress`.
+    private(set) var progress = TranscriptionProgress()
+
+    /// Whisper's own scale, 0 to 100. Redraws only when something moved.
+    func advance(progress percent: Int) {
+        guard self.progress.advance(percent: percent) else { return }
+        announce()
+        needsDisplay = true
+    }
+
+    /// VoiceOver hears what the ring shows.
+    ///
+    /// The value used to stay "Writing" for the whole transcription. On a 404 s
+    /// dictation that is 13 s of a screen reader repeating one word while
+    /// everyone else could see how far it had got.
+    private func announce() {
+        guard state == .transcribing, let spoken = progress.spoken else {
+            setAccessibilityValue(state.accessibilityValue)
+            return
+        }
+        setAccessibilityValue("\(state.accessibilityValue), \(spoken)")
     }
 
     /// Reborn on every press. Outside a press its answer is not read.
@@ -352,6 +380,28 @@ final class PillView: NSView {
         NSColor.white.withAlphaComponent(state == .idle ? 0.10 : 0.17).setStroke()
         path.lineWidth = 1
         path.stroke()
+
+        // The border doubles as the progress ring while writing.
+        //
+        // The orb is 34 px and carries no text, so its outline is the only
+        // surface a number fits on. It was worth adding because the wait grew:
+        // a 404 s dictation spends 13 s here, and before this the only thing on
+        // screen for those 13 s was a dot pulsing at a fixed rate, which says
+        // the app is alive and says nothing about whether it is nearly done.
+        //
+        // Clockwise from the top, which is where a reader expects a clock to
+        // start. Radius matches `path` exactly: a rounded rect whose corner
+        // radius is half its height is already a circle.
+        guard state == .transcribing, progress.fraction > 0 else { return }
+        let ring = NSBezierPath()
+        ring.appendArc(withCenter: NSPoint(x: drawingBounds.midX, y: drawingBounds.midY),
+                       radius: radius,
+                       startAngle: 90,
+                       endAngle: 90 - 360 * progress.fraction,
+                       clockwise: true)
+        NSColor.white.withAlphaComponent(0.55).setStroke()
+        ring.lineWidth = 1.5
+        ring.stroke()
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -457,6 +507,11 @@ final class RecordingOverlay {
 
     func transcribing() {
         apply(.transcribing)
+    }
+
+    /// Whisper's own progress, 0 to 100, drawn on the orb's border.
+    func progress(percent: Int) {
+        pill?.advance(progress: percent)
     }
 
     func hide() {

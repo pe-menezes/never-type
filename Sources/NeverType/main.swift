@@ -74,11 +74,12 @@ actor TranscriptionService {
     /// load* status as if it were the cause: with the model loaded and whisper
     /// returning an error code, the user read "transcription unavailable:
     /// Metal · load 168 ms" — a message that describes health, not failure.
-    func transcribe(_ samples: [Float], prompt: String? = nil) -> Result<(text: String, ms: Int), TranscriptionFailure> {
+    func transcribe(_ samples: [Float], prompt: String? = nil,
+                    onProgress: (@Sendable (Int) -> Void)? = nil) -> Result<(text: String, ms: Int), TranscriptionFailure> {
         guard let transcriber else { return .failure(TranscriptionFailure(reason: status)) }
         let started = Date()
         do {
-            let text = try transcriber.transcribe(samples, prompt: prompt)
+            let text = try transcriber.transcribe(samples, prompt: prompt, onProgress: onProgress)
             return .success((text, Int(Date().timeIntervalSince(started) * 1000)))
         } catch {
             return .failure(TranscriptionFailure(reason: "\(error)"))
@@ -388,7 +389,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let samples = recorder.lastSamples
             log("recorded: \(samples.count) samples (\(String(format: "%.1f", Double(samples.count) / 16_000)) s)")
             Task {
-                switch await self.transcription.transcribe(samples, prompt: self.vocabulary.prompt) {
+                // The closure is called on the actor's thread, so the hop to
+                // main is written out and checked by the compiler instead of
+                // being assumed. Same shape as `AudioRecorder.onLevel`.
+                let report: @Sendable (Int) -> Void = { percent in
+                    Task { @MainActor in self.overlay.progress(percent: percent) }
+                }
+                switch await self.transcription.transcribe(samples, prompt: self.vocabulary.prompt,
+                                                           onProgress: report) {
                 case .success(let result):
                     // The replacements run here, on the finished text: they are
                     // deterministic and do not go through the model.

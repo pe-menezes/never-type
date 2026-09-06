@@ -61,7 +61,7 @@ afterwards.
 After that:
 
 ```bash
-swift build && swift test     # 169 tests
+swift build && swift test     # 179 tests
 bash scripts/install.sh       # installs into /Applications
 bash scripts/bench.sh         # measures latency and quality per model
 ```
@@ -94,7 +94,7 @@ migration for a gain no user sees. And the app transcribes Portuguese only
 
 ## State
 
-Works end to end: ~600 ms per dictation with the model warm, 169 tests. Several
+Works end to end: ~600 ms per dictation with the model warm, 179 tests. Several
 people besides the author have installed it, as of 2026-09-04.
 
 One thing is missing: **a distributable package that does not require

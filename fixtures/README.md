@@ -48,6 +48,19 @@ issue for the platform team.")*
 dictations. Short sentences are where the model errs most and where latency
 shows most.
 
+**04, long dictation.** More than four minutes of continuous speech. This one is
+not for the bench: it is the input of `RecordedLongDictationTests`, and it exists
+because whisper processes in 30-second windows and the way it drops whole windows
+only separates a working build from a broken one well above two of them. Measured
+2026-09-05 on a 404 s recording: a build with `no_timestamps` on kept 19% of the
+words, and it did it without repeating a single sentence, so the text gave no
+sign of the loss. See
+`.vibeflow/hotfixes/2026-09-05-long-dictation-loses-and-repeats-speech.md`.
+
+Any continuous recording above four minutes works here. The test measures
+characters per second of audio and never reads the content, so there is no
+transcript of this fixture anywhere and a failure prints numbers only.
+
 ## What NOT to record
 
 No personal or sensitive data: documents, contract numbers, client names,
