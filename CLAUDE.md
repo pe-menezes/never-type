@@ -6,8 +6,8 @@ chosen from the menu by pressing it) records, releasing transcribes, two taps
 or a second key lock into hands-free, and the text is inserted wherever the
 cursor is.
 **No network calls at run time**: it is the constraint that justifies the
-project's existence, and there is a DoD check verifying it in the code and in
-the binary.
+project's existence, and each spec includes a DoD item for source and binary checks. These checks
+are manual; CI does not verify the no-network claim.
 
 Accessory menu bar app (no Dock; the only windows are the floating pill, the
 vocabulary one and the panel that captures the key). macOS 14+, Apple Silicon.
@@ -61,7 +61,7 @@ afterwards.
 After that:
 
 ```bash
-swift build && swift test     # 179 tests
+swift build && swift test     # swift-testing
 bash scripts/install.sh       # installs into /Applications
 bash scripts/bench.sh         # measures latency and quality per model
 ```
@@ -80,7 +80,7 @@ lines, test names, scripts, docs, and commit messages from here on (the commits
 already in the log stay as they are). Two exceptions:
 
 - `.vibeflow/` stays in Portuguese. It is the working notes of whoever drives
-  the repo; it is read next to the code, not published with it.
+  the repo. These notes are versioned and published with the source.
 - `README.md` and `docs/INSTALL.md` have Portuguese mirrors, `README.pt-BR.md`
   and `docs/INSTALL.pt-BR.md`, and a change to one side is a change to both.
   `INSTALL.pt-BR.md` exists because the four literal speech blocks in it are
@@ -94,7 +94,7 @@ migration for a gain no user sees. And the app transcribes Portuguese only
 
 ## State
 
-Works end to end: ~600 ms per dictation with the model warm, 179 tests. Several
+Works end to end: ~600 ms per dictation with the model warm, with a swift-testing suite. Several
 people besides the author have installed it, as of 2026-09-04.
 
 One thing is missing: **a distributable package that does not require

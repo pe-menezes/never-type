@@ -15,112 +15,111 @@
   <a href="https://github.com/pe-menezes/never-type/actions/workflows/ci.yml"><img src="https://github.com/pe-menezes/never-type/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 </p>
 
-Segure uma tecla em qualquer aplicativo, fale, solte, e o texto aparece onde o
-cursor está.
+Segure o **⌘ direito**, fale em português e solte para colar a transcrição no
+cursor. O NeverType fica na barra de menus e transcreve no seu Mac usando
+Whisper, sem acesso à rede durante o uso.
 
-Cerca de 600 ms por ditado com o modelo quente, num MacBook Pro M4 Pro.
+Ditados curtos mediram cerca de **600 ms** com o modelo carregado em um MacBook
+Pro M4 Pro. A [comparação de modelos](docs/model-choice.md) detalha as medições e
+o que foi avaliado.
 
-O [`docs/pitfalls.md`](docs/pitfalls.md) registra os 28 erros que este projeto
-cometeu, cada um com o custo que foi medido. O
-[`docs/INSTALL.md`](docs/INSTALL.md) é escrito para um agente de código executar:
-mande o link deste repositório e peça para ele seguir aquele arquivo.
+## Recursos
 
-## O que faz
+- Segure para gravar ou dê dois toques para falar com as mãos livres. Mais um
+  toque encerra; Esc descarta a gravação.
+- Escolha pelo menu um modificador compatível, Fn ou um botão extra do mouse.
+  Uma segunda tecla opcional inicia a gravação com as mãos livres com um toque.
+- Um indicador flutuante mostra a atividade da gravação e o progresso da
+  transcrição. Clique nele para abrir o menu, inclusive em apps em tela cheia.
+- Copie transcrições recentes, adicione dicas de vocabulário e substituições de
+  texto ou ative a abertura junto com o sistema.
 
-Segure o **⌘ direito**, fale, solte. A transcrição é colada no cursor. Dois
-toques rápidos travam a gravação para você falar com a tecla solta, mais um
-toque encerra e Esc descarta. O overlay permanece um círculo de 34 px com a
-marca do NeverType. Os três traços se movem com a voz, inclusive em mãos-livres,
-e viram pontos móveis ao lado do mesmo cursor enquanto o texto é escrito.
+Aguarde a transcrição terminar antes de iniciar outro ditado.
 
-O menu da barra oferece ⌘, ⌥ e ⌃ direitos como escolhas rápidas, e **Other key
-or mouse button…** deixa você apertar a tecla que quiser: um modificador dos
-dois lados, Fn ou um botão do mouse a partir do terceiro. O que não pode ser a
-tecla é recusado na hora, com o motivo na tela, ⇧ e ⌘ esquerdo entre eles. Uma
-segunda tecla trava o mãos-livres com um toque. O menu também guarda as últimas
-30 transcrições e um vocabulário customizado. Um clique no círculo abre esse
-mesmo menu, que é como se chega nele em tela cheia. O
-[`docs/reference.md`](docs/reference.md) passa por cada item, inclusive a tabela
-de teclas aceitas e recusadas.
+A [referência](docs/reference.md) detalha os controles, teclas aceitas e ajustes.
 
 ## Requisitos
 
-- macOS 14 ou mais novo em Apple Silicon. A inferência roda na GPU pelo Metal.
-  Na CPU a mesma inferência fica cerca de 11× mais lenta
-  ([`docs/pitfalls.md`](docs/pitfalls.md)), o que inviabiliza o ditado.
-- Command Line Tools do Xcode, que trazem a toolchain do Swift 6 que o build
-  usa. Xcode completo é opcional.
-- `cmake`, para compilar (`brew install cmake`).
-- O modelo, 547 MB, que não vem no `.app`. Um script baixa e converte, ou você
-  copia o arquivo de uma máquina que já o tem.
-- Só transcreve português.
+- Mac com Apple Silicon e macOS 14 ou mais recente.
+- Swift 6.0.3 ou mais recente, fornecido pelo Command Line Tools do Xcode ou Xcode.
+- `cmake` para compilar. A preparação dos modelos também exige Homebrew e Python 3.
+- O modelo Whisper de 547 MB, armazenado separadamente do app.
 
 ## Instalar
 
-O repositório publica só o código, e cada instalação compila na própria máquina.
+O NeverType atualmente distribui o código-fonte. A instalação compila o app na
+sua máquina e cria um certificado local de assinatura.
+
+Com os pré-requisitos instalados:
 
 ```bash
-bash scripts/build-app.sh   # a primeira compilação leva alguns minutos
-bash scripts/install.sh
+git clone https://github.com/pe-menezes/never-type.git
+cd never-type
+bash scripts/setup-bench.sh  # baixa dependências e converte três modelos
+bash scripts/fetch-model.sh  # instala o modelo usado pelo NeverType
+bash scripts/install.sh     # compila, assina, instala e abre o app
 ```
 
-Na primeira execução o macOS pede Microfone e Acessibilidade. O app precisa das
-duas. Enquanto a Acessibilidade não for concedida, a tentativa de ditado é
-bloqueada antes da gravação, e um aviso oferece abrir a página certa dos Ajustes.
+A preparação pode demorar e baixa mais do que os 547 MB do modelo final. Se você
+já tem um arquivo de modelo compatível, o
+[guia de instalação](docs/INSTALL.pt-BR.md#3-o-modelo) explica como usá-lo.
 
-O [`docs/INSTALL.pt-BR.md`](docs/INSTALL.pt-BR.md) tem o roteiro inteiro, o
-modelo incluído, e foi escrito para um agente de codificação executar: mande o
-link deste repositório e peça para ele seguir esse arquivo.
+Conceda **Microfone** e **Acessibilidade** quando o macOS pedir e dite em um campo
+de texto para verificar a instalação. O [guia de instalação](docs/INSTALL.pt-BR.md)
+traz o roteiro completo, solução de problemas e atualização; um agente de código
+também pode segui-lo.
 
 ## Privacidade
 
-O app não abre conexão de rede em tempo de uso. O único download do projeto é o
-do modelo, feito por um script que você roda à mão.
+O app instalado não faz requisições de rede. Os scripts de compilação,
+preparação dos modelos e atualização baixam código-fonte, dependências e modelos
+quando você os executa.
 
-O app escreve em `~/Library/Application Support/NeverType/`, em texto claro: as
-últimas 30 transcrições (`historico.json`), o áudio do último ditado
-(`last.wav`), um log com o tempo e o tamanho de cada transcrição, e o seu
-vocabulário. O **Clear History**, no menu, apaga os dois primeiros. A inserção
-passa pela área de transferência, então o texto fica lá por 0,6 s, marcado como
-oculto, antes de o seu conteúdo voltar.
+O NeverType guarda as últimas 30 transcrições, o áudio do último ditado, seu
+vocabulário e um log de diagnóstico em
+`~/Library/Application Support/NeverType/`, sem criptografia própria do app.
+O log registra tempo e tamanho da transcrição, sem o texto. **Clear History**
+apaga as transcrições e o áudio armazenados.
 
-A conferência da alegação de rede é manual. O CI compila o app e roda a suíte em
-três toolchains, incluindo a mais antiga suportada, e não roda nenhuma das duas
-conferências. O [`docs/reference.md`](docs/reference.md) dá o grep, os dois
-comandos do lado do binário e o que ninguém rodou.
+A inserção usa a área de transferência. Por padrão, o conteúdo anterior é
+restaurado após 0,6 s, desde que a área de transferência não tenha mudado nesse
+intervalo. Se a colagem automática for bloqueada, a transcrição fica na área de
+transferência para colagem manual. O texto ditado é marcado como oculto, mas
+gerenciadores que ignoram essa marca podem guardá-lo. Copiar explicitamente um
+item do histórico deixa o texto na área de transferência.
+
+A afirmação sobre rede se baseia em inspeção manual do código; o CI não a
+verifica. A [referência](docs/reference.md#the-check-behind-no-network-at-run-time)
+documenta as verificações e seus limites.
 
 ## Limitações
 
-- Outro idioma exige editar o `Transcriber.swift` e recompilar, e a qualidade
-  fora do português nunca foi medida
-  ([`docs/model-choice.md`](docs/model-choice.md)).
-- Ditado acima de 30 s paga uma segunda janela do Whisper: 31 s mediram 1299 ms,
-  e daí em diante a espera cresce cerca de um segundo por janela: 404 s de fala
-  levaram 13 s. A borda do orb vira um anel de progresso enquanto ele trabalha.
-- Fone Bluetooth grava a 8 kHz, o modo que o macOS liga quando o microfone abre,
-  e o reconhecimento piora. O microfone do próprio Mac evita a queda.
-- O app é assinado com um certificado local, então quem já executa código como
-  você nesta máquina pode se assinar como NeverType e herdar as permissões de
-  Microfone e Acessibilidade ([`docs/reference.md`](docs/reference.md)).
+- O idioma configurado é português. Usar outro idioma exige alterar o código e
+  recompilar; a qualidade fora do português não foi medida.
+- Gravações mais longas levam mais tempo para transcrever: 404 s de fala mediram
+  cerca de 13 s. O indicador flutuante mostra o progresso durante a transcrição.
+- Os modos de microfone Bluetooth podem reduzir a qualidade do áudio. Use o
+  microfone do Mac se as gravações com o fone produzirem resultados ruins.
+- Outro código executando como seu usuário pode usar o certificado local para
+  se passar pelo NeverType e herdar suas permissões. Veja a seção de
+  [assinatura](docs/reference.md#signing-and-what-it-costs).
 
 ## Desenvolvimento
 
 ```bash
-bash scripts/build-app.sh     # compila o whisper.cpp em vendor/
-swift build && swift test     # 179 testes, em swift-testing
+bash scripts/build-app.sh  # compila a dependência nativa whisper.cpp e o app
+swift build && swift test # swift-testing
 ```
 
-O `vendor/` não é versionado. Sem ele o build falha com `could not build
-Objective-C module 'CWhisper'`, mensagem que não diz a causa.
+O diretório gerado `vendor/` é necessário antes de executar SwiftPM diretamente.
+Os testes de integração com modelo e áudio são condicionais; uma execução verde
+sem esses arquivos não exercita a transcrição.
 
-- [`docs/pitfalls.md`](docs/pitfalls.md): as 29 coisas que quebraram aqui, com o
-  custo medido de cada uma. Várias passariam em revisão de código.
-- [`docs/model-choice.md`](docs/model-choice.md): por que `large-v3-turbo`, com
-  os números.
-- [`docs/launch-at-login.md`](docs/launch-at-login.md): quanto custa abrir com o
-  sistema, medido.
-- [`docs/reference.md`](docs/reference.md): o menu, os arquivos em disco, os
-  dois ajustes sem item de menu, a assinatura.
+- [Referência técnica](docs/reference.md): arquitetura, controles e armazenamento.
+- [Escolha do modelo](docs/model-choice.md): medições de qualidade e latência.
+- [Problemas encontrados](docs/pitfalls.md): falhas e suas correções.
+- [Abertura com o sistema](docs/launch-at-login.md): medições de inicialização.
+- [Áudios de avaliação](fixtures/README.md): como gravar amostras para testes locais.
 
 ## Licença
 

@@ -30,7 +30,7 @@ Os artefatos pesados (`models/`, `vendor/`, `fixtures/`,
   flutuante de gravação, janela do vocabulário, ator dono do modelo. Orquestra,
   não decide.
 - **`Sources/CWhisper/`** — module map apontando para `vendor/whisper`.
-- **`Tests/NeverTypeCoreTests/`**: 179 testes em 22 suítes, swift-testing.
+- **`Tests/NeverTypeCoreTests/`**: testes de comportamento em swift-testing.
 - **`scripts/`** — bancada de latência, build e assinatura, instalação,
   verificação e atualização.
 - **`docs/`** — armadilhas encontradas e a escolha do modelo, com os números.
@@ -74,7 +74,7 @@ patterns:
 - [`isolamento-tipado.md`](patterns/isolamento-tipado.md) — contrato de thread declarado no tipo, com `assumeIsolated` só onde a ordem importa mais que a pureza
 - [`estado-consultado.md`](patterns/estado-consultado.md) — permissão e área de transferência consultadas na hora, nunca copiadas para variável
 - [`estado-do-usuario.md`](patterns/estado-do-usuario.md) — o que se toca, se devolve, inclusive no caminho de erro
-- [`scripts-shell.md`](patterns/scripts-shell.md) — o esqueleto comum aos oito scripts
+- [`scripts-shell.md`](patterns/scripts-shell.md): o contrato dos scripts de shell
 - [`terceiros-pinados.md`](patterns/terceiros-pinados.md) — commit fixo, checksum conferido, rigor proporcional ao impacto
 
 ## Key Files
@@ -91,6 +91,7 @@ patterns:
 | `Sources/NeverTypeCore/FocusHandback.swift` | Devolve o foco ao app anterior ao fechar uma janela, sem esconder o orb (hotfix de 2026-09-04) |
 | `Sources/NeverTypeCore/Vocabulary.swift` | Termos (viram `initial_prompt`) e substituições determinísticas |
 | `Sources/NeverTypeCore/TranscriptHistory.swift` | As últimas 30 transcrições, com teto e escrita atômica |
+| `Sources/NeverTypeCore/TranscriptionSession.swift` | Impede ditados sobrepostos e descarta callbacks de inferências encerradas |
 | `Sources/NeverTypeCore/Tone.swift` | Gera os WAV do retorno auditivo, com envelope contra o estalo |
 | `Sources/NeverTypeCore/LoginItem.swift` | Abrir com o sistema, com a guarda de caminho antes de registrar |
 | `Sources/NeverType/RecordingOverlay.swift` | Indicador que sobrevive a apps em tela cheia |

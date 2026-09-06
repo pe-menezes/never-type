@@ -2,20 +2,17 @@ English: [INSTALL.md](INSTALL.md)
 
 # Instalar o NeverType
 
-> **Este documento é para um agente de codificação executar**, não para um humano
-> ler de cabo a rabo. Se você é humano e só quer usar: peça ao seu agente para
-> seguir este arquivo, ou vá para o `README.pt-BR.md`.
+Este guia pode ser seguido diretamente ou por um agente de código. As etapas
+marcadas com **PARE E PEÇA** exigem interação da pessoa que instala.
 
-O NeverType é ditado por voz local para macOS. Ele é **compilado na máquina de
-quem instala**: não há binário pré-compilado, e isso é de propósito. Cada
-instalação gera o próprio certificado local, e app compilado localmente não entra
-em quarentena, então o Gatekeeper não aparece.
+O NeverType é compilado na máquina de quem instala e usa um certificado local
+para manter a identidade do app entre atualizações. Ainda não há binário
+pré-compilado para distribuição.
 
 ## Antes de começar
 
-**Leia `docs/pitfalls.md`.** São os erros já cometidos neste projeto, com o
-custo medido de cada um. Vários deles são coisas que passariam em revisão de
-código e só apareceram rodando.
+Consulte [pitfalls.md](pitfalls.md) para detalhes dos problemas de instalação
+e compilação já encontrados.
 
 **Quatro coisas neste roteiro exigem a pessoa, e nenhum agente as resolve:**
 instalar as Command Line Tools, conceder Microfone, conceder Acessibilidade e
@@ -34,7 +31,7 @@ abaixo, com o texto a dizer.
 
 A linha do keychain não é excesso de zelo. `security list-keychains -s`
 **substitui a lista inteira**: errar ali tira o keychain de login da pessoa, e
-ela perde senhas de Wi-Fi, Safari e apps. O `build-app.sh` tem um guarda-corpo
+as senhas de Wi-Fi, Safari e apps podem ficar indisponíveis até restaurar a lista. O `build-app.sh` tem um guarda-corpo
 exatamente por isso. Não improvise nesse comando.
 
 E apagar o keychain de assinatura **revoga a permissão de Acessibilidade**: a
@@ -86,33 +83,19 @@ command -v cmake || brew install cmake
 
 Só para compilar. Não é dependência de execução.
 
-## 2. Compilar e instalar
+## 2. Clonar e compilar
 
 ```bash
 git clone <url-do-repositório> nevertype && cd nevertype
 bash scripts/build-app.sh
-bash scripts/install.sh
 ```
 
 `build-app.sh` clona o whisper.cpp num commit fixo, confere, compila estático e
 assina. **Leva alguns minutos na primeira vez**. É normal, não interrompa.
 
-`install.sh` recusa cedo o que não tem conserto depois (não-Darwin, não-arm64,
-`/Applications` sem escrita), instala, verifica a assinatura, confere o modelo e
-abre o app.
-Ele só compila se `build/NeverType.app` ainda não existir: depois de mudar código
-(ou de um `git pull` feito à mão), rode `build-app.sh` antes, senão ele instala
-o `build/` velho sem avisar. O `update.sh` já faz isso na ordem certa.
-
-Se ele reclamar de `/Applications` sem permissão de escrita: **pare e pergunte**.
-Existe um caminho alternativo (`~/Applications/`), mas ele é uma decisão da
-pessoa, não sua. E se ela escolher esse caminho, saiba que
-`verify-install.sh` e `update.sh` só conhecem `/Applications`: vão
-dizer que o app não está instalado. A verificação passa a ser só o ditado.
-
 ## 3. O modelo
 
-São 547 MB e ele **não vem no app**. O `install.sh` avisa se estiver faltando.
+São 547 MB e ele **não vem no app**. O `install.sh` interrompe a instalação antes de abrir o app se ele estiver faltando.
 
 ```bash
 bash scripts/setup-bench.sh   # baixa três checkpoints do CDN da OpenAI e converte
@@ -135,21 +118,39 @@ Copiar de outra máquina que já tenha é um caminho válido, **mas o arquivo
 precisa entrar pelo repositório**, nunca direto no destino:
 
 ```bash
+mkdir -p models
 cp /caminho/do/ggml-large-v3-turbo-q5_0.bin models/
+cp /caminho/do/ggml-large-v3-turbo-q5_0.bin.sha256 models/
 bash scripts/fetch-model.sh
 ```
 
-`fetch-model.sh` valida magic e tamanho (pelo menos 400 MB, para um modelo de
-547 MB) antes de promover, e apaga a cópia se ela não ficar válida. Copiar direto
-para `~/Library/Application Support/` pula essa validação: o app confere de novo
-ao abrir, recusa o arquivo, abre com o ícone cortado e a linha "Model:" do menu
-traz a mensagem com o script a rodar. Essa linha aparece com o Option segurado na
-hora de abrir o menu. A pessoa descobre o problema no menu, não no primeiro
-ditado.
+Leve o arquivo `.bin` e o comprovante `.bin.sha256` gerado pelo setup. O
+`fetch-model.sh` confere o magic, o tamanho mínimo de 400 MB e o SHA-256 antes
+de instalar. O checksum local detecta arquivos alterados ou cópias incompletas;
+ele não autentica quem forneceu o modelo. Use uma origem em que você confia.
+Modelos antigos sem esse comprovante precisam ser reconstruídos com
+`setup-bench.sh`, que reaproveita os checkpoints `.pt` válidos em cache.
 
-## 4. Permissões
+## 4. Instalar e conceder permissões
 
-Duas, e o app pede as duas ao abrir. **As duas exigem a pessoa.**
+Com o modelo instalado, compile e abra o app:
+
+```bash
+bash scripts/install.sh
+```
+
+O script sempre executa o build, instala em `/Applications`, verifica a
+assinatura e abre o app. Ele recusa sistemas incompatíveis e falta de permissão
+de escrita em `/Applications`. Nesse caso, peça ajuda a um administrador ou
+combine a instalação em `~/Applications`. Os scripts `verify-install.sh` e
+`update.sh` usam `/Applications`; em outro caminho, a verificação exige conferir
+o app instalado e ditar uma frase.
+
+Se você abriu o app antes de instalar ou substituir o modelo, encerre-o pelo
+menu e abra novamente. O modelo é carregado apenas na inicialização. Executar
+`install.sh` também encerra a instância anterior e abre a nova.
+
+O app pede duas permissões ao abrir. **As duas exigem sua interação.**
 
 ### Microfone: PARE E PEÇA
 
@@ -198,8 +199,10 @@ não é o sistema dizer que concedeu, é o ditado inserir texto.
 >
 > O texto tem que aparecer onde o cursor está.
 
-Apareceu: acabou. Não apareceu: volte para a Acessibilidade. É ela em quase
-todos os casos.
+Se o texto aparecer, a instalação está concluída. Caso contrário, confira as
+permissões no menu e o diagnóstico Model (segure Option ao abrir o menu).
+Depois de instalar um modelo ausente, encerre e reabra o app antes de tentar
+novamente.
 
 ## 6. Atualizar
 

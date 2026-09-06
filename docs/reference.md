@@ -296,8 +296,8 @@ the log, and on the "Model:" line under Option.
 ## What stays on disk
 
 Everything in `~/Library/Application Support/NeverType/` is unencrypted.
-Encrypting it would put the key on the same machine, next to the file, within
-reach of anyone who can already read the file.
+The app does not implement encryption at rest. Access depends on the macOS
+account and filesystem protections.
 
 | | |
 |---|---|
@@ -305,7 +305,7 @@ reach of anyone who can already read the file.
 | `last.wav` | the last dictation's audio, overwritten on every recording. Cancelling a dictation leaves no file. The transcription runs on the samples in memory, and the WAV is a debugging artifact |
 | `nevertype.log` | the session's diagnostics, truncated on every launch. It keeps the time and size of each transcription, never the text |
 | `vocabulario.json` | the terms and replacements you entered |
-| `models/` | the model, 547 MB |
+| `models/` | the model, 547 MB, and its local `.sha256` receipt |
 
 **Clear History** deletes `historico.json` and `last.wav`, the two files that
 hold what you said.
@@ -331,13 +331,15 @@ and a test fixture from disk.
 
 A Definition of Done item on each spec covers the claim, in the sources and in
 the binary. CI builds the app and runs the suite, and it runs neither of those
-two checks, so the repository keeps no record of either having run.
+two checks. The source inspection above is a manual snapshot, not continuous
+verification.
 
 The scripts do download, which is a separate thing. `setup-bench.sh` curls the
 three checkpoints from OpenAI's CDN and the ggml converter, `build-app.sh`
 clones whisper.cpp at its pinned commit, and `update.sh` runs `git fetch` and
-`git pull`. You run those by hand, to build or to update, and the model is the
-project's only download. The installed app runs none of them.
+`git pull`. Setup also installs Homebrew packages and Python dependencies and clones
+Whisper. These network operations run when you invoke the setup, build or update
+scripts. The installed app runs none of them.
 
 The binary side keeps no record. `Package.swift` links Foundation, Metal,
 MetalKit and Accelerate plus six static whisper and ggml archives, and names no
@@ -401,7 +403,7 @@ the two permissions.
 | `Sources/NeverTypeCore/` | audio conversion, key, transcription, insertion, vocabulary, history, tones and login item: the testable part |
 | `Sources/NeverType/` | menu bar app: icon, menu, pill, vocabulary window |
 | `scripts/setup-bench.sh` | builds the three ggml models from OpenAI's checkpoints (requires Homebrew and python3) |
-| `scripts/fetch-model.sh` | validates and installs the model from `models/` into its final place |
+| `scripts/fetch-model.sh` | checks model magic, size and the local SHA-256 receipt before installing from `models/` |
 | `scripts/record-fixture.sh` | records bench fixtures in 16 kHz mono (requires `ffmpeg`) |
 | `scripts/bench.sh` | measures latency and quality per model |
 | `scripts/build-app.sh` | compiles static whisper, assembles and signs |
