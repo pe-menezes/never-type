@@ -15,116 +15,111 @@
   <a href="https://github.com/pe-menezes/never-type/actions/workflows/ci.yml"><img src="https://github.com/pe-menezes/never-type/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 </p>
 
-Hold a key in any application, speak, release, and the text appears where the
-cursor is.
+Hold **Right ⌘**, speak in Portuguese, and release to paste the transcription
+at the cursor. NeverType runs in the menu bar and transcribes on your Mac using
+Whisper, with no network access during use.
 
-Around 600 ms per dictation with the model warm, on a MacBook Pro M4 Pro.
+Short dictations measured about **600 ms** with the model warm on a MacBook Pro
+M4 Pro. See the [model comparison](docs/model-choice.md) for measurements and
+coverage.
 
-[`docs/pitfalls.md`](docs/pitfalls.md) records the 28 mistakes this project made,
-each with the cost it was measured to have. [`docs/INSTALL.md`](docs/INSTALL.md)
-is written for a coding agent to execute: send it the link to this repository and
-ask it to follow that file.
+## Features
 
-## What it does
+- Hold to record, or double-tap to speak hands-free. Tap again to finish; Esc
+  discards the recording.
+- Choose a supported modifier key, Fn or an extra mouse button from the menu.
+  An optional second key starts hands-free recording with one tap.
+- A floating indicator shows recording activity and transcription progress.
+  Click it to open the menu, including in full-screen apps.
+- Copy recent transcriptions, add vocabulary hints and text replacements, or
+  enable launch at login.
 
-Hold **Right ⌘**, speak, release. The transcription is pasted at the cursor.
-Two quick taps lock the recording on so you can speak with the key up, one more
-tap ends it, and Esc discards. The overlay stays a 34 px orb with the NeverType
-mark. Its three bars move with the voice while listening, including hands-free,
-then collapse into moving dots beside the unchanged cursor while writing text.
+Wait for transcription to finish before starting another dictation.
 
-The menu bar menu offers Right ⌘, ⌥ and ⌃ as quick picks, and **Other key or
-mouse button…** lets you press the key you want: a modifier on either side, Fn,
-or a mouse button from the third on. What cannot be the key is refused on the
-spot, with the reason on screen, ⇧ and Left ⌘ among them. A second key can lock
-hands-free with one tap. The menu also holds the last 30 transcriptions and a
-custom vocabulary. Clicking the orb opens that same menu, which is how you reach
-it in full screen.
-[`docs/reference.md`](docs/reference.md) goes through every item, including the
-table of accepted and refused keys.
+The [reference](docs/reference.md) covers controls, accepted keys and settings.
 
 ## Requirements
 
-- macOS 14 or later on Apple Silicon. The inference runs on the GPU through
-  Metal. On the CPU the same inference is about 11× slower
-  ([`docs/pitfalls.md`](docs/pitfalls.md)), which makes dictation unusable.
-- Xcode Command Line Tools, which carry the Swift 6 toolchain the build uses.
-  Full Xcode is optional.
-- `cmake`, to build (`brew install cmake`).
-- The model, 547 MB, which does not ship in the `.app`. A script downloads and
-  converts it, or you copy the file from a machine that already has it.
-- Portuguese speech only.
+- Apple Silicon Mac running macOS 14 or later.
+- Swift 6.0.3 or later, supplied by Xcode Command Line Tools or Xcode.
+- `cmake` for the build. Model setup also needs Homebrew and Python 3.
+- The 547 MB Whisper model, stored separately from the app.
 
 ## Install
 
-The repository ships source only, and each installation compiles on its own
-machine.
+NeverType currently ships as source. Installation compiles the app locally and
+creates a local signing certificate.
+
+With the prerequisites installed:
 
 ```bash
-bash scripts/build-app.sh   # the first build takes a few minutes
-bash scripts/install.sh
+git clone https://github.com/pe-menezes/never-type.git
+cd never-type
+bash scripts/setup-bench.sh  # downloads dependencies and converts three models
+bash scripts/fetch-model.sh  # installs the model NeverType uses
+bash scripts/install.sh     # builds, signs, installs and opens the app
 ```
 
-On the first launch macOS asks for Microphone and Accessibility. The app needs
-both. Until Accessibility is granted, a dictation attempt is blocked before
-recording and an alert offers to open the right System Settings page.
+Model setup can take a while and downloads more than the final 547 MB model.
+If you already have a compatible model file, the
+[installation guide](docs/INSTALL.md#3-the-model) explains how to use it.
 
-[`docs/INSTALL.md`](docs/INSTALL.md) has the whole walkthrough, the model
-included, and it was written for a coding agent to execute: send it the link to
-this repository and ask it to follow that file.
+Grant **Microphone** and **Accessibility** when macOS asks, then dictate into a
+text field to verify the installation. The [installation guide](docs/INSTALL.md)
+has the complete walkthrough, troubleshooting and update instructions; a coding
+agent can follow it too.
 
 ## Privacy
 
-The app opens no network connection at run time. The only download in the
-project is the model, fetched by a script you run by hand.
+The installed app makes no network requests. Build, model setup and update
+scripts download source code, dependencies and model files when you run them.
 
-The app writes to `~/Library/Application Support/NeverType/`, unencrypted: the
-last 30 transcriptions (`historico.json`), the audio of the last dictation
-(`last.wav`), a log with the time and size of each transcription, and your
-vocabulary. **Clear History**, in the menu, deletes the first two. Insertion goes
-through the clipboard, so the text sits there for 0.6 s, marked as concealed,
-before your previous contents come back.
+NeverType stores the last 30 transcriptions, the last dictation's audio, your
+vocabulary and a diagnostic log in `~/Library/Application Support/NeverType/`,
+without app-level encryption. The log records transcription timing and size,
+not the text. **Clear History** deletes the stored transcriptions and audio.
 
-The no-network claim is checked by hand. CI builds the app and runs the suite on
-three toolchains, including the oldest one supported, and it runs neither of
-those two checks. [`docs/reference.md`](docs/reference.md) gives the grep, the
-two commands for the binary side, and what nobody has run.
+Insertion uses the clipboard. By default, the previous clipboard contents are
+restored after 0.6 s, provided the clipboard has not changed in the meantime.
+If automatic pasting is blocked, the transcription stays on the clipboard for
+manual pasting. Dictated text is marked as concealed, but clipboard managers
+that ignore that mark can retain it. Explicitly copying a history item leaves
+it on the clipboard.
+
+The network claim is based on manual source inspection; CI does not verify it.
+The [reference](docs/reference.md#the-check-behind-no-network-at-run-time)
+documents the checks and their limits.
 
 ## Limitations
 
-- Another language means editing `Transcriber.swift` and rebuilding, and quality
-  outside Portuguese was never measured
-  ([`docs/model-choice.md`](docs/model-choice.md)).
-- A dictation past 30 s pays for a second Whisper window: 31 s measured 1299 ms,
-  and from there the wait grows by roughly a second per window: 404 s of speech
-  took 13 s. The orb's border fills as a progress ring while it works.
-- A Bluetooth headset records at 8 kHz, which macOS switches to when the
-  microphone opens, and recognition gets worse. The Mac's own microphone avoids
-  the downgrade.
-- The app is signed with a local certificate, so anyone who already runs code as
-  you on this machine can sign as NeverType and inherit its Microphone and
-  Accessibility permissions ([`docs/reference.md`](docs/reference.md)).
+- Portuguese is the configured language. Using another language requires a code
+  change and rebuild; recognition quality outside Portuguese has not been measured.
+- Longer recordings take longer to transcribe: 404 s of speech measured about
+  13 s. The floating indicator shows progress during transcription.
+- Bluetooth microphone modes can reduce audio quality. Use the Mac microphone
+  if headset recordings produce poor results.
+- The local signing certificate can be used by other code running as your user
+  to impersonate NeverType and inherit its permissions. See
+  [signing](docs/reference.md#signing-and-what-it-costs).
 
 ## Development
 
 ```bash
-bash scripts/build-app.sh     # compiles whisper.cpp into vendor/
-swift build && swift test     # 179 tests, in swift-testing
+bash scripts/build-app.sh  # builds the native whisper.cpp dependency and app
+swift build && swift test # swift-testing
 ```
 
-`vendor/` is not versioned. Without it the build fails with `could not build
-Objective-C module 'CWhisper'`, a message that does not say the cause.
+The generated `vendor/` directory is required before running SwiftPM directly.
+Model and audio integration tests are conditional; a passing run without those
+assets does not exercise transcription.
 
-- [`docs/pitfalls.md`](docs/pitfalls.md): the 29 things that broke here, with the
-  measured cost of each.
-- [`docs/model-choice.md`](docs/model-choice.md): why `large-v3-turbo`, with the
-  numbers.
-- [`docs/launch-at-login.md`](docs/launch-at-login.md): what opening at login
-  costs, measured.
-- [`docs/reference.md`](docs/reference.md): the menu, the files on disk, the two
-  settings with no menu item, the signing.
+- [Technical reference](docs/reference.md): architecture, controls and storage.
+- [Model choice](docs/model-choice.md): quality and latency measurements.
+- [Pitfalls](docs/pitfalls.md): failures encountered and their fixes.
+- [Launch at login](docs/launch-at-login.md): startup measurements.
+- [Bench fixtures](fixtures/README.md): recording samples for local evaluation.
 
 ## License
 
 MIT. Depends on [whisper.cpp](https://github.com/ggml-org/whisper.cpp) (MIT) and
-on OpenAI's Whisper model (MIT, code and weights).
+OpenAI's Whisper model (MIT, code and weights).

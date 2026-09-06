@@ -79,9 +79,35 @@ struct VocabularyTests {
     func specialCharactersAreLiteral() {
         let (v, url) = fresh()
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
-        v.setReplacements([Replacement(from: "whisper.cpp", to: "whisper.cpp")])
-        #expect(v.apply(to: "uses whisperXcpp here") == "uses whisperXcpp here",
+        v.setReplacements([Replacement(from: "whisper.cpp", to: "$1\\engine")])
+        #expect(v.apply(to: "whisper.cpp and whisperXcpp") == "$1\\engine and whisperXcpp",
                 "the dot cannot become a wildcard and match the X")
+    }
+
+    @Test("terms can start or end with punctuation", arguments: ["C++", "C#", ".NET"])
+    func matchesTermsWithSymbols(term: String) {
+        let (v, url) = fresh()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        v.setReplacements([Replacement(from: term, to: "technology")])
+        #expect(v.apply(to: "\(term) e (\(term.lowercased())), \(term).")
+                == "technology e (technology), technology.")
+    }
+
+    @Test("symbol terms do not match inside identifiers or accented words", arguments: ["C++", "C#", ".NET"])
+    func symbolTermsRespectWordEdges(term: String) {
+        let (v, url) = fresh()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        v.setReplacements([Replacement(from: term, to: "technology")])
+        let text = "prefix\(term) \(term)suffix _\(term) \(term)2 é\(term) \(term)á"
+        #expect(v.apply(to: text) == text)
+    }
+
+    @Test("a combining accent belongs to the surrounding word")
+    func combiningAccentPreventsPartialMatch() {
+        let (v, url) = fresh()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        v.setReplacements([Replacement(from: "cafe", to: "coffee")])
+        #expect(v.apply(to: "cafe\u{301} e cafe") == "cafe\u{301} e coffee")
     }
 
     @Test("a replacement with an empty source or target does not go in")

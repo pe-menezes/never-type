@@ -57,6 +57,12 @@ words, and it did it without repeating a single sentence, so the text gave no
 sign of the loss. See
 `.vibeflow/hotfixes/2026-09-05-long-dictation-loses-and-repeats-speech.md`.
 
+Record a five-minute clip with:
+
+```bash
+scripts/record-fixture.sh 04-long-dictation 300
+```
+
 Any continuous recording above four minutes works here. The test measures
 characters per second of audio and never reads the content, so there is no
 transcript of this fixture anywhere and a failure prints numbers only.

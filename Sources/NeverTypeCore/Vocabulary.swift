@@ -71,7 +71,9 @@ public final class Vocabulary {
     public func apply(to text: String) -> String {
         var output = text
         for replacement in replacements {
-            let pattern = "\\b" + NSRegularExpression.escapedPattern(for: replacement.from) + "\\b"
+            // Look outside the literal so punctuation at either end can match.
+            // Unicode word characters still prevent matches inside other words.
+            let pattern = "(?<!\\w)" + NSRegularExpression.escapedPattern(for: replacement.from) + "(?!\\w)"
             guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { continue }
             let range = NSRange(output.startIndex..., in: output)
             output = regex.stringByReplacingMatches(

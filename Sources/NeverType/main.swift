@@ -161,6 +161,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let menu = NSMenu()
     private let overlay = RecordingOverlay()
     private let transcription = TranscriptionService()
+    private var transcriptionSession = TranscriptionSession()
     private var modelStatus = "loading model…"
 
     /// The last transcription, kept for the menu.
@@ -343,8 +344,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .pressed:
             switch DictationAttempt.decide(
                 microphoneAuthorized: micAuthorized,
-                accessibilityAuthorized: HotkeyMonitor.hasAccessibilityPermission
+                accessibilityAuthorized: HotkeyMonitor.hasAccessibilityPermission,
+                isTranscribing: transcriptionSession.isTranscribing
             ) {
+            case .waitForTranscription:
+                log("transcription in progress: wait for the result before recording again")
+                return false
             case .showAccessibilityWarning:
                 render(.blocked)
                 log("Accessibility not granted: recording blocked before capturing audio")
@@ -387,16 +392,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // whole transcription with no sign of what was happening.
             overlay.transcribing()
             let samples = recorder.lastSamples
+            guard let session = transcriptionSession.begin() else { return false }
             log("recorded: \(samples.count) samples (\(String(format: "%.1f", Double(samples.count) / 16_000)) s)")
             Task {
                 // The closure is called on the actor's thread, so the hop to
                 // main is written out and checked by the compiler instead of
                 // being assumed. Same shape as `AudioRecorder.onLevel`.
                 let report: @Sendable (Int) -> Void = { percent in
-                    Task { @MainActor in self.overlay.progress(percent: percent) }
+                    Task { @MainActor in
+                        guard self.transcriptionSession.accepts(session) else { return }
+                        self.overlay.progress(percent: percent)
+                    }
                 }
-                switch await self.transcription.transcribe(samples, prompt: self.vocabulary.prompt,
-                                                           onProgress: report) {
+                let result = await self.transcription.transcribe(samples, prompt: self.vocabulary.prompt,
+                                                                onProgress: report)
+                guard self.transcriptionSession.finish(session) else { return }
+                switch result {
                 case .success(let result):
                     // The replacements run here, on the finished text: they are
                     // deterministic and do not go through the model.
@@ -505,7 +516,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func flashIdle() {
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(2))
-            if !self.recorder.isRecording { self.render(.idle) }
+            if !self.recorder.isRecording && !self.transcriptionSession.isTranscribing {
+                self.render(.idle)
+            }
         }
     }
 

@@ -119,27 +119,13 @@ public enum TextInjector {
     /// or Maccy's history and survive the restoration.
     static let concealed = NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType")
 
-    /// Generation of the insertion in progress, and the snapshot still to be restored.
-    ///
-    /// Without this the restoration was unconditional and destroyed user data in
-    /// two ways, both reproduced in audit:
-    ///
-    /// 1. **Any write to the pasteboard in the 600 ms after a dictation was
-    ///    reverted** — a ⌘C of yours, Universal Clipboard, a clipboard manager.
-    /// 2. **Two dictations less than 600 ms apart** left the first one's text in
-    ///    place of the original contents, permanently: the second `insert`
-    ///    snapshotted the pasteboard already contaminated by the first.
-    ///
-    /// The generation makes only the most recent restoration count; the inherited
-    /// snapshot makes it restore the **original** contents, not the intermediate
-    /// ones; and the `changeCount` makes it give up if someone wrote in between.
-    /// Indexed by pasteboard: the pending snapshot belongs to a specific
-    /// pasteboard, not to the process. In production only `.general` exists, but
-    /// treating it as global state made two distinct pasteboards interfere with
-    /// each other — which the parallel tests exposed right away.
+    /// A pending restoration owns one pasteboard write and its saved contents.
+    /// The UUID keeps expired callbacks distinct after failure or cancellation;
+    /// the change count detects external writes before either inheritance or restore.
     private struct Pending {
-        var generation: Int
-        var snapshot: Snapshot
+        let generation: UUID
+        let snapshot: Snapshot
+        let changeCount: Int
     }
     @MainActor private static var pending: [NSPasteboard.Name: Pending] = [:]
 
@@ -160,6 +146,7 @@ public enum TextInjector {
     /// still keeps out of it.
     @MainActor
     private static func leave(_ text: String, on pasteboard: NSPasteboard) {
+        pending[pasteboard.name] = nil
         pasteboard.clearContents()
         let item = NSPasteboardItem()
         item.setString(text, forType: .string)
@@ -167,6 +154,9 @@ public enum TextInjector {
         _ = pasteboard.writeObjects([item])
     }
 
+    /// Inserts through the clipboard and restores the previous contents after a delay.
+    /// System queries and restoration scheduling can be supplied by callers;
+    /// scheduled callbacks must run on the main actor.
     @MainActor
     @discardableResult
     public static func insert(_ text: String,
@@ -174,7 +164,8 @@ public enum TextInjector {
                               paste: (() -> Bool)? = nil,
                               secureInput: (() -> Bool)? = nil,
                               focus: (() -> PasteTarget.Decision)? = nil,
-                              readBack: ((NSPasteboard) -> String?)? = nil) -> Outcome {
+                              readBack: ((NSPasteboard) -> String?)? = nil,
+                              scheduleRestore: ((TimeInterval, @escaping @MainActor () -> Void) -> Void)? = nil) -> Outcome {
         guard !text.isEmpty else { return .failed("empty text") }
 
         // Secure input on: the app does not post the ⌘V. The original premise —
@@ -209,12 +200,17 @@ public enum TextInjector {
         }
 
         let key = pasteboard.name
-        let myGeneration = (pending[key]?.generation ?? 0) + 1
+        let myGeneration = UUID()
 
-        // Inherits the snapshot of a restoration still pending: snapshotting now
-        // would capture the previous dictation's text, not the user's contents.
-        let snapshot = pending[key]?.snapshot ?? Snapshot.capture(from: pasteboard)
-        pending[key] = Pending(generation: myGeneration, snapshot: snapshot)
+        // Inherit only while our previous write still owns the pasteboard.
+        // A copy between insertions becomes the new contents to restore.
+        let previous = pending.removeValue(forKey: key)
+        let snapshot: Snapshot
+        if let previous, previous.changeCount == pasteboard.changeCount {
+            snapshot = previous.snapshot
+        } else {
+            snapshot = Snapshot.capture(from: pasteboard)
+        }
 
         pasteboard.clearContents()
         let item = NSPasteboardItem()
@@ -226,23 +222,10 @@ public enum TextInjector {
         }
 
         let stamp = pasteboard.changeCount
+        pending[key] = Pending(generation: myGeneration, snapshot: snapshot, changeCount: stamp)
 
-        // The bytes come back before the ⌘V goes out.
-        //
-        // espanso waits 300 ms at this point (`pre_paste_delay`), on the grounds
-        // that firing the paste before the content is on the clipboard makes the
-        // operation fail. Here there is nothing to wait for: `writeObjects` is
-        // synchronous and its result is checked above, and the item carries
-        // concrete bytes, with no data provider in this file to defer anything to
-        // a later callback. So this asks the pasteboard for the text and compares
-        // it, which costs one round trip to the pasteboard server. A 300 ms wait
-        // would be half the cost of the whole dictation (~600 ms, backlog L1) and
-        // would still prove nothing.
-        //
-        // Failing here means the pasteboard was cleared and our text did not
-        // land, so a ⌘V would paste whatever is sitting there, which is the very
-        // damage D1 describes. The person's contents go back, under the same
-        // `changeCount` guard the scheduled restoration uses.
+        // Confirm the payload before posting a paste. A failed read restores the
+        // saved contents only while our write still owns the pasteboard.
         guard (readBack ?? stringOnPasteboard)(pasteboard) == text else {
             if pasteboard.changeCount == stamp { snapshot.restore(to: pasteboard) }
             pending[key] = nil
@@ -252,18 +235,21 @@ public enum TextInjector {
         // Read once: the timer and whoever asks `restoreDelay` afterwards have to
         // agree, and the key can change between two dictations.
         let delay = restoreDelay
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-            MainActor.assumeIsolated {
-                // A newer insertion took over: it restores the snapshot.
-                guard pending[key]?.generation == myGeneration else { return }
-                // Someone wrote to the pasteboard after us. Restoring now would
-                // erase what that person just copied.
-                guard pasteboard.changeCount == stamp else {
-                    pending[key] = nil
-                    return
-                }
-                snapshot.restore(to: pasteboard)
+        let restore: @MainActor () -> Void = {
+            // Only the current insertion may restore, even after a failed insert.
+            guard pending[key]?.generation == myGeneration else { return }
+            guard pasteboard.changeCount == stamp else {
                 pending[key] = nil
+                return
+            }
+            snapshot.restore(to: pasteboard)
+            pending[key] = nil
+        }
+        if let scheduleRestore {
+            scheduleRestore(delay, restore)
+        } else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                MainActor.assumeIsolated { restore() }
             }
         }
 
