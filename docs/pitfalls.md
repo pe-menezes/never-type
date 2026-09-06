@@ -353,6 +353,32 @@ transcriptions and two ⌘V. `flock` solves it in one indivisible step.
 
 ## Audio
 
+### Silence at the end becomes a sentence nobody said
+
+Whisper does not treat silence as an absolute constraint. It predicts plausible
+text, and a quiet final window can become a short continuation of the sentence
+before it. This appeared repeatedly in daily use, usually as a final question.
+
+Measured 2026-09-06 on one 28.6 s dictation. The recording's speech ended with
+`De verdade?` and its last 2.2 s were silence and room noise. The text saved by
+the app ended with `De verdade? O que é isso?`. Transcribing the WAV again
+dropped the invented question, which also showed that the decoder result can
+change after tiny differences in input precision: the app reads float samples
+from memory and the WAV holds their 16-bit copy.
+
+Changing a text threshold cannot prove which words had sound behind them. The
+fix runs Silero VAD, already supported by the pinned whisper.cpp, before the
+decoder. The 864 KB VAD model ships inside the signed app. It is checked by
+magic, size and a pinned SHA-256 during the build. A 200 ms pad protects the
+edges of speech, and silences shorter than 500 ms remain natural pauses.
+
+The warm-up bypasses VAD deliberately. Its input is one second of silence, so
+VAD would return before Whisper ran and the first real dictation would pay the
+decoder's warm-up cost again.
+
+**Rule:** remove non-speech before asking a generative speech model for text.
+An empty decoding is stronger evidence than a plausible sentence over silence.
+
 ### The converter holds back samples, and the end of the speech disappears
 
 `AVAudioConverter` keeps samples inside the resampling filter between calls.

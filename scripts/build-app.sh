@@ -208,6 +208,8 @@ ok "$IDENTITY"
 
 VENDOR="$REPO_ROOT/vendor/whisper"
 WHISPER_TAG="v1.9.2"
+VAD_MODEL="ggml-silero-v6.2.0.bin"
+VAD_MODEL_SHA256="2aa269b785eeb53a82983a20501ddf7c1d9c48e33ab63a41391ac6c9f7fb6987"
 # The exact commit, not just the tag.
 #
 # `v1.9.2` is a lightweight tag, a pointer that the maintainer, or whoever
@@ -277,6 +279,7 @@ build_whisper_static() {
   done
   cp "$src/include/whisper.h" "$VENDOR/include/"
   cp "$src/ggml/include/"*.h "$VENDOR/include/"
+  cp "$src/models/for-tests-silero-v6.2.0-ggml.bin" "$VENDOR/$VAD_MODEL"
   # Manifest of what was produced. Without it, reusing vendor/ on a later run
   # would trust the .a files just because they exist, and this is code that
   # goes inside the binary that holds Accessibility.
@@ -286,7 +289,9 @@ build_whisper_static() {
 
 vendor_intact() {
   [ -f "$VENDOR/MANIFEST" ] && [ -f "$VENDOR/include/whisper.h" ] || return 1
-  ( cd "$VENDOR/lib" && shasum -a 256 --status -c "$VENDOR/MANIFEST" ) 2>/dev/null
+  ( cd "$VENDOR/lib" && shasum -a 256 --status -c "$VENDOR/MANIFEST" ) 2>/dev/null || return 1
+  [ -f "$VENDOR/$VAD_MODEL" ] || return 1
+  [ "$(shasum -a 256 "$VENDOR/$VAD_MODEL" | cut -d' ' -f1)" = "$VAD_MODEL_SHA256" ]
 }
 
 info "Checking static whisper.cpp"
@@ -325,6 +330,7 @@ info "Assembling $APP"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/NeverType"
+cp "$VENDOR/$VAD_MODEL" "$APP/Contents/Resources/$VAD_MODEL"
 
 # Keep the source icon as a small, reviewable vector. The app bundle still needs
 # an icns file for Finder and System Settings, so the built-in macOS tools render

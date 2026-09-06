@@ -96,6 +96,23 @@ struct ModelStoreTests {
         #expect(path.hasSuffix("ggml-large-v3-turbo-q5_0.bin"))
     }
 
+    @Test("the bundled voice activity model is structurally validated")
+    func validatesVoiceActivityModel() throws {
+        let url = ModelStore.voiceActivityModelURL
+        #expect(ModelStore.isValidVoiceActivityModel(url),
+                "the VAD model needs ggml magic and its full 864 KB, got \(url.path)")
+
+        let truncated = FileManager.default.temporaryDirectory
+            .appendingPathComponent("truncated-vad-\(UUID().uuidString).bin")
+        defer { try? FileManager.default.removeItem(at: truncated) }
+        try Data([0x6c, 0x6d, 0x67, 0x67]).write(to: truncated)
+        let handle = try FileHandle(forWritingTo: truncated)
+        try handle.truncate(atOffset: UInt64(ModelStore.minimumVoiceActivityBytes - 1))
+        try handle.close()
+        #expect(!ModelStore.isValidVoiceActivityModel(truncated),
+                "ggml magic cannot approve a truncated VAD model")
+    }
+
     @Test("a missing model fails with an instruction, not a raw error")
     func missingModelExplainsItself() {
         let absent = FileManager.default.temporaryDirectory
@@ -144,6 +161,19 @@ func transcriptionTestsRunnable() -> Bool {
 @Suite("Local transcription", .enabled(if: transcriptionTestsRunnable()))
 struct TranscriberTests {
 
+    /// The private recording that exposed this defect is not a fixture. The
+    /// repeatable property is what matters: silence alone cannot become words
+    /// at the end of a dictation once VAD is enabled.
+    @Test("trailing silence does not become an invented final sentence")
+    func trailingSilenceProducesNoText() throws {
+        let transcriber = try Transcriber()
+        let silence = [Float](repeating: 0, count: 3 * 16_000)
+        let text = try transcriber.transcribe(silence, prompt: "Claude.")
+        #expect(text.isEmpty, "three seconds of silence became: \(text)")
+        #expect(transcriber.voiceActivitySegmentCount == 0,
+                "VAD classified silence as speech")
+    }
+
     @Test("transcribes a recorded fixture")
     func transcribesRealAudio() throws {
         let fixture = try #require(firstFixture())
@@ -155,6 +185,8 @@ struct TranscriberTests {
 
         // The assertion is about the mechanism, not about specific words: the
         // content depends on what whoever cloned recorded.
+        #expect(transcriber.voiceActivitySegmentCount > 0,
+                "the transcription ran without a speech region from VAD")
         #expect(!text.isEmpty, "the transcription cannot come back empty")
         #expect(text.count < samples.count / 40,
                 "text out of proportion to the audio suggests hallucination: \(text.count) chars")

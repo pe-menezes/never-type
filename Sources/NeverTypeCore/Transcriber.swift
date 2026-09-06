@@ -4,6 +4,7 @@ import Foundation
 /// Where the model lives once installed.
 public enum ModelStore {
     public static let fileName = "ggml-large-v3-turbo-q5_0.bin"
+    public static let voiceActivityFileName = "ggml-silero-v6.2.0.bin"
 
     public static var directory: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -11,6 +12,26 @@ public enum ModelStore {
     }
 
     public static var modelURL: URL { directory.appendingPathComponent(fileName) }
+
+    /// The VAD model ships inside the app. During development it comes from the
+    /// verified whisper.cpp vendor directory that `build-app.sh` produces.
+    ///
+    /// Silence at the end of a 28.6 s recording produced an invented final
+    /// question in daily use on 2026-09-06. Running the same audio through
+    /// Silero VAD removed the 2.2 s silent tail and the question disappeared.
+    /// Keeping this small model beside the executable also preserves the app's
+    /// no-network-at-runtime guarantee.
+    public static var voiceActivityModelURL: URL {
+        if let bundled = Bundle.main.url(
+            forResource: voiceActivityFileName.replacingOccurrences(of: ".bin", with: ""),
+            withExtension: "bin"
+        ) {
+            return bundled
+        }
+        return URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("vendor/whisper")
+            .appendingPathComponent(voiceActivityFileName)
+    }
 
     /// Size floor, in bytes: 400 MB for a 547 MB model.
     ///
@@ -27,18 +48,29 @@ public enum ModelStore {
     /// 400 holds in `install.sh`, `verify-install.sh`, `fetch-model.sh` and, for
     /// this model, in `setup-bench.sh`; changing it here requires changing it there.
     public static let minimumBytes = 400 * 1024 * 1024
+    /// 864 KB for the Silero v6.2 model bundled by the pinned whisper.cpp tree.
+    public static let minimumVoiceActivityBytes = 800 * 1024
 
     /// The ggml magic is written as a little-endian uint32, so the bytes in the
     /// file come out reversed: `6c6d6767`, which read as text becomes "lmgg",
     /// not "ggml". Checking the text directly rejects every valid model — a
     /// mistake already made in this project.
     public static func isValid(_ url: URL) -> Bool {
+        isValid(url, minimumBytes: minimumBytes)
+    }
+
+    /// Applies the same structural check to the much smaller VAD model.
+    public static func isValidVoiceActivityModel(_ url: URL) -> Bool {
+        isValid(url, minimumBytes: minimumVoiceActivityBytes)
+    }
+
+    private static func isValid(_ url: URL, minimumBytes: Int) -> Bool {
         let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int) ?? nil
         guard let size else { return false }
         guard let handle = try? FileHandle(forReadingFrom: url) else { return false }
         defer { try? handle.close() }
         let magic = (try? handle.read(upToCount: 4)) ?? Data()
-        return isValid(magic: magic, size: size)
+        return isValid(magic: magic, size: size, minimumBytes: minimumBytes)
     }
 
     /// The rule itself, separated from the disk read.
@@ -47,6 +79,10 @@ public enum ModelStore {
     /// of the suite. (The test for the on-disk path uses a sparse file for the
     /// same reason.)
     public static func isValid(magic: Data, size: Int) -> Bool {
+        isValid(magic: magic, size: size, minimumBytes: minimumBytes)
+    }
+
+    private static func isValid(magic: Data, size: Int, minimumBytes: Int) -> Bool {
         guard size >= minimumBytes else { return false }
         guard magic.count == 4 else { return false }
         return magic.map { String(format: "%02x", $0) }.joined() == "6c6d6767"
@@ -56,6 +92,8 @@ public enum ModelStore {
 public enum TranscriberError: Error, CustomStringConvertible {
     case modelMissing(URL)
     case modelInvalid(URL)
+    case voiceActivityModelMissing(URL)
+    case voiceActivityModelInvalid(URL)
     case contextFailed
     case inferenceFailed(Int32)
 
@@ -65,6 +103,10 @@ public enum TranscriberError: Error, CustomStringConvertible {
             return "model not found at \(u.path). Run scripts/fetch-model.sh"
         case .modelInvalid(let u):
             return "the file at \(u.path) is not a complete ggml model (truncated or corrupt). Run scripts/fetch-model.sh"
+        case .voiceActivityModelMissing(let u):
+            return "voice activity model not found at \(u.path). Rebuild and reinstall NeverType"
+        case .voiceActivityModelInvalid(let u):
+            return "the voice activity model at \(u.path) is truncated or corrupt. Rebuild and reinstall NeverType"
         case .contextFailed:
             return "could not load the model into memory"
         case .inferenceFailed(let code):
@@ -92,14 +134,26 @@ private final class ProgressRelay: Sendable {
 /// dispatching through a queue.
 public final class Transcriber {
     private let context: OpaquePointer
+    private let voiceActivityModelURL: URL
     public private(set) var backend: String = ""
+    /// Number of speech regions VAD found in the most recent real dictation.
+    /// Internal so the model-backed regression test can verify that filtering
+    /// ran. An empty transcript alone would also pass with VAD accidentally off.
+    private(set) var voiceActivitySegmentCount = 0
 
-    public init(modelURL: URL = ModelStore.modelURL) throws {
+    public init(modelURL: URL = ModelStore.modelURL,
+                voiceActivityModelURL: URL = ModelStore.voiceActivityModelURL) throws {
         guard FileManager.default.fileExists(atPath: modelURL.path) else {
             throw TranscriberError.modelMissing(modelURL)
         }
         guard ModelStore.isValid(modelURL) else {
             throw TranscriberError.modelInvalid(modelURL)
+        }
+        guard FileManager.default.fileExists(atPath: voiceActivityModelURL.path) else {
+            throw TranscriberError.voiceActivityModelMissing(voiceActivityModelURL)
+        }
+        guard ModelStore.isValidVoiceActivityModel(voiceActivityModelURL) else {
+            throw TranscriberError.voiceActivityModelInvalid(voiceActivityModelURL)
         }
 
         // `ggml_backend_load_all()` was removed from here.
@@ -122,6 +176,7 @@ public final class Transcriber {
             throw TranscriberError.contextFailed
         }
         context = ctx
+        self.voiceActivityModelURL = voiceActivityModelURL
 
         // Enumerates the devices ggml actually registered, instead of looking
         // for the word "metal" in a log — which was the false negative caught in
@@ -167,7 +222,10 @@ public final class Transcriber {
     public func warmUp() -> Bool {
         let silence = [Float](repeating: 0, count: 16_000)
         do {
-            _ = try transcribe(silence)
+            // VAD would correctly reject silence before Whisper runs. Warm-up
+            // needs the opposite: one actual decoder pass so the first real
+            // dictation does not pay that cost.
+            _ = try decode(silence, useVoiceActivityDetection: false)
             return true
         } catch {
             return false
@@ -180,6 +238,13 @@ public final class Transcriber {
     public func transcribe(_ samples: [Float],
                            prompt: String? = nil,
                            onProgress: (@Sendable (Int) -> Void)? = nil) throws -> String {
+        try decode(samples, prompt: prompt, onProgress: onProgress, useVoiceActivityDetection: true)
+    }
+
+    private func decode(_ samples: [Float],
+                        prompt: String? = nil,
+                        onProgress: (@Sendable (Int) -> Void)? = nil,
+                        useVoiceActivityDetection: Bool) throws -> String {
         var params = whisper_full_default_params(WHISPER_SAMPLING_GREEDY)
         params.print_progress = false
         params.print_realtime = false
@@ -204,6 +269,16 @@ public final class Transcriber {
         params.no_timestamps = false
         params.n_threads = 4
 
+        // Whisper is trained to continue plausible text and can do exactly
+        // that over silence. A 2.2 s tail repeatedly became a question the
+        // speaker never said. Silero removes non-speech before decoding. Half
+        // a second is kept as a natural pause boundary, and 200 ms of padding
+        // protects quiet consonants at both edges of every detected region.
+        params.vad = useVoiceActivityDetection
+        params.vad_params.min_speech_duration_ms = 100
+        params.vad_params.min_silence_duration_ms = 500
+        params.vad_params.speech_pad_ms = 200
+
         // Progress, from 0 to 100, so a long dictation is not a still dot.
         //
         // whisper calls this on the thread that called `whisper_full`, inside
@@ -227,9 +302,14 @@ public final class Transcriber {
         // the call happens inside the nested `withCString` instead of keeping the
         // pointers in variables.
         func run(_ params: whisper_full_params) {
+            voiceActivitySegmentCount = 0
             let code = whisper_full(context, params, samples, Int32(samples.count))
             guard code == 0 else { failure = code; return }
-            for i in 0..<whisper_full_n_segments(context) {
+            let textSegmentCount = whisper_full_n_segments(context)
+            if useVoiceActivityDetection, textSegmentCount > 0 {
+                voiceActivitySegmentCount = Int(whisper_full_n_vad_segments(context))
+            }
+            for i in 0..<textSegmentCount {
                 text += String(cString: whisper_full_get_segment_text(context, i))
             }
         }
@@ -241,15 +321,18 @@ public final class Transcriber {
         // compiler it is still in use, and it may be released before the call
         // that reads it returns.
         withExtendedLifetime(relay) {
-            "pt".withCString { language in
-                params.language = language
-                if let prompt, !prompt.isEmpty {
-                    prompt.withCString { hint in
-                        params.initial_prompt = hint
+            voiceActivityModelURL.path.withCString { voiceActivityModelPath in
+                params.vad_model_path = useVoiceActivityDetection ? voiceActivityModelPath : nil
+                "pt".withCString { language in
+                    params.language = language
+                    if let prompt, !prompt.isEmpty {
+                        prompt.withCString { hint in
+                            params.initial_prompt = hint
+                            run(params)
+                        }
+                    } else {
                         run(params)
                     }
-                } else {
-                    run(params)
                 }
             }
         }
