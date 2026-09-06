@@ -17,8 +17,15 @@ public enum ModelStore {
     /// verified whisper.cpp vendor directory that `build-app.sh` produces.
     ///
     /// Silence at the end of a 28.6 s recording produced an invented final
-    /// question in daily use on 2026-09-06. Running the same audio through
-    /// Silero VAD removed the 2.2 s silent tail and the question disappeared.
+    /// question in daily use on 2026-09-06. That recording is gone, and
+    /// re-transcribing its 16-bit copy already dropped the question, so it
+    /// cannot serve as an A/B for this filter.
+    ///
+    /// The reproduction that can: 26 s of `fixtures/04-long-dictation.wav`
+    /// ending at a natural pause, followed by 2.2 s of low-level noise. Without
+    /// VAD the text gains `E aí,` after the last real word; with VAD it stops
+    /// at the word. Deterministic across repeated runs.
+    ///
     /// Keeping this small model beside the executable also preserves the app's
     /// no-network-at-runtime guarantee.
     public static var voiceActivityModelURL: URL {
@@ -306,15 +313,20 @@ public final class Transcriber {
             let code = whisper_full(context, params, samples, Int32(samples.count))
             guard code == 0 else { failure = code; return }
             let textSegmentCount = whisper_full_n_segments(context)
-            // Counts whatever VAD found, including nothing.
+            // Read only when this call produced text, because whisper.cpp keeps
+            // the previous VAD result when a run finds no speech.
             //
-            // This ran only when the decoder had produced text, which made
-            // `voiceActivitySegmentCount == 0` follow from an empty transcript
-            // rather than from VAD. The regression test asserts both, so its
-            // second assertion could not fail on its own. Measured with the
-            // guard removed: 1 s, 3 s and 10 s of zeros each report 0 segments,
-            // and 6.1 s of speech reports 1.
-            if useVoiceActivityDetection {
+            // In the pinned v1.9.2, `whisper_vad_filter` clears
+            // `state->vad_segments` inside the branch it takes when at least one
+            // segment was found, so a silent run leaves the earlier vector in
+            // place and `whisper_full_n_vad_segments` reports it. Measured on
+            // one reused Transcriber, which is how `main.swift` holds it: 6.1 s
+            // of speech reports 1, and the two silent dictations after it report
+            // 1 again while returning empty text.
+            //
+            // An empty transcript means VAD handed the decoder no samples, so 0
+            // is the honest answer. `silenceAfterSpeechReportsZero` pins this.
+            if useVoiceActivityDetection, textSegmentCount > 0 {
                 voiceActivitySegmentCount = Int(whisper_full_n_vad_segments(context))
             }
             for i in 0..<textSegmentCount {

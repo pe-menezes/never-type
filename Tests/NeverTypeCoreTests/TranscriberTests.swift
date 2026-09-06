@@ -153,7 +153,39 @@ func firstFixture() -> URL? {
 }
 
 func transcriptionTestsRunnable() -> Bool {
-    FileManager.default.fileExists(atPath: ModelStore.modelURL.path) && firstFixture() != nil
+    modelInstalled() && firstFixture() != nil
+}
+
+/// The model, without a recording.
+///
+/// A test that builds its own audio needs only this. Gating such a test behind
+/// `transcriptionTestsRunnable()` skipped it on every checkout that had the
+/// model and no private recording, which is every clean clone, and the defect
+/// check went unexercised while the suite reported green.
+func modelInstalled() -> Bool {
+    FileManager.default.fileExists(atPath: ModelStore.modelURL.path)
+        && ModelStore.isValidVoiceActivityModel(ModelStore.voiceActivityModelURL)
+}
+
+/// Transcription of audio the test makes itself. No fixture, so this runs on a
+/// clean clone with the model installed.
+@Suite("Silence, without a recording", .enabled(if: modelInstalled()))
+struct SilenceTests {
+
+    /// The private recording that exposed this defect is not a fixture. The
+    /// repeatable property is what matters: silence alone cannot become words
+    /// at the end of a dictation once VAD is enabled.
+    ///
+    /// What proves VAD is the reason is the mutation, not this assertion:
+    /// with `params.vad = false` and nothing else changed, three seconds of
+    /// zeros come back as `Legenda Adriana Zanotto`.
+    @Test("trailing silence does not become an invented final sentence")
+    func trailingSilenceProducesNoText() throws {
+        let transcriber = try Transcriber()
+        let silence = [Float](repeating: 0, count: 3 * 16_000)
+        let text = try transcriber.transcribe(silence, prompt: "Claude.")
+        #expect(text.isEmpty, "three seconds of silence became: \(text)")
+    }
 }
 
 /// Real transcription. Needs the model installed **and** at least one recorded
@@ -161,17 +193,26 @@ func transcriptionTestsRunnable() -> Bool {
 @Suite("Local transcription", .enabled(if: transcriptionTestsRunnable()))
 struct TranscriberTests {
 
-    /// The private recording that exposed this defect is not a fixture. The
-    /// repeatable property is what matters: silence alone cannot become words
-    /// at the end of a dictation once VAD is enabled.
-    @Test("trailing silence does not become an invented final sentence")
-    func trailingSilenceProducesNoText() throws {
+    /// Pins the guard around `whisper_full_n_vad_segments` in `decode`.
+    ///
+    /// whisper.cpp v1.9.2 keeps its previous VAD result when a run finds no
+    /// speech, and `main.swift` holds one Transcriber for the life of the app.
+    /// Without the guard, the count read after a silent dictation is the count
+    /// from the dictation before it: measured at 1 after 6.1 s of speech, then
+    /// 1 again through two silent runs that returned empty text.
+    @Test("a silent dictation does not inherit the previous count")
+    func silenceAfterSpeechReportsZero() throws {
         let transcriber = try Transcriber()
-        let silence = [Float](repeating: 0, count: 3 * 16_000)
-        let text = try transcriber.transcribe(silence, prompt: "Claude.")
-        #expect(text.isEmpty, "three seconds of silence became: \(text)")
+        let samples = try readWavSamples(try #require(firstFixture()))
+
+        let spoken = try transcriber.transcribe(samples)
+        #expect(!spoken.isEmpty, "the fixture has to transcribe for this to mean anything")
+        #expect(transcriber.voiceActivitySegmentCount > 0, "VAD found no speech in the fixture")
+
+        let silence = try transcriber.transcribe([Float](repeating: 0, count: 3 * 16_000))
+        #expect(silence.isEmpty, "three seconds of silence became: \(silence)")
         #expect(transcriber.voiceActivitySegmentCount == 0,
-                "VAD classified silence as speech")
+                "the silent dictation reported the previous dictation's segments")
     }
 
     @Test("transcribes a recorded fixture")

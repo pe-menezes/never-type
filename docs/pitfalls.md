@@ -376,6 +376,29 @@ The warm-up bypasses VAD deliberately. Its input is one second of silence, so
 VAD would return before Whisper ran and the first real dictation would pay the
 decoder's warm-up cost again.
 
+The 28.6 s recording is gone, and re-transcribing its 16-bit copy already
+dropped the question, so it never served as an A/B for the filter. The
+reproduction that does: 26 s of `fixtures/04-long-dictation.wav` from 12.2 s,
+which ends at a natural pause, plus 2.2 s of low-level noise. Without VAD the
+text gains `E aí,` after the last real word, or an ellipsis at a quieter tail
+level; with VAD it stops at the word. Deterministic across repeated runs.
+
+A synthesized voice is not a substitute here. On a `say` clip of the same
+shape, VAD **added** a repetition, `De verdade? De verdade?`, at 200, 225 and
+300 ms of padding and not at 150, 175 or 250. Truncating the same audio by hand
+to the lengths VAD produces never repeated, so it was the filter and not the
+length. It never appeared on recorded audio: 4 arbitrary 26 s slices and 5
+slices ending at a natural pause, at six padding values, showed ordinary
+punctuation variation and no repetition. The padding stayed at 200 ms on that
+evidence.
+
+`whisper_full_n_vad_segments` reports a stale count. In the pinned v1.9.2,
+`whisper_vad_filter` clears `state->vad_segments` only in the branch it takes
+when it found at least one segment, so a silent run leaves the previous run's
+vector in place. The app holds one `Transcriber` for its lifetime, so a silent
+dictation after a 400 s one reported 67 segments while returning empty text.
+`Transcriber` reads the count only when the call produced text.
+
 **Rule:** remove non-speech before asking a generative speech model for text.
 An empty decoding is stronger evidence than a plausible sentence over silence.
 
