@@ -8,7 +8,8 @@ import Testing
 /// The default of `insert` asks the Accessibility API what has the focus on the
 /// machine running the suite, and the answer depends on which window happened to
 /// be in front. The pasteboard is a named instance here for the same reason: a
-/// test may not read the state of whoever is running it.
+/// test may not read the state of whoever is running it. Secure input is also
+/// supplied explicitly so another app cannot change the path under test.
 ///
 /// A free function, isolated to no actor, so it goes in as a plain function
 /// reference the way `IsSecureEventInputEnabled` does in the code under test.
@@ -27,6 +28,74 @@ struct TextInjectorTests {
         NSPasteboard(name: NSPasteboard.Name("com.nevertype.tests.\(UUID().uuidString)"))
     }
 
+    @Test("a copy between insertions becomes the contents restored by the latest insertion")
+    func restoresCopyBetweenInsertions() {
+        let pb = scratchPasteboard()
+        defer { pb.releaseGlobally() }
+        pb.clearContents()
+        pb.setString("original", forType: .string)
+        var restorations: [@MainActor () -> Void] = []
+
+        TextInjector.insert("first", pasteboard: pb, paste: { true }, secureInput: { false },
+                            focus: somewhereToPaste, scheduleRestore: { _, restore in restorations.append(restore) })
+        pb.clearContents()
+        let copied = NSPasteboardItem()
+        copied.setString("new copy", forType: .string)
+        copied.setString("<b>new copy</b>", forType: .html)
+        pb.writeObjects([copied])
+        TextInjector.insert("second", pasteboard: pb, paste: { true }, secureInput: { false },
+                            focus: somewhereToPaste, scheduleRestore: { _, restore in restorations.append(restore) })
+
+        restorations[0]()
+        #expect(pb.string(forType: .string) == "second")
+        restorations[1]()
+        #expect(pb.string(forType: .string) == "new copy")
+        #expect(pb.string(forType: .html) == "<b>new copy</b>")
+    }
+
+    @Test("a timer from before a failed insertion cannot cancel a newer restoration")
+    func staleTimerAfterFailureDoesNotOwnNewInsertion() {
+        let pb = scratchPasteboard()
+        defer { pb.releaseGlobally() }
+        pb.clearContents()
+        pb.setString("original", forType: .string)
+        var restorations: [@MainActor () -> Void] = []
+
+        TextInjector.insert("first", pasteboard: pb, paste: { true }, secureInput: { false },
+                            focus: somewhereToPaste, scheduleRestore: { _, restore in restorations.append(restore) })
+        let failed = TextInjector.insert("failed", pasteboard: pb, paste: { true }, secureInput: { false },
+                                         focus: somewhereToPaste, readBack: { _ in nil })
+        #expect(failed == .failed("the text did not reach the clipboard"))
+        #expect(pb.string(forType: .string) == "original")
+        TextInjector.insert("third", pasteboard: pb, paste: { true }, secureInput: { false },
+                            focus: somewhereToPaste, scheduleRestore: { _, restore in restorations.append(restore) })
+
+        restorations[0]()
+        #expect(pb.string(forType: .string) == "third")
+        restorations[1]()
+        #expect(pb.string(forType: .string) == "original")
+    }
+
+    @Test("leaving a blocked dictation invalidates the previous restoration")
+    func blockedInsertionRetiresPendingTimer() {
+        let pb = scratchPasteboard()
+        defer { pb.releaseGlobally() }
+        pb.clearContents()
+        pb.setString("original", forType: .string)
+        var restorations: [@MainActor () -> Void] = []
+
+        TextInjector.insert("first", pasteboard: pb, paste: { true }, secureInput: { false },
+                            focus: somewhereToPaste, scheduleRestore: { _, restore in restorations.append(restore) })
+        TextInjector.insert("blocked", pasteboard: pb, secureInput: { true })
+        TextInjector.insert("third", pasteboard: pb, paste: { true }, secureInput: { false },
+                            focus: somewhereToPaste, scheduleRestore: { _, restore in restorations.append(restore) })
+
+        restorations[0]()
+        #expect(pb.string(forType: .string) == "third")
+        restorations[1]()
+        #expect(pb.string(forType: .string) == "blocked")
+    }
+
     @Test("the previous contents come back after the insertion")
     func restoresPreviousContent() async throws {
         let pb = scratchPasteboard()
@@ -35,7 +104,7 @@ struct TextInjectorTests {
         pb.clearContents()
         pb.setString("what was there before", forType: .string)
 
-        let outcome = TextInjector.insert("dictated text", pasteboard: pb, paste: { true },
+        let outcome = TextInjector.insert("dictated text", pasteboard: pb, paste: { true }, secureInput: { false },
                                           focus: somewhereToPaste)
         #expect(outcome == .inserted)
         #expect(pb.string(forType: .string) == "dictated text", "during the insertion the text is the dictation")
@@ -55,7 +124,7 @@ struct TextInjectorTests {
         pb.clearContents()
         pb.setString("important content", forType: .string)
 
-        let outcome = TextInjector.insert("dictated text", pasteboard: pb, paste: { false },
+        let outcome = TextInjector.insert("dictated text", pasteboard: pb, paste: { false }, secureInput: { false },
                                           focus: somewhereToPaste)
         #expect(outcome == .failed("could not send ⌘V"))
 
@@ -78,7 +147,7 @@ struct TextInjectorTests {
         original.setString(html, forType: .html)
         #expect(pb.writeObjects([original]))
 
-        TextInjector.insert("dictation", pasteboard: pb, paste: { true },
+        TextInjector.insert("dictation", pasteboard: pb, paste: { true }, secureInput: { false },
                             focus: somewhereToPaste)
         try await Task.sleep(for: .seconds(TextInjector.restoreDelay + 0.4))
 
@@ -92,7 +161,7 @@ struct TextInjectorTests {
         defer { pb.releaseGlobally() }
         pb.clearContents()
 
-        TextInjector.insert("dictation", pasteboard: pb, paste: { true },
+        TextInjector.insert("dictation", pasteboard: pb, paste: { true }, secureInput: { false },
                             focus: somewhereToPaste)
         try await Task.sleep(for: .seconds(TextInjector.restoreDelay + 0.4))
 
@@ -108,7 +177,7 @@ struct TextInjectorTests {
         defer { pb.releaseGlobally() }
         pb.clearContents()
 
-        TextInjector.insert("dictated secret", pasteboard: pb, paste: { true },
+        TextInjector.insert("dictated secret", pasteboard: pb, paste: { true }, secureInput: { false },
                             focus: somewhereToPaste)
         let types = pb.pasteboardItems?.first?.types ?? []
         #expect(types.contains(TextInjector.concealed))
@@ -125,10 +194,10 @@ struct TextInjectorTests {
         pb.clearContents()
         pb.setString("the user's original content", forType: .string)
 
-        TextInjector.insert("first dictation", pasteboard: pb, paste: { true },
+        TextInjector.insert("first dictation", pasteboard: pb, paste: { true }, secureInput: { false },
                             focus: somewhereToPaste)
         try await Task.sleep(for: .seconds(0.25))
-        TextInjector.insert("second dictation", pasteboard: pb, paste: { true },
+        TextInjector.insert("second dictation", pasteboard: pb, paste: { true }, secureInput: { false },
                             focus: somewhereToPaste)
         #expect(pb.string(forType: .string) == "second dictation")
 
@@ -147,7 +216,7 @@ struct TextInjectorTests {
         pb.clearContents()
         pb.setString("old", forType: .string)
 
-        TextInjector.insert("dictation", pasteboard: pb, paste: { true },
+        TextInjector.insert("dictation", pasteboard: pb, paste: { true }, secureInput: { false },
                             focus: somewhereToPaste)
         try await Task.sleep(for: .seconds(0.2))
 
@@ -235,6 +304,7 @@ struct TextInjectorTests {
         var pasted = false
         let outcome = TextInjector.insert("dictated text", pasteboard: pb,
                                           paste: { pasted = true; return true },
+                                          secureInput: { false },
                                           focus: { .notEditable("AXButton") })
 
         #expect(outcome == .noEditableField("AXButton"))
@@ -257,6 +327,7 @@ struct TextInjectorTests {
         var pasted = false
         let outcome = TextInjector.insert("dictated text", pasteboard: pb,
                                           paste: { pasted = true; return true },
+                                          secureInput: { false },
                                           focus: { .editable("AXTextField") })
         #expect(outcome == .inserted)
         #expect(pasted)
@@ -274,6 +345,7 @@ struct TextInjectorTests {
         var pasted = false
         let outcome = TextInjector.insert("dictated text", pasteboard: pb,
                                           paste: { pasted = true; return true },
+                                          secureInput: { false },
                                           focus: { .unknown("AXFocusedUIElement failed (-25204)") })
         #expect(outcome == .inserted)
         #expect(pasted, "an app that goes mute after a dictation looks broken")
@@ -294,6 +366,7 @@ struct TextInjectorTests {
         var pasted = false
         let outcome = TextInjector.insert("dictated text", pasteboard: pb,
                                           paste: { pasted = true; return true },
+                                          secureInput: { false },
                                           focus: somewhereToPaste,
                                           readBack: { _ in nil })
 
@@ -312,6 +385,7 @@ struct TextInjectorTests {
         var pasted = false
         let outcome = TextInjector.insert("dictated text", pasteboard: pb,
                                           paste: { pasted = true; return true },
+                                          secureInput: { false },
                                           focus: somewhereToPaste,
                                           readBack: { _ in "something else entirely" })
         #expect(outcome == .failed("the text did not reach the clipboard"))
@@ -325,7 +399,7 @@ struct TextInjectorTests {
         pb.clearContents()
         pb.setString("untouched", forType: .string)
 
-        #expect(TextInjector.insert("", pasteboard: pb, paste: { true }) == .failed("empty text"))
+        #expect(TextInjector.insert("", pasteboard: pb, paste: { true }, secureInput: { false }) == .failed("empty text"))
         #expect(pb.string(forType: .string) == "untouched")
     }
 }
