@@ -193,6 +193,18 @@ final class AutoUpdater {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/bash")
         process.arguments = ["\(repoRoot)/scripts/update.sh"]
+        // `install.sh` kills the running app by exact PID when this variable
+        // is set, instead of finding it by name with `pgrep`/`pkill -x
+        // NeverType`. Measured on 2026-09-16: that name-based lookup finds
+        // nothing when run from a child this app spawned via `Process()`,
+        // even while the app is provably still running — `install.sh`'s own
+        // comment on the block that reads this variable has the repro. `kill
+        // -TERM`/`kill -0` on an exact, already-known pid has no such blind
+        // spot, which is the whole reason this exists instead of leaving
+        // `install.sh`'s existing `pgrep` path to find this app on its own.
+        var environment = ProcessInfo.processInfo.environment
+        environment["NEVERTYPE_CALLER_PID"] = "\(ProcessInfo.processInfo.processIdentifier)"
+        process.environment = environment
         // A log file, not a `Pipe()`: on success this app's own process dies
         // partway through (see the type's doc comment), and a pipe whose
         // reader has gone away can raise SIGPIPE in the still-running script

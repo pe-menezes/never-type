@@ -56,7 +56,27 @@ info "Installing into $DEST"
 # process to actually die: with a fixed `sleep`, an app that takes a while to
 # quit survives, the single-instance guard blocks the new one, and the person
 # keeps running the old binary thinking they updated.
-if pgrep -x NeverType >/dev/null; then
+#
+# `$NEVERTYPE_CALLER_PID`, not `pgrep`/`pkill -x NeverType`, when the app
+# updates itself (`AutoUpdater.swift`, which sets this before spawning this
+# script). Measured on 2026-09-16: `pgrep -x NeverType` finds nothing when run
+# from a child this app spawned via Swift's `Process()`, even while the app is
+# provably still running — confirmed with a minimal repro, three levels of
+# `Process()`-spawned descendants deep, external `pgrep` sees the ancestor and
+# the descendant's own `pgrep` does not. `kill -TERM`/`kill -0` on the exact
+# pid the app hands over has no such blind spot in the same repro, so it is
+# what the app-triggered path uses; a human or agent running this script
+# directly has no pid to hand over and keeps the name-based path unchanged.
+if [ -n "${NEVERTYPE_CALLER_PID:-}" ]; then
+  info "Quitting the running instance"
+  kill -TERM "$NEVERTYPE_CALLER_PID" 2>/dev/null || true
+  for _ in $(seq 1 30); do
+    kill -0 "$NEVERTYPE_CALLER_PID" 2>/dev/null || break
+    sleep 0.2
+  done
+  kill -0 "$NEVERTYPE_CALLER_PID" 2>/dev/null \
+    && fail "NeverType did not quit. Quit it from the menu bar menu and run again."
+elif pgrep -x NeverType >/dev/null; then
   info "Quitting the running instance"
   pkill -x NeverType || true
   for _ in $(seq 1 30); do
