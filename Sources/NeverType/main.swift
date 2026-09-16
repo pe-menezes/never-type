@@ -160,6 +160,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let recorder = AudioRecorder(destination: lastRecordingURL())
     private let menu = NSMenu()
     private let overlay = RecordingOverlay()
+    private let autoUpdater = AutoUpdater()
     private let transcription = TranscriptionService()
     private var transcriptionSession = TranscriptionSession()
     private var modelStatus = "loading model…"
@@ -268,6 +269,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlay.showIdle()
         // After the orb exists, since one of the two hints lives on it.
         refreshHoverHint()
+
+        autoUpdater.log = { [weak self] message in self?.log(message) }
+        // Applying ends with this app's own process being killed to
+        // reinstall — never mid-recording.
+        autoUpdater.isDictationActive = { [weak self] in
+            self?.recorder.isRecording == true || self?.transcriptionSession.isTranscribing == true
+        }
+        autoUpdater.checkOnLaunchIfDue()
+        autoUpdater.scheduleDailyChecks()
 
         requestMicrophoneAccess()
         warnIfAccessibilityMissing()
@@ -691,6 +701,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         log("sounds: \(Feedback.isEnabled ? "on" : "off")")
     }
 
+    @objc private func checkForUpdatesManually() {
+        autoUpdater.checkNowInteractively()
+    }
+
+    @objc private func toggleAutoUpdate() {
+        autoUpdater.isEnabled.toggle()
+        log("auto-update: \(autoUpdater.isEnabled ? "on" : "off")")
+    }
+
     @objc private func clearHistory() {
         history.clear()
         // The audio is the other copy of what the user said, and it is the whole
@@ -797,7 +816,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             handsFreeEnabled: monitor.handsFreeEnabled,
             handsFreeKeyLabel: monitor.handsFreeTrigger?.label,
             startsAtLogin: loginState == .on,
-            loginItemNeedsApproval: loginState == .needsApproval)
+            loginItemNeedsApproval: loginState == .needsApproval,
+            updateCheckAvailable: autoUpdater.isAvailable,
+            autoUpdateEnabled: autoUpdater.isEnabled)
 
         for row in MenuLayout.rows(for: conditions) {
             menu.addItem(item(for: row))
@@ -883,6 +904,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         case .openLoginItems:
             return action("Open Login Items…", #selector(openLoginItemsSettings))
+
+        case .checkForUpdates:
+            return action("Check for Updates…", #selector(checkForUpdatesManually))
+
+        case .autoUpdate(let enabled):
+            let item = action("Automatically Check for Updates", #selector(toggleAutoUpdate))
+            item.state = enabled ? .on : .off
+            return item
 
         case .quit:
             // The app's own selector instead of `terminate:`, which is what
