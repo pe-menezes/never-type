@@ -26,7 +26,8 @@ struct MenuLayoutTests {
                             handsFree: Bool = true,
                             handsFreeKey: String? = nil,
                             startsAtLogin: Bool = false,
-                            needsApproval: Bool = false) -> MenuLayout.Conditions {
+                            needsApproval: Bool = false,
+                            iconAlwaysVisible: Bool = false) -> MenuLayout.Conditions {
         MenuLayout.Conditions(microphoneAuthorized: microphone,
                               accessibilityAuthorized: accessibility,
                               showsDiagnostics: option,
@@ -35,7 +36,8 @@ struct MenuLayoutTests {
                               handsFreeEnabled: handsFree,
                               handsFreeKeyLabel: handsFreeKey,
                               startsAtLogin: startsAtLogin,
-                              loginItemNeedsApproval: needsApproval)
+                              loginItemNeedsApproval: needsApproval,
+                              iconAlwaysVisible: iconAlwaysVisible)
     }
 
     @Test("with everything in order the menu holds nothing you cannot click")
@@ -46,6 +48,7 @@ struct MenuLayoutTests {
             .hotkey(trigger: "Right ⌘"),
             .handsFree(enabled: true),
             .vocabulary,
+            .iconAlwaysVisible(enabled: false),
             .separator,
             .copyLastTranscription,
             .history(count: 30),
@@ -71,6 +74,7 @@ struct MenuLayoutTests {
             .hotkey(trigger: "Right ⌘"),
             .handsFree(enabled: true),
             .vocabulary,
+            .iconAlwaysVisible(enabled: false),
             .separator,
             .copyLastTranscription,
             .history(count: 30),
@@ -111,6 +115,7 @@ struct MenuLayoutTests {
             .hotkey(trigger: "Right ⌘"),
             .handsFree(enabled: true),
             .vocabulary,
+            .iconAlwaysVisible(enabled: false),
             .separator,
             .startAtLogin(enabled: false),
             .quit,
@@ -149,6 +154,7 @@ struct MenuLayoutTests {
             .hotkey(trigger: "Right ⌘"),
             .handsFree(enabled: true),
             .vocabulary,
+            .iconAlwaysVisible(enabled: false),
             .separator,
             .startAtLogin(enabled: false),
             .quit,
@@ -190,6 +196,7 @@ struct MenuLayoutTests {
             .hotkey(trigger: "Right ⌘"),
             .handsFree(enabled: false),
             .vocabulary,
+            .iconAlwaysVisible(enabled: false),
             .separator,
             .startAtLogin(enabled: false),
             .quit,
@@ -223,6 +230,16 @@ struct MenuLayoutTests {
         #expect(on.contains(.gestureHint))
         #expect(!off.contains(.gestureHint), "it describes the lock, and there is no lock")
         #expect(off.contains(.trigger), "hold and speak is still what the key does")
+    }
+
+    /// A root item, not nested under Hotkey: it governs the pill everywhere,
+    /// not only while dictating with that key.
+    @Test("the icon visibility item carries its own checkmark and sits at the root")
+    func iconAlwaysVisibleCheckmark() {
+        #expect(MenuLayout.rows(for: conditions(iconAlwaysVisible: true))
+            .contains(.iconAlwaysVisible(enabled: true)))
+        #expect(MenuLayout.rows(for: conditions(iconAlwaysVisible: false))
+            .contains(.iconAlwaysVisible(enabled: false)))
     }
 
     @Test("the login item carries its own checkmark")

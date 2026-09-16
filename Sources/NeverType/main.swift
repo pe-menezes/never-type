@@ -691,6 +691,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         log("sounds: \(Feedback.isEnabled ? "on" : "off")")
     }
 
+    @objc private func toggleIconAlwaysVisible() {
+        overlay.showsWhileIdle.toggle()
+        log("icon: \(overlay.showsWhileIdle ? "always visible" : "shown only while recording")")
+    }
+
     @objc private func clearHistory() {
         history.clear()
         // The audio is the other copy of what the user said, and it is the whole
@@ -797,7 +802,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             handsFreeEnabled: monitor.handsFreeEnabled,
             handsFreeKeyLabel: monitor.handsFreeTrigger?.label,
             startsAtLogin: loginState == .on,
-            loginItemNeedsApproval: loginState == .needsApproval)
+            loginItemNeedsApproval: loginState == .needsApproval,
+            iconAlwaysVisible: overlay.showsWhileIdle)
 
         for row in MenuLayout.rows(for: conditions) {
             menu.addItem(item(for: row))
@@ -854,6 +860,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ? "Vocabulary (\(vocabulary.terms.count) terms, \(vocabulary.replacements.count) replacements)…"
                 : "Vocabulary…"
             return action(title, #selector(openVocabulary))
+
+        case .iconAlwaysVisible(let enabled):
+            let item = action("Always Show Icon", #selector(toggleIconAlwaysVisible))
+            item.state = enabled ? .on : .off
+            return item
 
         case .copyLastTranscription:
             let item = action("Copy Last Transcription", #selector(copyLastTranscript))
