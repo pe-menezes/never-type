@@ -802,7 +802,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             handsFreeEnabled: monitor.handsFreeEnabled,
             handsFreeKeyLabel: monitor.handsFreeTrigger?.label,
             startsAtLogin: loginState == .on,
-            loginItemNeedsApproval: loginState == .needsApproval)
+            loginItemNeedsApproval: loginState == .needsApproval,
+            iconAlwaysVisible: overlay.showsWhileIdle)
 
         for row in MenuLayout.rows(for: conditions) {
             menu.addItem(item(for: row))
@@ -860,6 +861,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 : "Vocabulary…"
             return action(title, #selector(openVocabulary))
 
+        case .iconAlwaysVisible(let enabled):
+            let item = action("Always Show Icon", #selector(toggleIconAlwaysVisible))
+            item.state = enabled ? .on : .off
+            return item
+
         case .copyLastTranscription:
             let item = action("Copy Last Transcription", #selector(copyLastTranscript))
             if let lastTranscript { item.toolTip = preview(of: lastTranscript) }
@@ -915,9 +921,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let soundItem = action("Sounds", #selector(toggleSound))
         soundItem.state = Feedback.isEnabled ? .on : .off
         keyMenu.addItem(soundItem)
-        let iconItem = action("Always Show Icon", #selector(toggleIconAlwaysVisible))
-        iconItem.state = overlay.showsWhileIdle ? .on : .off
-        keyMenu.addItem(iconItem)
         return keyMenu
     }
 
