@@ -446,11 +446,36 @@ final class PillView: NSView {
     }
 }
 
-/// Always-visible dictation status that survives full-screen applications.
+/// Dictation status that survives full-screen applications.
 @MainActor
 final class RecordingOverlay {
     private var panel: NSPanel?
     private var pill: PillView?
+
+    private static let showsWhileIdleKey = "pillAlwaysVisible"
+
+    /// On by default: the pill is the only way back into the menu once a
+    /// full-screen app hides the menu bar (`presentMenu()` below,
+    /// `docs/pitfalls.md` "In full screen there is no menu bar"). Off, the
+    /// pill appears only while a dictation is in progress and disappears the
+    /// instant it goes back to idle — accepting that the full-screen menu
+    /// path is unreachable while idle, a deliberate trade-off, not an
+    /// oversight.
+    var showsWhileIdle: Bool {
+        get { UserDefaults.standard.object(forKey: Self.showsWhileIdleKey) as? Bool ?? true }
+        set {
+            UserDefaults.standard.set(newValue, forKey: Self.showsWhileIdleKey)
+            settleIdleVisibility()
+        }
+    }
+
+    /// Only the idle state is ever hidden: recording, latched and
+    /// transcribing already reach the screen through `show()`, which always
+    /// orders the panel front regardless of this setting.
+    private func settleIdleVisibility() {
+        guard let panel, pill?.state == .idle else { return }
+        showsWhileIdle ? panel.orderFrontRegardless() : panel.orderOut(nil)
+    }
 
     /// The status item's menu, which a click on the orb opens as well.
     ///
@@ -492,7 +517,7 @@ final class RecordingOverlay {
 
     func showIdle() {
         apply(.idle)
-        panel?.orderFrontRegardless()
+        settleIdleVisibility()
     }
 
     func show() {
@@ -517,6 +542,7 @@ final class RecordingOverlay {
     func hide() {
         pill?.activity.reset()
         apply(.idle)
+        settleIdleVisibility()
     }
 
     func push(level: Float) {

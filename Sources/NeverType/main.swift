@@ -691,6 +691,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         log("sounds: \(Feedback.isEnabled ? "on" : "off")")
     }
 
+    @objc private func toggleIconAlwaysVisible() {
+        overlay.showsWhileIdle.toggle()
+        log("icon: \(overlay.showsWhileIdle ? "always visible" : "shown only while recording")")
+    }
+
     @objc private func clearHistory() {
         history.clear()
         // The audio is the other copy of what the user said, and it is the whole
@@ -910,6 +915,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let soundItem = action("Sounds", #selector(toggleSound))
         soundItem.state = Feedback.isEnabled ? .on : .off
         keyMenu.addItem(soundItem)
+        let iconItem = action("Always Show Icon", #selector(toggleIconAlwaysVisible))
+        iconItem.state = overlay.showsWhileIdle ? .on : .off
+        keyMenu.addItem(iconItem)
         return keyMenu
     }
 
