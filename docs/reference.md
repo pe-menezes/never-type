@@ -312,8 +312,10 @@ hold what you said.
 
 Outside that folder, `UserDefaults` holds six preferences: the key, hands-free,
 the sounds toggle, the pill's position, `clipboardRestoreDelay` and
-`checkFocusBeforePaste`. None of them holds text. The `ultima-transcricao.txt`
-from earlier versions is deleted at launch.
+`checkFocusBeforePaste` — plus three for auto-update (whether it is on, the
+last check's time, and the most recently dismissed commit, so a "Later" is
+not re-asked the next day for the same one). None of them holds text. The
+`ultima-transcricao.txt` from earlier versions is deleted at launch.
 
 ## The check behind "no network at run time"
 
@@ -332,14 +334,27 @@ and a test fixture from disk.
 A Definition of Done item on each spec covers the claim, in the sources and in
 the binary. CI builds the app and runs the suite, and it runs neither of those
 two checks. The source inspection above is a manual snapshot, not continuous
-verification.
+verification, and it is stale as of `AutoUpdater.swift`: `Process(` now has
+two production hits, and they exist to reach the network — see below.
 
 The scripts do download, which is a separate thing. `setup-bench.sh` curls the
 three checkpoints from OpenAI's CDN and the ggml converter, `build-app.sh`
 clones whisper.cpp at its pinned commit, and `update.sh` runs `git fetch` and
 `git pull`. Setup also installs Homebrew packages and Python dependencies and clones
 Whisper. These network operations run when you invoke the setup, build or update
-scripts. The installed app runs none of them.
+scripts.
+
+**Exception, since `AutoUpdater.swift`:** with the auto-update setting on (the
+default) or a manual "Check for Updates…" click, the *installed app itself*
+now runs `git fetch` — and, on confirmation, `git pull` plus a rebuild — at
+run time. This is the one deliberate crack in "no network calls at run time":
+`AutoUpdater` runs exactly the `git fetch`/`git pull` that `update.sh` already
+ran when a person invoked it from a terminal, just invoked by the app instead.
+Turning the setting off in the menu (`Automatically Check for Updates`)
+removes the periodic check; nothing else in the app reaches the network
+either way, and applying an update always requires an explicit "Update Now"
+click — it is never silent. Whoever reviews this should treat it as the
+philosophy exception it is, not as a claim that got quietly out of date.
 
 The binary side keeps no record. `Package.swift` links Foundation, Metal,
 MetalKit and Accelerate plus six static whisper and ggml archives, and names no

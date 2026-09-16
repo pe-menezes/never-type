@@ -26,7 +26,9 @@ struct MenuLayoutTests {
                             handsFree: Bool = true,
                             handsFreeKey: String? = nil,
                             startsAtLogin: Bool = false,
-                            needsApproval: Bool = false) -> MenuLayout.Conditions {
+                            needsApproval: Bool = false,
+                            updateCheckAvailable: Bool = false,
+                            autoUpdateEnabled: Bool = false) -> MenuLayout.Conditions {
         MenuLayout.Conditions(microphoneAuthorized: microphone,
                               accessibilityAuthorized: accessibility,
                               showsDiagnostics: option,
@@ -35,7 +37,9 @@ struct MenuLayoutTests {
                               handsFreeEnabled: handsFree,
                               handsFreeKeyLabel: handsFreeKey,
                               startsAtLogin: startsAtLogin,
-                              loginItemNeedsApproval: needsApproval)
+                              loginItemNeedsApproval: needsApproval,
+                              updateCheckAvailable: updateCheckAvailable,
+                              autoUpdateEnabled: autoUpdateEnabled)
     }
 
     @Test("with everything in order the menu holds nothing you cannot click")
@@ -256,10 +260,36 @@ struct MenuLayoutTests {
             conditions(history: 30),
             conditions(microphone: false, accessibility: false, option: true, history: 30,
                        startsAtLogin: true, needsApproval: true),
+            conditions(updateCheckAvailable: true, autoUpdateEnabled: true),
         ]
 
         for state in states {
             #expect(MenuLayout.rows(for: state).last == .quit)
         }
+    }
+
+    /// A copy of the app with no reachable git checkout (moved, deleted, or
+    /// never built from source) has nothing to offer here, so both lines and
+    /// their separator are left out rather than shown disabled.
+    @Test("the update lines only show with a git checkout reachable")
+    func updateLinesOnlyWhenCheckoutIsReachable() {
+        let unavailable = MenuLayout.rows(for: conditions())
+        let available = MenuLayout.rows(for: conditions(updateCheckAvailable: true))
+
+        #expect(!unavailable.contains(.checkForUpdates))
+        #expect(!unavailable.contains(.autoUpdate(enabled: false)))
+        #expect(Array(available.suffix(3)) == [
+            .checkForUpdates,
+            .autoUpdate(enabled: false),
+            .quit,
+        ])
+    }
+
+    @Test("the auto-update item carries its own checkmark")
+    func autoUpdateCheckmark() {
+        #expect(MenuLayout.rows(for: conditions(updateCheckAvailable: true, autoUpdateEnabled: true))
+            .contains(.autoUpdate(enabled: true)))
+        #expect(MenuLayout.rows(for: conditions(updateCheckAvailable: true, autoUpdateEnabled: false))
+            .contains(.autoUpdate(enabled: false)))
     }
 }

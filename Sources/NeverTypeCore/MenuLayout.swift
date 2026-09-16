@@ -52,6 +52,14 @@ public enum MenuLayout {
         /// everything except the rule.
         public let startsAtLogin: Bool
         public let loginItemNeedsApproval: Bool
+        /// Whether a git checkout this app was built from is reachable at
+        /// runtime (`NeverTypeRepoRoot` in Info.plist, stamped by
+        /// `build-app.sh`, and still a valid clone). False for a copy on a
+        /// machine without that checkout, or one whose checkout moved — the
+        /// two update rows below are pointless to offer then, so they are
+        /// left out rather than shown disabled.
+        public let updateCheckAvailable: Bool
+        public let autoUpdateEnabled: Bool
 
         public init(microphoneAuthorized: Bool,
                     accessibilityAuthorized: Bool,
@@ -61,7 +69,9 @@ public enum MenuLayout {
                     handsFreeEnabled: Bool,
                     handsFreeKeyLabel: String? = nil,
                     startsAtLogin: Bool,
-                    loginItemNeedsApproval: Bool) {
+                    loginItemNeedsApproval: Bool,
+                    updateCheckAvailable: Bool,
+                    autoUpdateEnabled: Bool) {
             self.microphoneAuthorized = microphoneAuthorized
             self.accessibilityAuthorized = accessibilityAuthorized
             self.showsDiagnostics = showsDiagnostics
@@ -71,6 +81,8 @@ public enum MenuLayout {
             self.handsFreeKeyLabel = handsFreeKeyLabel
             self.startsAtLogin = startsAtLogin
             self.loginItemNeedsApproval = loginItemNeedsApproval
+            self.updateCheckAvailable = updateCheckAvailable
+            self.autoUpdateEnabled = autoUpdateEnabled
         }
     }
 
@@ -98,6 +110,10 @@ public enum MenuLayout {
         case startAtLogin(enabled: Bool)
         case loginItemTurnedOff
         case openLoginItems
+        /// A manual check, always answered — "up to date" or an offer to
+        /// update — regardless of the automatic toggle below.
+        case checkForUpdates
+        case autoUpdate(enabled: Bool)
         case quit
         case separator
     }
@@ -160,6 +176,13 @@ public enum MenuLayout {
             rows.append(.loginItemTurnedOff)
             rows.append(.openLoginItems)
         }
+
+        if conditions.updateCheckAvailable {
+            rows.append(.separator)
+            rows.append(.checkForUpdates)
+            rows.append(.autoUpdate(enabled: conditions.autoUpdateEnabled))
+        }
+
         rows.append(.quit)
         return rows
     }
