@@ -133,7 +133,7 @@ for model_path in "${MODELS[@]}"; do
       grep -E 'whisper_backend_init_gpu:' "$log" >&2 || true
       fail "inference did not run on Metal in this run.
       Any time measured this way is CPU and does not represent the app.
-      Check: brew reinstall ggml whisper-cpp"
+      Check: brew reinstall ggml whisper.cpp"
     fi
 
     # The `|| true` is not decoration: under `set -e` and `pipefail`, a grep that
