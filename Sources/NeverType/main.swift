@@ -1055,11 +1055,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         log("check for updates: fetching \(repoRoot)")
         Task { @MainActor in
             let outcome = await UpdateCheck.check(repoRoot: repoRoot, installed: Self.buildCommit)
-            self.updateCheckInProgress = false
             // The enum's own description: commits and git's words, never text
             // the person dictated.
             self.log("check for updates: \(outcome)")
             self.present(outcome, repoRoot: repoRoot)
+            // Cleared after the alert, not before it. Cleared before, a click
+            // while the alert was up started a second fetch and queued a
+            // second alert behind the first. Seen on 2026-09-18, in the hand
+            // test of the first installed build.
+            self.updateCheckInProgress = false
         }
     }
 
