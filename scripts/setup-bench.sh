@@ -1,5 +1,5 @@
 #!/bin/bash
-# Prepares the latency bench: installs whisper-cpp, proves the Metal backend
+# Prepares the latency bench: installs whisper.cpp, proves the Metal backend
 # loads, and builds the quantized ggml models in models/.
 #
 # Idempotent: running again redoes nothing that is already done.
@@ -42,12 +42,12 @@ size_mb() { echo "$(( $(stat -f%z "$1") / 1048576 ))"; }
 [ "$(uname -m)" = "arm64" ]  || fail "Apple Silicon is required: without Metal the measurement says nothing."
 command -v brew >/dev/null   || fail "Homebrew not found. Install it from https://brew.sh"
 
-info "Checking whisper-cpp"
+info "Checking whisper.cpp"
 if command -v whisper-cli >/dev/null 2>&1 && command -v whisper-quantize >/dev/null 2>&1; then
   ok "whisper-cli and whisper-quantize already installed"
 else
-  info "Installing whisper-cpp via Homebrew (brings ggml with Metal in the bottle)"
-  brew install whisper-cpp
+  info "Installing whisper.cpp via Homebrew (brings ggml with Metal in the bottle)"
+  brew install whisper.cpp
 fi
 command -v whisper-cli      >/dev/null || fail "whisper-cli did not end up on the PATH."
 command -v whisper-quantize >/dev/null || fail "whisper-quantize did not end up on the PATH."
@@ -61,9 +61,9 @@ command -v whisper-quantize >/dev/null || fail "whisper-quantize did not end up 
 # credibility of every number in the bench.
 
 info "Metal backend smoke test"
-SHARE_DIR="$(brew --prefix)/share/whisper-cpp"
+SHARE_DIR="$(brew --prefix whisper.cpp)/share/whisper.cpp"
 [ -f "$SHARE_DIR/for-tests-ggml-tiny.bin" ] && [ -f "$SHARE_DIR/jfk.wav" ] \
-  || fail "Homebrew's test files are missing from $SHARE_DIR. Try: brew reinstall whisper-cpp"
+  || fail "Homebrew's test files are missing from $SHARE_DIR. Try: brew reinstall whisper.cpp"
 
 # ggml initializes the Metal device just to enumerate it, even when inference
 # runs on the CPU: a `whisper-cli -ng` log contains 37 lines with the word
@@ -89,7 +89,7 @@ else
   echo "--- log ---" >&2; cat "$SMOKE_LOG" >&2; echo "-----------" >&2
   fail "the Metal backend did NOT load — inference would run on the CPU.
       Any number measured this way is misleading, so the bench stops here.
-      Check: brew reinstall ggml whisper-cpp"
+      Check: brew reinstall ggml whisper.cpp"
 fi
 
 # --- what is still missing ----------------------------------------------------

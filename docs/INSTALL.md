@@ -106,7 +106,7 @@ bash scripts/fetch-model.sh   # validates and installs it in the right place
 ```
 
 `setup-bench.sh` is the model bench, and it does more than install: it requires
-**Homebrew** (it installs `whisper-cpp` through it) and **python3** (it creates a
+**Homebrew** (it installs `whisper.cpp` through it) and **python3** (it creates a
 venv with torch in `.cache/`), and it downloads, converts and quantizes
 **three** models (turbo, medium and small). It takes a while; the time was not
 measured. If `brew` does not exist, the script stops: installing Homebrew is the
