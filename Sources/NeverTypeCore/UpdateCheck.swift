@@ -190,8 +190,8 @@ public enum UpdateCheck {
 
     /// The fetch is the one call that can wait on a network; the rest read
     /// the checkout and answer at once.
-    public static let fetchTimeout: Duration = .seconds(30)
-    public static let localTimeout: Duration = .seconds(10)
+    static let fetchTimeout: Duration = .seconds(30)
+    static let localTimeout: Duration = .seconds(10)
 
     /// The environment git runs with.
     ///
