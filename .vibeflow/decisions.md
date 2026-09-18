@@ -3,6 +3,32 @@
 Registro das decisões de arquitetura, a mais recente primeiro. O backlog guarda
 a lista curta em "Decidido e fechado"; aqui fica o contexto de cada uma.
 
+### 2026-09-18: Rede só no clique; aplicar é coisa do Terminal
+**Decision:** O app ganha o item de menu `Check for Updates…`, que roda `git
+fetch` no checkout de origem (caminho carimbado em `NeverTypeRepoRoot` no
+`Info.plist`) só quando a pessoa clica, e responde com um alerta: atualizado,
+versão nova, ou não deu para checar. Nada automático: sem timer, sem checagem
+no launch, sem preferência. `Update Now` abre o Terminal rodando
+`scripts/update.sh`; o app nunca aplica de dentro. A regra vive em
+`Sources/NeverTypeCore/UpdateCheck.swift` (spec
+`.vibeflow/specs/check-for-updates-part-1.md`). A regra geral, que o Don't de
+`conventions.md` passa a carregar como exceção: o app nunca abre socket por
+conta própria; rede é coisa de script, e script roda no Terminal.
+**Context:** PR #14 (vcamaral, 2026-09-16) propôs checagem diária e no launch,
+ligada por padrão, com o `update.sh` disparado pelo próprio app. A conversa com
+o autor fechou em duas coisas: a promessa "sem rede" protege o conteúdo ditado,
+e um fetch num repositório público não carrega nada disso; a checagem
+automática era a única parte que vazava algo de verdade (IP e horário de uso,
+todo dia), e ninguém a pediu. Quem instalou pelo Claude e não usa git queria
+saber se há versão nova e aplicar sem lembrar de comando; o clique dá isso.
+**Discarded alternatives:** Checagem diária ligada por padrão (PR #14): vaza
+uso, rouba foco com modal, e é o "phone home" que quem escolheu o app por
+privacidade não quer. Aplicar dentro do app, com janela de progresso e pid por
+variável de ambiente (PR #14): `install.sh` mata o app no meio do script e
+qualquer falha depois disso fica sem janela, o padrão número um de
+`docs/pitfalls.md`. Handoff total para o Terminal, sem checagem no app: mantém
+"zero socket" à letra, mas perde o aviso de versão nova, que era o pedido.
+
 ### 2026-09-04: Devolver o foco é ativar o app anterior
 **Decision:** Ao fechar uma janela do app, a ativação vai para o app que estava
 na frente quando ela abriu (`NSRunningApplication.activate(from: .current,

@@ -5,9 +5,16 @@ key (Right ⌘ by default; a supported modifier, Fn or an extra mouse button,
 chosen from the menu by pressing it) records, releasing transcribes, two taps
 or a second key lock into hands-free, and the text is inserted wherever the
 cursor is.
-**No network calls at run time**: it is the constraint that justifies the
-project's existence, and each spec includes a DoD item for source and binary checks. These checks
-are manual; CI does not verify the no-network claim.
+**No network calls at run time, with one exception the person starts**:
+`Check for Updates…` in the menu runs `git fetch` on the source checkout when
+clicked, and nothing else in the app ever opens a connection. Nothing checks on
+a timer or at launch, and applying an update opens Terminal on
+`scripts/update.sh`; the app never updates itself from the inside. The rule
+behind it: the app never opens a socket on its own; network is a script's job,
+and scripts run in a terminal (`.vibeflow/decisions.md`, 2026-09-18). The
+promise is the constraint that justifies the project's existence, and each spec
+includes a DoD item for source and binary checks. These checks are manual; CI
+does not verify the claim.
 
 Accessory menu bar app (no Dock; the only windows are the floating pill, the
 vocabulary one and the panel that captures the key). macOS 14+, Apple Silicon.

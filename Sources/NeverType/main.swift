@@ -162,6 +162,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let overlay = RecordingOverlay()
     private let transcription = TranscriptionService()
     private var transcriptionSession = TranscriptionSession()
+    /// A second click while the first still fetches would answer one question
+    /// with two alerts in a row.
+    private var updateCheckInProgress = false
     private var modelStatus = "loading model…"
 
     /// The last transcription, kept for the menu.
@@ -575,6 +578,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Bundle.main.object(forInfoDictionaryKey: "NeverTypeCommit") as? String ?? "unknown"
     }
 
+    /// The checkout this binary was built from, stamped by `build-app.sh` next
+    /// to the commit. Nil for a build without the stamp. Read on every use and
+    /// never kept, since whether the checkout is still there is asked again at
+    /// each menu rebuild (`UpdateCheck.isAvailable`).
+    private static var repoRoot: String? {
+        let path = Bundle.main.object(forInfoDictionaryKey: "NeverTypeRepoRoot") as? String
+        return (path?.isEmpty == false) ? path : nil
+    }
+
     @objc private func openVocabulary() {
         vocabularyWindow.show()
     }
@@ -797,7 +809,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             handsFreeEnabled: monitor.handsFreeEnabled,
             handsFreeKeyLabel: monitor.handsFreeTrigger?.label,
             startsAtLogin: loginState == .on,
-            loginItemNeedsApproval: loginState == .needsApproval)
+            loginItemNeedsApproval: loginState == .needsApproval,
+            updateCheckAvailable: UpdateCheck.isAvailable(repoRoot: Self.repoRoot))
 
         for row in MenuLayout.rows(for: conditions) {
             menu.addItem(item(for: row))
@@ -883,6 +896,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         case .openLoginItems:
             return action("Open Login Items…", #selector(openLoginItemsSettings))
+
+        case .checkForUpdates:
+            return action("Check for Updates…", #selector(checkForUpdates))
 
         case .quit:
             // The app's own selector instead of `terminate:`, which is what
@@ -1009,6 +1025,86 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func openLoginItemsSettings() {
         LoginItem.openSettings()
+    }
+
+    // MARK: - Check for Updates
+
+    /// The one click that reaches the network: `git fetch` on the checkout,
+    /// then an alert with the answer. Nothing calls this but the menu item, on
+    /// purpose. PR #14 ran the same check daily and at launch, on by default;
+    /// `.vibeflow/decisions.md` (2026-09-18) has why the click is the only way.
+    @objc private func checkForUpdates() {
+        guard let repoRoot = Self.repoRoot else {
+            log("check for updates: no checkout stamped in this build")
+            return
+        }
+        guard !updateCheckInProgress else {
+            log("check for updates: ignored, a check is still running")
+            return
+        }
+        // The alert is modal and takes the focus. Mid-dictation, the ⌘V would
+        // land on the alert instead of the app the person was speaking into.
+        // The same refusal, with the same two-second slash, as the login item's.
+        guard !recorder.isRecording, !transcriptionSession.isTranscribing else {
+            log("check for updates: ignored, dictation in progress")
+            render(.blocked)
+            flashIdle()
+            return
+        }
+        updateCheckInProgress = true
+        log("check for updates: fetching \(repoRoot)")
+        Task { @MainActor in
+            let outcome = await UpdateCheck.check(repoRoot: repoRoot, installed: Self.buildCommit)
+            // The enum's own description: commits and git's words, never text
+            // the person dictated.
+            self.log("check for updates: \(outcome)")
+            self.present(outcome, repoRoot: repoRoot)
+            // Cleared after the alert, not before it. Cleared before, a click
+            // while the alert was up started a second fetch and queued a
+            // second alert behind the first. Seen on 2026-09-18, in the hand
+            // test of the first installed build.
+            self.updateCheckInProgress = false
+        }
+    }
+
+    /// Modal and in front, like the Accessibility alert: the person clicked
+    /// and is waiting for the answer. "Update Now" hands the rest to Terminal,
+    /// which is where `update.sh` was written to run and the one window that
+    /// outlives `install.sh` quitting this app.
+    private func present(_ outcome: UpdateCheck.Outcome, repoRoot: String) {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        switch outcome {
+        case .noUpstream, .unreachable: alert.alertStyle = .warning
+        case .upToDate, .reinstallNeeded, .behind: alert.alertStyle = .informational
+        }
+        alert.messageText = outcome.title
+        alert.informativeText = outcome.detail
+        guard outcome.offersUpdate else {
+            alert.addButton(withTitle: "OK")
+            alert.runModal()
+            return
+        }
+        alert.addButton(withTitle: "Update Now")
+        alert.addButton(withTitle: "Later")
+        guard alert.runModal() == .alertFirstButtonReturn else {
+            log("check for updates: later")
+            return
+        }
+        log("check for updates: opening Terminal on scripts/update.sh")
+        Task { @MainActor in
+            guard let failure = await UpdateCheck.openUpdateScript(repoRoot: repoRoot) else { return }
+            // The failure names the command to run by hand; it goes to the
+            // alert and to the log, since the menu has long closed by now.
+            self.log("check for updates: \(failure)")
+            NSApp.activate(ignoringOtherApps: true)
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = "Could not open Terminal"
+            alert.informativeText = failure
+            alert.addButton(withTitle: "OK")
+            alert.runModal()
+        }
     }
 
     /// The app's diary.
