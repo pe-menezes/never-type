@@ -52,6 +52,11 @@ public enum MenuLayout {
         /// everything except the rule.
         public let startsAtLogin: Bool
         public let loginItemNeedsApproval: Bool
+        /// Whether the checkout this build came from is still there, with
+        /// `scripts/update.sh` in it: `UpdateCheck.isAvailable`, read on every
+        /// rebuild. A copy with no checkout has nothing to check against, so
+        /// the line is left out rather than shown disabled.
+        public let updateCheckAvailable: Bool
 
         public init(microphoneAuthorized: Bool,
                     accessibilityAuthorized: Bool,
@@ -61,7 +66,8 @@ public enum MenuLayout {
                     handsFreeEnabled: Bool,
                     handsFreeKeyLabel: String? = nil,
                     startsAtLogin: Bool,
-                    loginItemNeedsApproval: Bool) {
+                    loginItemNeedsApproval: Bool,
+                    updateCheckAvailable: Bool = false) {
             self.microphoneAuthorized = microphoneAuthorized
             self.accessibilityAuthorized = accessibilityAuthorized
             self.showsDiagnostics = showsDiagnostics
@@ -71,6 +77,7 @@ public enum MenuLayout {
             self.handsFreeKeyLabel = handsFreeKeyLabel
             self.startsAtLogin = startsAtLogin
             self.loginItemNeedsApproval = loginItemNeedsApproval
+            self.updateCheckAvailable = updateCheckAvailable
         }
     }
 
@@ -98,6 +105,11 @@ public enum MenuLayout {
         case startAtLogin(enabled: Bool)
         case loginItemTurnedOff
         case openLoginItems
+        /// A check the person starts, never the app: `git fetch` on the source
+        /// checkout, and an alert with the answer. The only line whose click
+        /// reaches the network, which is why there is no automatic version of
+        /// it (`.vibeflow/decisions.md`, 2026-09-18).
+        case checkForUpdates
         case quit
         case separator
     }
@@ -159,6 +171,11 @@ public enum MenuLayout {
         if conditions.loginItemNeedsApproval {
             rows.append(.loginItemTurnedOff)
             rows.append(.openLoginItems)
+        }
+        // Same block as the login item: both are about the app itself, and
+        // neither opens on a day the checkout is gone.
+        if conditions.updateCheckAvailable {
+            rows.append(.checkForUpdates)
         }
         rows.append(.quit)
         return rows
