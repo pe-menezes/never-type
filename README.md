@@ -17,7 +17,8 @@
 
 Hold **Right ⌘**, speak in Portuguese, and release to paste the transcription
 at the cursor. NeverType runs in the menu bar and transcribes on your Mac using
-Whisper, with no network access during use.
+Whisper. The only network connection it ever opens is the update check you
+start from the menu.
 
 Short dictations measured about **600 ms** with the model warm on a MacBook Pro
 M4 Pro. See the [model comparison](docs/model-choice.md) for measurements and
@@ -71,8 +72,13 @@ agent can follow it too.
 
 ## Privacy
 
-The installed app makes no network requests. Build, model setup and update
-scripts download source code, dependencies and model files when you run them.
+The installed app makes no network request on its own. The one exception is
+**Check for Updates…** in the menu: when you click it, the app runs `git fetch`
+on the source checkout it was built from and tells you whether there is a newer
+version. Nothing checks on a timer or at launch. Applying an update opens
+Terminal and runs `scripts/update.sh` there; the app never updates itself from
+the inside. Build, model setup and update scripts download source code,
+dependencies and model files when you run them.
 
 NeverType stores the last 30 transcriptions, the last dictation's audio, your
 vocabulary and a diagnostic log in `~/Library/Application Support/NeverType/`,
