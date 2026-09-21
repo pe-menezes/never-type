@@ -34,3 +34,44 @@ Nenhuma. Um ajuste feito durante a auditoria: `fetchTimeout` e `localTimeout` er
 Sem operação destrutiva no diff.
 
 2 hotfix docs not yet consolidated: `/vibeflow:audit --consolidate-hotfixes`.
+
+---
+
+## Revisão de 2026-09-21 (Copilot no PR #16)
+
+O DoD 2 acima foi marcado `[x]` com um buraco: a falha de `rev-parse --short
+HEAD` não tinha teste. `falha-alta.md` diz que caminho de falha que ninguém
+exercita é código morto, e a auditoria listou os quatro testes que existiam sem
+conferir contra os quatro pontos de retorno do `check`. Fechado agora por
+`headFails`, que confere o estágio, a saída inteira e que o upstream e a
+contagem não chegam a ser perguntados.
+
+Cinco defeitos reais vieram da mesma revisão, todos em `UpdateCheck.swift`:
+
+- `.unreachable` virou `.gitFailed(stage:output:)`. O texto dizia sempre "git
+  fetch failed" e mandava olhar a rede, inclusive quando quem falhou foi um
+  `rev-parse` no checkout local.
+- Todo erro do `rev-parse @{u}` virava `.noUpstream`. Medido no git 2.50.1 com
+  `LC_ALL=C`, três erros diferentes caem ali, e o `--set-upstream-to` que o
+  `update.sh` imprime resolve só um. `LC_ALL=C` entrou no ambiente para que a
+  linha lida não dependa do idioma da máquina.
+- Os dois alertas que pedem para digitar diziam `bash scripts/update.sh`. Um
+  Terminal aberto pelo Finder começa em `$HOME`, onde esse comando responde "No
+  such file or directory". Passaram a levar o caminho absoluto do checkout.
+- O caminho no texto ia sem aspas. O `update.sh` cita `"$REPO_ROOT"` inteiro,
+  então um checkout com espaço no caminho funciona — só a linha oferecida para
+  colar é que não.
+- O alerta podia aparecer no meio de um ditado começado durante o fetch, que
+  leva até 30 s. Ele é modal e ativa o app, então o ⌘V cairia nele. A resposta
+  agora espera o ditado acabar, com limite em `UpdateCheck.presentationWait`.
+
+Um sexto achado, o de severidade alta, era falso positivo: "o timeout mata só o
+`git`, e um helper (`ssh`, `git-remote-https`) seguraria o pipe aberto". Medido:
+`Process` põe o filho em process group próprio (`pgid == pid`) e `terminate()`
+sinaliza o grupo, como a Apple documenta. Com um helper sobrevivendo ao pai, um
+`kill` cru no pid deixou a leitura presa 25 s; o `terminate()` voltou em 0,53 s,
+no timeout. Está anotado em `ProcessBox.terminateIfRunning` e preso pelo teste
+`timeoutWithSurvivingHelper`, para a próxima revisão não levantar de novo.
+
+O texto do alerta citado no DoD 2 da auditoria da parte 2 é o de antes desta
+revisão; a frase "Check the network" agora só aparece na falha do fetch.
