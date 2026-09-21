@@ -323,8 +323,17 @@ ok "$(basename "$BIN")"
 # repository is one line.
 #
 # `unknown` when there is no git: someone who downloaded a tarball instead of
-# cloning. The app works the same; only the automatic update path is unusable.
+# cloning. The app works the same; only update.sh and the menu's check are unusable.
 COMMIT="$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+
+# The checkout's path, for "Check for Updates…" in the menu: the installed app
+# runs `git fetch` there when clicked, and opens Terminal on its update.sh.
+#
+# Escaped for XML before it goes into the plist. PR #14 interpolated the raw
+# path, and a clone in a folder with `&` or `<` in its name produces an
+# Info.plist that does not parse; an app whose plist does not parse does not
+# open, and nothing on screen says why.
+REPO_ROOT_XML="$(printf '%s' "$REPO_ROOT" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')"
 
 info "Assembling $APP"
 rm -rf "$APP"
@@ -378,6 +387,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleShortVersionString</key><string>0.1.0</string>
   <key>CFBundleVersion</key><string>1</string>
   <key>NeverTypeCommit</key><string>$COMMIT</string>
+  <key>NeverTypeRepoRoot</key><string>$REPO_ROOT_XML</string>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>LSUIElement</key><true/>
   <key>NSMicrophoneUsageDescription</key>

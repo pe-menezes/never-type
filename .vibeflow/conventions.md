@@ -152,3 +152,14 @@ Sempre por estrutura, nunca por texto de log. Ver `patterns/verificacao-estrutur
   (`FocusHandback`), e é ela que ganha os testes de comportamento. O oráculo de
   texto guarda a ligação entre os dois; o comportamento em si é verificado de
   olho e registrado no doc do hotfix.
+
+- **Rede só no clique, e aplicar é coisa do Terminal (2026-09-18).** O Don't
+  "NÃO adicione chamada de rede ao app" tem uma única exceção: `Check for
+  Updates…` roda `git fetch` no checkout de origem quando a pessoa clica
+  (`UpdateCheck.swift`, em Core, com o comando por parâmetro e timeout). Nada
+  automático: sem timer, sem checagem no launch, sem preferência. `Update Now`
+  abre o Terminal com `scripts/update.sh`; o app nunca aplica de dentro, porque
+  `install.sh` o mata no meio e só o Terminal sobrevive para mostrar a falha.
+  A regra por trás: o app nunca abre socket por conta própria; rede é coisa de
+  script, e script roda no Terminal. Contexto e alternativas descartadas em
+  `decisions.md` (2026-09-18).

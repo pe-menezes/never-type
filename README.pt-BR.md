@@ -17,7 +17,8 @@
 
 Segure o **⌘ direito**, fale em português e solte para colar a transcrição no
 cursor. O NeverType fica na barra de menus e transcreve no seu Mac usando
-Whisper, sem acesso à rede durante o uso.
+Whisper. A única conexão de rede que ele abre é a checagem de atualização que
+você dispara pelo menu.
 
 Ditados curtos mediram cerca de **600 ms** com o modelo carregado em um MacBook
 Pro M4 Pro. A [comparação de modelos](docs/model-choice.md) detalha as medições e
@@ -71,9 +72,13 @@ também pode segui-lo.
 
 ## Privacidade
 
-O app instalado não faz requisições de rede. Os scripts de compilação,
-preparação dos modelos e atualização baixam código-fonte, dependências e modelos
-quando você os executa.
+O app instalado não faz requisição de rede por conta própria. A única exceção
+é o **Check for Updates…** do menu: ao clicar, o app roda `git fetch` no clone
+de origem de onde foi compilado e diz se há versão mais nova. Nada checa por
+timer nem ao abrir. Aplicar a atualização abre o Terminal e roda
+`scripts/update.sh` lá; o app nunca se atualiza por dentro. Os scripts de
+compilação, preparação dos modelos e atualização baixam código-fonte,
+dependências e modelos quando você os executa.
 
 O NeverType guarda as últimas 30 transcrições, o áudio do último ditado, seu
 vocabulário e um log de diagnóstico em
