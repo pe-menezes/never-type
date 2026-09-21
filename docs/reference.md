@@ -265,7 +265,10 @@ Quit NeverType             ⌘Q
   the one click that reaches the network, and the only time the app does:
   nothing checks on a timer or at launch. The line only shows while the
   checkout exists with its `scripts/update.sh`; a copy built without the stamp,
-  or whose checkout moved, has no line.
+  or whose checkout moved, has no line. Clicked mid-dictation, it refuses with
+  the same two-second slash as the login item; and if a dictation starts while
+  the fetch is still running, the alert waits for it to end rather than taking
+  the focus from the window your text is about to land in.
 - **Quit NeverType** (⌘Q). Opening the app while it is already running activates
   the running copy, and the new process exits.
 

@@ -37,6 +37,29 @@ public enum UpdateCheck {
     /// stands in with a closure.
     public typealias Command = @Sendable ([String]) async -> CommandResult
 
+    /// Which git call failed, so the alert names the real cause.
+    ///
+    /// Every failure used to come back as one case whose text said "git fetch
+    /// failed", including when what failed was a `rev-parse` on the local
+    /// checkout: the person was sent to check a network that was fine.
+    public enum Stage: Equatable, Sendable {
+        case fetch, head, upstream, count
+
+        var summary: String {
+            switch self {
+            case .fetch:    return "git fetch failed"
+            case .head:     return "git could not read the checkout"
+            case .upstream: return "git could not read the upstream branch"
+            case .count:    return "git could not count the commits to pull"
+            }
+        }
+
+        /// Only the fetch touches the network. Telling someone to check their
+        /// connection because `rev-parse HEAD` failed points at the wrong
+        /// thing entirely.
+        var touchesNetwork: Bool { self == .fetch }
+    }
+
     /// What the click found, with the alert's text already written.
     ///
     /// The wording lives here, next to the rule, the way `LoginItem.Outcome`
@@ -53,15 +76,14 @@ public enum UpdateCheck {
         /// The branch tracks no remote branch, so there is nothing to compare
         /// against. `update.sh` prints the command that fixes it.
         case noUpstream
-        /// `git fetch` (or one of the local questions) failed; carries the
-        /// command's output.
-        case unreachable(String)
+        /// A git call failed; carries which one and what it printed.
+        case gitFailed(stage: Stage, output: String)
 
         /// Whether the alert gets an "Update Now" button.
         public var offersUpdate: Bool {
             switch self {
             case .reinstallNeeded, .behind: return true
-            case .upToDate, .noUpstream, .unreachable: return false
+            case .upToDate, .noUpstream, .gitFailed: return false
             }
         }
 
@@ -69,11 +91,19 @@ public enum UpdateCheck {
             switch self {
             case .upToDate:                   return "NeverType is up to date"
             case .reinstallNeeded, .behind:   return "Update available"
-            case .noUpstream, .unreachable:   return "Could not check for updates"
+            case .noUpstream, .gitFailed:     return "Could not check for updates"
             }
         }
 
-        public var detail: String {
+        /// `updateScript` is the absolute path under the stamped checkout.
+        ///
+        /// The two messages that ask the person to type something carry it in
+        /// full and shell-quoted. They used to say `bash scripts/update.sh`,
+        /// and a Terminal opened from Finder starts in the home directory,
+        /// where that command answers "No such file or directory". The two that
+        /// only describe what the button is about to do keep the short name:
+        /// nobody types those.
+        public func detail(updateScript: String) -> String {
             switch self {
             case .upToDate(let installed):
                 return "Running \(installed). Nothing newer on the remote."
@@ -88,11 +118,13 @@ public enum UpdateCheck {
                     + "rebuilds and reinstalls; NeverType quits and reopens at the end."
             case .noUpstream:
                 return "The branch at the checkout tracks no remote branch. "
-                    + "Run bash scripts/update.sh in a terminal: it prints the command that fixes it."
-            case .unreachable(let output):
+                    + "Run \(UpdateCheck.manualCommand(updateScript)) in a terminal: "
+                    + "it prints the command that fixes it."
+            case .gitFailed(let stage, let output):
                 let reason = UpdateCheck.lastLine(of: output)
-                return "git fetch failed" + (reason.isEmpty ? "" : ": \(reason)") + ". "
-                    + "Check the network, or run bash scripts/update.sh in a terminal."
+                let lead = stage.touchesNetwork ? "Check the network, or run" : "Run"
+                return stage.summary + (reason.isEmpty ? "" : ": \(reason)") + ". "
+                    + "\(lead) \(UpdateCheck.manualCommand(updateScript)) in a terminal."
             }
         }
     }
@@ -141,25 +173,29 @@ public enum UpdateCheck {
     /// `NeverTypeCommit`.
     ///
     /// Four git calls, in this order: the fetch is the only one that can take
-    /// long or need the network; the other three read the checkout. A failure
-    /// of the fetch or of the count comes back as `.unreachable` with the
-    /// output, and a missing upstream as its own case, since its way out is a
-    /// git command and not a network.
+    /// long or need the network; the other three read the checkout. Each
+    /// failure comes back naming the call that failed, so the alert does not
+    /// blame the network for a checkout git could not read. A branch that
+    /// tracks nothing is its own case, since its way out is a git command.
     public static func check(repoRoot: String, installed: String, git: Command? = nil) async -> Outcome {
         let git = git ?? gitCommand(repoRoot: repoRoot)
 
         let fetch = await git(["fetch", "--quiet"])
-        guard fetch.status == 0 else { return .unreachable(fetch.output) }
+        guard fetch.status == 0 else { return .gitFailed(stage: .fetch, output: fetch.output) }
 
         let local = await git(["rev-parse", "--short", "HEAD"])
-        guard local.status == 0 else { return .unreachable(local.output) }
+        guard local.status == 0 else { return .gitFailed(stage: .head, output: local.output) }
 
         let remote = await git(["rev-parse", "--short", "@{u}"])
-        guard remote.status == 0 else { return .noUpstream }
+        guard remote.status == 0 else {
+            return isNoUpstream(remote.output)
+                ? .noUpstream
+                : .gitFailed(stage: .upstream, output: remote.output)
+        }
 
         let behind = await git(["rev-list", "--count", "HEAD..@{u}"])
         guard behind.status == 0, let count = Int(trimmed(behind.output)) else {
-            return .unreachable(behind.output)
+            return .gitFailed(stage: .count, output: behind.output)
         }
 
         return decide(installed: installed,
@@ -180,10 +216,83 @@ public enum UpdateCheck {
         let result = await (open ?? openCommand)(["-a", "Terminal", script])
         guard result.status == 0 else {
             let reason = lastLine(of: result.output)
+            // `open` gets the path raw, as an argument; only the line the
+            // person is asked to paste into a shell is quoted.
             return "Could not open Terminal" + (reason.isEmpty ? "" : " (\(reason))")
-                + ". Run in a terminal: bash \(script)"
+                + ". Run in a terminal: \(manualCommand(script))"
         }
         return nil
+    }
+
+    // MARK: - Telling git's failures apart
+
+    /// Whether `rev-parse @{u}` failed because the branch tracks nothing, as
+    /// opposed to any other reason it can fail.
+    ///
+    /// Every non-zero exit here used to be `.noUpstream`, whose way out is the
+    /// `git branch --set-upstream-to` that `update.sh` prints. That command
+    /// fixes exactly one of the three. Git's own words, measured on 2.50.1 with
+    /// `LC_ALL=C`:
+    ///
+    ///     no upstream set     fatal: no upstream configured for branch 'main'
+    ///     detached HEAD       fatal: HEAD does not point to a branch
+    ///     tracking ref gone   fatal: Needed a single revision
+    ///
+    /// The last two are a checkout to repair, not an upstream to set, and they
+    /// now come back as `.gitFailed` carrying that line.
+    static func isNoUpstream(_ output: String) -> Bool {
+        output.contains("no upstream configured")
+    }
+
+    // MARK: - Text the person is asked to type
+
+    /// The command an alert tells the person to run, ready to paste.
+    static func manualCommand(_ script: String) -> String {
+        "bash " + shellQuoted(script)
+    }
+
+    /// Quoted only when it has to be.
+    ///
+    /// `update.sh` quotes `"$REPO_ROOT"` throughout, so a checkout under a path
+    /// with a space in it works; only this line, which asks the person to type
+    /// that path, did not. A plain path is left bare: it is the common one and
+    /// an alert reads better without the quotes.
+    static func shellQuoted(_ path: String) -> String {
+        let plain = Set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789/._-+=,:@")
+        guard path.isEmpty || !path.allSatisfy(plain.contains) else { return path }
+        return "'" + path.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
+    // MARK: - When the answer may be shown
+
+    /// How long the answer waits for a dictation that began during the fetch,
+    /// and how often it looks.
+    ///
+    /// The click refuses to start a check mid-dictation, but the fetch takes up
+    /// to `fetchTimeout` and a dictation can begin inside that window. The
+    /// alert is modal and activates the app: shown then, it lands in front of
+    /// the window the text is about to be pasted into, and the ⌘V goes to the
+    /// alert instead. So the answer waits for the dictation to end. Bounded,
+    /// because a transcription that never finishes would otherwise leave the
+    /// check running and the menu item dead until the next launch.
+    public static let presentationWait: Duration = .seconds(90)
+    public static let presentationPoll: Duration = .milliseconds(200)
+
+    /// What to do with a finished check, given the session and how long the
+    /// answer has already waited. Pure, so the bound has a test.
+    public enum Presentation: Equatable, Sendable {
+        case show
+        case waitForDictation
+        /// Still dictating after `presentationWait`. The answer is dropped, and
+        /// written to the log: `falha-alta.md` wants the giving-up recorded.
+        case giveUp
+    }
+
+    public static func presentation(dictating: Bool,
+                                    waited: Duration,
+                                    within: Duration = presentationWait) -> Presentation {
+        guard dictating else { return .show }
+        return waited < within ? .waitForDictation : .giveUp
     }
 
     // MARK: - Running processes
@@ -198,9 +307,15 @@ public enum UpdateCheck {
     /// `GIT_TERMINAL_PROMPT=0`: with no terminal attached, a remote asking for
     /// credentials would wait for an answer that never comes, until the
     /// timeout. With it, git fails at once and its output says why.
+    ///
+    /// `LC_ALL=C`: git translates its `fatal:` lines, and `isNoUpstream` reads
+    /// one of them to tell a branch that tracks nothing from a checkout that is
+    /// broken. Pinned, that reading does not depend on the machine's language,
+    /// and the alert quotes the same English the rest of the app is written in.
     public static var gitEnvironment: [String: String] {
         var environment = ProcessInfo.processInfo.environment
         environment["GIT_TERMINAL_PROMPT"] = "0"
+        environment["LC_ALL"] = "C"
         return environment
     }
 
@@ -304,6 +419,16 @@ public enum UpdateCheck {
             return timedOut
         }
 
+        /// `terminate()`, never `kill(pid, SIGTERM)`: `Process` puts the child
+        /// in a process group of its own, and `terminate()` signals the group,
+        /// so a helper `git fetch` spawned — `git-remote-https`, `ssh` — goes
+        /// with it. This is what makes the timeout hold: a surviving helper
+        /// inherits the pipe, and the read in the termination handler waits for
+        /// its end of it to close. Measured with a helper outliving its parent:
+        /// a raw `kill` on the pid alone left that read blocked 25 s, the
+        /// helper's whole life; `terminate()` returned in 0.53 s, the timeout.
+        /// A helper that calls `setsid()` to leave the group would still hold
+        /// it — nothing git runs over https does.
         private func terminateIfRunning() {
             lock.lock()
             defer { lock.unlock() }

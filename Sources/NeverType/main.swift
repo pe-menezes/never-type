@@ -1058,6 +1058,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // The enum's own description: commits and git's words, never text
             // the person dictated.
             self.log("check for updates: \(outcome)")
+            // The click refused to start mid-dictation, but the fetch takes up
+            // to 30 s and a dictation can begin inside it. The alert activates
+            // the app and takes the focus, so presenting it now would put it in
+            // front of the window the text is about to be pasted into and the
+            // ⌘V would land on the alert. The rule and the bound are in
+            // `UpdateCheck.presentation`; this only waits.
+            var waited: Duration = .zero
+            while true {
+                let dictating = self.recorder.isRecording
+                    || self.transcriptionSession.isTranscribing
+                let next = UpdateCheck.presentation(dictating: dictating, waited: waited)
+                if next == .show { break }
+                if next == .giveUp {
+                    self.log("check for updates: dictation still running after "
+                        + "\(UpdateCheck.presentationWait); the answer was dropped")
+                    self.updateCheckInProgress = false
+                    return
+                }
+                try? await Task.sleep(for: UpdateCheck.presentationPoll)
+                waited += UpdateCheck.presentationPoll
+            }
             self.present(outcome, repoRoot: repoRoot)
             // Cleared after the alert, not before it. Cleared before, a click
             // while the alert was up started a second fetch and queued a
@@ -1075,11 +1096,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
         switch outcome {
-        case .noUpstream, .unreachable: alert.alertStyle = .warning
+        case .noUpstream, .gitFailed: alert.alertStyle = .warning
         case .upToDate, .reinstallNeeded, .behind: alert.alertStyle = .informational
         }
         alert.messageText = outcome.title
-        alert.informativeText = outcome.detail
+        alert.informativeText = outcome.detail(
+            updateScript: UpdateCheck.updateScriptPath(repoRoot: repoRoot))
         guard outcome.offersUpdate else {
             alert.addButton(withTitle: "OK")
             alert.runModal()
