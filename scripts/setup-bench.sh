@@ -61,9 +61,33 @@ command -v whisper-quantize >/dev/null || fail "whisper-quantize did not end up 
 # credibility of every number in the bench.
 
 info "Metal backend smoke test"
-SHARE_DIR="$(brew --prefix whisper.cpp)/share/whisper.cpp"
-[ -f "$SHARE_DIR/for-tests-ggml-tiny.bin" ] && [ -f "$SHARE_DIR/jfk.wav" ] \
-  || fail "Homebrew's test files are missing from $SHARE_DIR. Try: brew reinstall whisper.cpp"
+
+# Where Homebrew puts the fixtures depends on when the keg was built, not on
+# what the formula is called today. `pkgshare` is `share/<formula name>`, and
+# the formula was renamed whisper-cpp -> whisper.cpp, so a keg from before the
+# rename has them under share/whisper-cpp and one installed after, under
+# share/whisper.cpp. `brew --prefix` does not settle it: asked for either name
+# it answers with the current one, /opt/homebrew/opt/whisper.cpp, and exits 0
+# even on a machine where that path does not exist (measured on a keg from
+# 2026-04-18). Under `set -e` that gets you the next line's error, about a
+# directory nobody has, instead of this one. So try every layout and take the
+# first that actually holds both files.
+BREW_PREFIX="$(brew --prefix)"
+WHISPER_OPT="$(brew --prefix whisper.cpp 2>/dev/null || true)"
+SHARE_DIR=""
+for candidate in "$WHISPER_OPT/share/whisper.cpp" \
+                 "$BREW_PREFIX/share/whisper.cpp" \
+                 "$BREW_PREFIX/opt/whisper-cpp/share/whisper-cpp" \
+                 "$BREW_PREFIX/share/whisper-cpp"; do
+  if [ -f "$candidate/for-tests-ggml-tiny.bin" ] && [ -f "$candidate/jfk.wav" ]; then
+    SHARE_DIR="$candidate"
+    break
+  fi
+done
+[ -n "$SHARE_DIR" ] || fail "Homebrew's test files (for-tests-ggml-tiny.bin, jfk.wav) are in none
+      of the layouts this script knows, under $BREW_PREFIX.
+      Try: brew reinstall whisper.cpp"
+ok "fixtures at $SHARE_DIR"
 
 # ggml initializes the Metal device just to enumerate it, even when inference
 # runs on the CPU: a `whisper-cli -ng` log contains 37 lines with the word
