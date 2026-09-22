@@ -27,7 +27,7 @@ struct MenuLayoutTests {
                             handsFreeKey: String? = nil,
                             startsAtLogin: Bool = false,
                             needsApproval: Bool = false,
-                            iconAlwaysVisible: Bool = false) -> MenuLayout.Conditions {
+                            pillAlwaysVisible: Bool = true) -> MenuLayout.Conditions {
         MenuLayout.Conditions(microphoneAuthorized: microphone,
                               accessibilityAuthorized: accessibility,
                               showsDiagnostics: option,
@@ -37,7 +37,7 @@ struct MenuLayoutTests {
                               handsFreeKeyLabel: handsFreeKey,
                               startsAtLogin: startsAtLogin,
                               loginItemNeedsApproval: needsApproval,
-                              iconAlwaysVisible: iconAlwaysVisible)
+                              pillAlwaysVisible: pillAlwaysVisible)
     }
 
     @Test("with everything in order the menu holds nothing you cannot click")
@@ -48,7 +48,7 @@ struct MenuLayoutTests {
             .hotkey(trigger: "Right ⌘"),
             .handsFree(enabled: true),
             .vocabulary,
-            .iconAlwaysVisible(enabled: false),
+            .pillAlwaysVisible(enabled: true),
             .separator,
             .copyLastTranscription,
             .history(count: 30),
@@ -74,7 +74,7 @@ struct MenuLayoutTests {
             .hotkey(trigger: "Right ⌘"),
             .handsFree(enabled: true),
             .vocabulary,
-            .iconAlwaysVisible(enabled: false),
+            .pillAlwaysVisible(enabled: true),
             .separator,
             .copyLastTranscription,
             .history(count: 30),
@@ -115,7 +115,7 @@ struct MenuLayoutTests {
             .hotkey(trigger: "Right ⌘"),
             .handsFree(enabled: true),
             .vocabulary,
-            .iconAlwaysVisible(enabled: false),
+            .pillAlwaysVisible(enabled: true),
             .separator,
             .startAtLogin(enabled: false),
             .quit,
@@ -154,7 +154,7 @@ struct MenuLayoutTests {
             .hotkey(trigger: "Right ⌘"),
             .handsFree(enabled: true),
             .vocabulary,
-            .iconAlwaysVisible(enabled: false),
+            .pillAlwaysVisible(enabled: true),
             .separator,
             .startAtLogin(enabled: false),
             .quit,
@@ -196,7 +196,7 @@ struct MenuLayoutTests {
             .hotkey(trigger: "Right ⌘"),
             .handsFree(enabled: false),
             .vocabulary,
-            .iconAlwaysVisible(enabled: false),
+            .pillAlwaysVisible(enabled: true),
             .separator,
             .startAtLogin(enabled: false),
             .quit,
@@ -232,14 +232,27 @@ struct MenuLayoutTests {
         #expect(off.contains(.trigger), "hold and speak is still what the key does")
     }
 
-    /// A root item, not nested under Hotkey: it governs the pill everywhere,
-    /// not only while dictating with that key.
-    @Test("the icon visibility item carries its own checkmark and sits at the root")
-    func iconAlwaysVisibleCheckmark() {
-        #expect(MenuLayout.rows(for: conditions(iconAlwaysVisible: true))
-            .contains(.iconAlwaysVisible(enabled: true)))
-        #expect(MenuLayout.rows(for: conditions(iconAlwaysVisible: false))
-            .contains(.iconAlwaysVisible(enabled: false)))
+    @Test("the pill visibility item carries its own checkmark")
+    func pillAlwaysVisibleCheckmark() {
+        #expect(MenuLayout.rows(for: conditions(pillAlwaysVisible: true))
+            .contains(.pillAlwaysVisible(enabled: true)))
+        #expect(MenuLayout.rows(for: conditions(pillAlwaysVisible: false))
+            .contains(.pillAlwaysVisible(enabled: false)))
+    }
+
+    /// The title used to promise a position the body never looked at. The item
+    /// belongs at the root because it governs the pill everywhere. A place under
+    /// Hotkey would say it applies while dictating with that key. The index is
+    /// what pins it.
+    @Test("the pill visibility item sits at the root, right after Vocabulary")
+    func pillAlwaysVisibleSitsAtTheRoot() {
+        let rows = MenuLayout.rows(for: conditions())
+        guard let vocabulary = rows.firstIndex(of: .vocabulary) else {
+            Issue.record("no Vocabulary row: \(rows)")
+            return
+        }
+        #expect(rows.firstIndex(of: .pillAlwaysVisible(enabled: true)) == vocabulary + 1,
+                "got: \(rows)")
     }
 
     @Test("the login item carries its own checkmark")

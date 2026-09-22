@@ -53,9 +53,10 @@ public enum MenuLayout {
         public let startsAtLogin: Bool
         public let loginItemNeedsApproval: Bool
         /// Whether the pill stays on screen while idle, or only while a
-        /// dictation is in progress. Read from `RecordingOverlay.showsWhileIdle`
-        /// at every rebuild, the same as the other toggles here.
-        public let iconAlwaysVisible: Bool
+        /// dictation is in progress. Queried at every rebuild, like the other
+        /// toggles here; `PillVisibility` holds the rule and what turning it
+        /// off costs.
+        public let pillAlwaysVisible: Bool
 
         public init(microphoneAuthorized: Bool,
                     accessibilityAuthorized: Bool,
@@ -66,7 +67,7 @@ public enum MenuLayout {
                     handsFreeKeyLabel: String? = nil,
                     startsAtLogin: Bool,
                     loginItemNeedsApproval: Bool,
-                    iconAlwaysVisible: Bool) {
+                    pillAlwaysVisible: Bool) {
             self.microphoneAuthorized = microphoneAuthorized
             self.accessibilityAuthorized = accessibilityAuthorized
             self.showsDiagnostics = showsDiagnostics
@@ -76,7 +77,7 @@ public enum MenuLayout {
             self.handsFreeKeyLabel = handsFreeKeyLabel
             self.startsAtLogin = startsAtLogin
             self.loginItemNeedsApproval = loginItemNeedsApproval
-            self.iconAlwaysVisible = iconAlwaysVisible
+            self.pillAlwaysVisible = pillAlwaysVisible
         }
     }
 
@@ -97,11 +98,10 @@ public enum MenuLayout {
         /// then says "off", and a key it does not listen to is not taught.
         case handsFree(enabled: Bool, key: String? = nil)
         case vocabulary
-        /// Whether the pill stays on screen while idle. A root item, not
-        /// nested under Hotkey: it governs the pill everywhere, not only
-        /// while dictating with that key, and it was found by accident by
-        /// people who did not expect it there.
-        case iconAlwaysVisible(enabled: Bool)
+        /// Whether the pill stays on screen while idle. It sits at the root
+        /// because it governs the pill everywhere. A place under Hotkey would
+        /// say it applies while dictating with that key.
+        case pillAlwaysVisible(enabled: Bool)
         case copyLastTranscription
         case history(count: Int)
         case model
@@ -147,7 +147,7 @@ public enum MenuLayout {
         rows.append(.handsFree(enabled: conditions.handsFreeEnabled,
                                key: conditions.handsFreeEnabled ? conditions.handsFreeKeyLabel : nil))
         rows.append(.vocabulary)
-        rows.append(.iconAlwaysVisible(enabled: conditions.iconAlwaysVisible))
+        rows.append(.pillAlwaysVisible(enabled: conditions.pillAlwaysVisible))
 
         // The block appears with the first transcription and the submenu with
         // the second: a "History (1)" holding the same text as the line above it
