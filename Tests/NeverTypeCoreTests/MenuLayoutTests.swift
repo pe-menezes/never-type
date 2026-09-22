@@ -27,7 +27,8 @@ struct MenuLayoutTests {
                             handsFreeKey: String? = nil,
                             startsAtLogin: Bool = false,
                             needsApproval: Bool = false,
-                            pillAlwaysVisible: Bool = true) -> MenuLayout.Conditions {
+                            pillAlwaysVisible: Bool = true,
+                            updateCheck: Bool = false) -> MenuLayout.Conditions {
         MenuLayout.Conditions(microphoneAuthorized: microphone,
                               accessibilityAuthorized: accessibility,
                               showsDiagnostics: option,
@@ -37,7 +38,8 @@ struct MenuLayoutTests {
                               handsFreeKeyLabel: handsFreeKey,
                               startsAtLogin: startsAtLogin,
                               loginItemNeedsApproval: needsApproval,
-                              pillAlwaysVisible: pillAlwaysVisible)
+                              pillAlwaysVisible: pillAlwaysVisible,
+                              updateCheckAvailable: updateCheck)
     }
 
     @Test("with everything in order the menu holds nothing you cannot click")
@@ -286,10 +288,27 @@ struct MenuLayoutTests {
             conditions(history: 30),
             conditions(microphone: false, accessibility: false, option: true, history: 30,
                        startsAtLogin: true, needsApproval: true),
+            conditions(updateCheck: true),
         ]
 
         for state in states {
             #expect(MenuLayout.rows(for: state).last == .quit)
         }
+    }
+
+    /// The line only makes sense with a checkout to fetch from. Without one it
+    /// goes, rather than sitting there disabled: an item you cannot click is
+    /// the grey text this layout exists to avoid.
+    @Test("the update check sits right above Quit, and only with a checkout reachable")
+    func checkForUpdatesNeedsACheckout() {
+        let without = MenuLayout.rows(for: conditions())
+        #expect(!without.contains(.checkForUpdates))
+
+        let with = MenuLayout.rows(for: conditions(updateCheck: true))
+        #expect(Array(with.suffix(3)) == [.startAtLogin(enabled: false), .checkForUpdates, .quit])
+
+        let withNotice = MenuLayout.rows(for: conditions(startsAtLogin: true, needsApproval: true, updateCheck: true))
+        #expect(Array(withNotice.suffix(3)) == [.openLoginItems, .checkForUpdates, .quit],
+                "the Login Items notice keeps its place under the login item; the check stays next to Quit")
     }
 }

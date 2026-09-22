@@ -212,6 +212,7 @@ Copy Last Transcription
 History (30)               >
 ──────────────
 Start NeverType with macOS
+Check for Updates…
 Quit NeverType             ⌘Q
 ```
 
@@ -262,6 +263,20 @@ Quit NeverType             ⌘Q
   says to run `install.sh`. If you turn it off in System Settings, the menu says
   so and offers a shortcut to that pane. What it costs at boot is measured in
   [`launch-at-login.md`](launch-at-login.md).
+- **Check for Updates…**: runs `git fetch` on the checkout this build came from
+  (`build-app.sh` stamps the path into the bundle) and answers with an alert:
+  `NeverType is up to date`, `Update available` with the installed and the
+  newest commit, or `Could not check for updates` with git's own reason.
+  **Update Now** opens Terminal running `scripts/update.sh`; the app quits and
+  reopens updated when the script ends, and a failure stays readable in the
+  Terminal window. **Later** closes the alert and remembers nothing. This is
+  the one click that reaches the network, and the only time the app does:
+  nothing checks on a timer or at launch. The line only shows while the
+  checkout exists with its `scripts/update.sh`; a copy built without the stamp,
+  or whose checkout moved, has no line. Clicked mid-dictation, it refuses with
+  the same two-second slash as the login item; and if a dictation starts while
+  the fetch is still running, the alert waits for it to end rather than taking
+  the focus from the window your text is about to land in.
 - **Quit NeverType** (⌘Q). Opening the app while it is already running activates
   the running copy, and the new process exits.
 
@@ -331,11 +346,16 @@ Network.framework (`import Network`, `NWConnection`, `NWBrowser`, `NWListener`,
 `NWPathMonitor`, `NWEndpoint`), sockets and streams (`socket(`, `connect(`,
 `getaddrinfo`, `gethostbyname`, `sockaddr`, `inet_pton`, `CFStream`, `CFSocket`,
 `CFHost`, `NSStream`), subprocesses (`Process(`, `posix_spawn`), and `curl`,
-`wget` and any `http://` or `https://` literal. None of them hit. The sources
-import AVFoundation, AppKit, Carbon.HIToolbox, Foundation, ServiceManagement,
-`os` and the bundled CWhisper, `Package.swift` declares no external package, and
-the three `Data(contentsOf:)` calls read `vocabulario.json`, `historico.json`
-and a test fixture from disk.
+`wget` and any `http://` or `https://` literal. At the time, nothing hit. Since
+2026-09-18, `Process(` hits once, in `Sources/NeverTypeCore/UpdateCheck.swift`,
+where the menu's **Check for Updates…** runs `/usr/bin/git` (a `fetch`, then
+three questions answered from the checkout) and `/usr/bin/open -a Terminal` on
+`scripts/update.sh`. Both run only on that click, the fetch with a 30 s timeout,
+and nothing in the app runs them on a timer or at launch. The other patterns in
+the list still do not hit. The sources import AVFoundation, AppKit,
+Carbon.HIToolbox, Foundation, ServiceManagement, `os` and the bundled CWhisper,
+`Package.swift` declares no external package, and the three `Data(contentsOf:)`
+calls read `vocabulario.json`, `historico.json` and a test fixture from disk.
 
 A Definition of Done item on each spec covers the claim, in the sources and in
 the binary. CI builds the app and runs the suite, and it runs neither of those
@@ -347,7 +367,8 @@ three checkpoints from OpenAI's CDN and the ggml converter, `build-app.sh`
 clones whisper.cpp at its pinned commit, and `update.sh` runs `git fetch` and
 `git pull`. Setup also installs Homebrew packages and Python dependencies and clones
 Whisper. These network operations run when you invoke the setup, build or update
-scripts. The installed app runs none of them.
+scripts. The installed app runs none of them on its own: the update check above
+is the one it runs on a click, and applying hands the rest to Terminal.
 
 The binary side keeps no record. `Package.swift` links Foundation, Metal,
 MetalKit and Accelerate plus six static whisper and ggml archives, and names no
