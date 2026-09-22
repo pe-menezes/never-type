@@ -242,6 +242,14 @@ Quit NeverType             ⌘Q
   for the terms, and **Replacements**), plus and minus buttons, and a save on
   every edited cell. Closing gives the focus back to the app you were in, and
   the counts show up in the item itself.
+- **Always Show Pill**: on by default. Off, the floating pill appears only while
+  you dictate and goes away the moment the text lands. What that costs is on the
+  tooltip and in `PillVisibility`: the pill is the only way to open this menu in
+  full screen, where macOS hides the menu bar, and the idle pill is the only
+  sign that an app with no Dock tile and no window is still running. VoiceOver
+  is a third cost, unmeasured: a hidden panel leaves the accessibility
+  hierarchy, so the progress the pill announces is out of reach until it comes
+  back. The line governs the pill alone. The menu bar icon is always there.
 - **Copy Last Transcription**: appears from the first transcription on, with the
   preview in the tooltip.
 - **History**: the last 30, most recent first, with the time and a 44-character

@@ -52,6 +52,11 @@ public enum MenuLayout {
         /// everything except the rule.
         public let startsAtLogin: Bool
         public let loginItemNeedsApproval: Bool
+        /// Whether the pill stays on screen while idle, or only while a
+        /// dictation is in progress. Queried at every rebuild, like the other
+        /// toggles here; `PillVisibility` holds the rule and what turning it
+        /// off costs.
+        public let pillAlwaysVisible: Bool
         /// Whether the checkout this build came from is still there, with
         /// `scripts/update.sh` in it: `UpdateCheck.isAvailable`, read on every
         /// rebuild. A copy with no checkout has nothing to check against, so
@@ -67,6 +72,7 @@ public enum MenuLayout {
                     handsFreeKeyLabel: String? = nil,
                     startsAtLogin: Bool,
                     loginItemNeedsApproval: Bool,
+                    pillAlwaysVisible: Bool,
                     updateCheckAvailable: Bool = false) {
             self.microphoneAuthorized = microphoneAuthorized
             self.accessibilityAuthorized = accessibilityAuthorized
@@ -77,6 +83,7 @@ public enum MenuLayout {
             self.handsFreeKeyLabel = handsFreeKeyLabel
             self.startsAtLogin = startsAtLogin
             self.loginItemNeedsApproval = loginItemNeedsApproval
+            self.pillAlwaysVisible = pillAlwaysVisible
             self.updateCheckAvailable = updateCheckAvailable
         }
     }
@@ -98,6 +105,10 @@ public enum MenuLayout {
         /// then says "off", and a key it does not listen to is not taught.
         case handsFree(enabled: Bool, key: String? = nil)
         case vocabulary
+        /// Whether the pill stays on screen while idle. It sits at the root
+        /// because it governs the pill everywhere. A place under Hotkey would
+        /// say it applies while dictating with that key.
+        case pillAlwaysVisible(enabled: Bool)
         case copyLastTranscription
         case history(count: Int)
         case model
@@ -148,6 +159,7 @@ public enum MenuLayout {
         rows.append(.handsFree(enabled: conditions.handsFreeEnabled,
                                key: conditions.handsFreeEnabled ? conditions.handsFreeKeyLabel : nil))
         rows.append(.vocabulary)
+        rows.append(.pillAlwaysVisible(enabled: conditions.pillAlwaysVisible))
 
         // The block appears with the first transcription and the submenu with
         // the second: a "History (1)" holding the same text as the line above it

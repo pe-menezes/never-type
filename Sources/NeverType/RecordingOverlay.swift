@@ -1,24 +1,11 @@
 import AppKit
 import NeverTypeCore
 
-/// The moments the overlay must distinguish through shape and motion.
-enum OverlayState: Equatable {
-    case idle
-    case recording
-    case latched
-    case transcribing
-
+/// `OverlayState` itself lives in Core, where the visibility rule can be
+/// tested; what it means on screen stays here.
+extension OverlayState {
     var size: NSSize {
         NSSize(width: 34, height: 34)
-    }
-
-    var accessibilityValue: String {
-        switch self {
-        case .idle:          "Ready"
-        case .recording:     "Listening"
-        case .latched:       "Hands-free recording"
-        case .transcribing:  "Writing"
-        }
     }
 }
 
@@ -446,11 +433,28 @@ final class PillView: NSView {
     }
 }
 
-/// Always-visible dictation status that survives full-screen applications.
+/// Dictation status that survives full-screen applications.
 @MainActor
 final class RecordingOverlay {
     private var panel: NSPanel?
     private var pill: PillView?
+
+    private static let alwaysVisibleKey = "pillAlwaysVisible"
+
+    /// On by default. Off, the pill appears only while a dictation is in
+    /// progress and goes away the moment it ends. What that gives up, and why
+    /// someone might want it anyway, is written next to the rule in
+    /// `PillVisibility`.
+    var alwaysVisible: Bool {
+        get {
+            PillVisibility.resolvedAlwaysVisible(
+                UserDefaults.standard.object(forKey: Self.alwaysVisibleKey) as? Bool)
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: Self.alwaysVisibleKey)
+            apply(pill?.state ?? .idle)
+        }
+    }
 
     /// The status item's menu, which a click on the orb opens as well.
     ///
@@ -492,13 +496,11 @@ final class RecordingOverlay {
 
     func showIdle() {
         apply(.idle)
-        panel?.orderFrontRegardless()
     }
 
     func show() {
         pill?.activity.reset()
         apply(.recording)
-        panel?.orderFrontRegardless()
     }
 
     func latch() {
@@ -523,10 +525,34 @@ final class RecordingOverlay {
         pill?.activity.push(level)
     }
 
+    /// Every state change passes through here, and so does the ordering.
+    ///
+    /// The first version ordered the panel out from `hide()`. `AudioRecorder`
+    /// reports a write error and carries on capturing, and the app's error
+    /// handler answers it with `hide()`: with the preference off, the
+    /// microphone stayed open with no pill on screen, and `transcribing()`
+    /// then drew the whole ring on a panel nobody could see. Deciding here
+    /// covers any future path into a state that does not go through `show()`.
     private func apply(_ state: OverlayState) {
         let panel = self.panel ?? makePanel()
         self.panel = panel
         pill?.state = state
+
+        guard PillVisibility.isVisible(state: state, alwaysVisible: alwaysVisible) else {
+            panel.orderOut(nil)
+            return
+        }
+        // An ordered-out panel keeps its frame, and the window server stops
+        // moving it when its display goes away: a pill hidden on a monitor that
+        // was then unplugged, or in a corner a smaller resolution no longer
+        // has, would come back with the start tone playing and nothing on
+        // screen to drag. `constrainFrameRect(_:to:)` does not cover it, since
+        // that is for titled windows. Reasoned from AppKit behavior. Not
+        // measured. `restoredOrigin` already knows the fallback corner.
+        if !NSScreen.screens.contains(where: { $0.frame.intersects(panel.frame) }) {
+            panel.setFrameOrigin(restoredOrigin(for: panel.frame.size))
+        }
+        panel.orderFrontRegardless()
     }
 
     private func makePanel() -> NSPanel {

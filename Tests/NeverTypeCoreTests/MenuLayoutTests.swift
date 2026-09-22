@@ -27,6 +27,7 @@ struct MenuLayoutTests {
                             handsFreeKey: String? = nil,
                             startsAtLogin: Bool = false,
                             needsApproval: Bool = false,
+                            pillAlwaysVisible: Bool = true,
                             updateCheck: Bool = false) -> MenuLayout.Conditions {
         MenuLayout.Conditions(microphoneAuthorized: microphone,
                               accessibilityAuthorized: accessibility,
@@ -37,6 +38,7 @@ struct MenuLayoutTests {
                               handsFreeKeyLabel: handsFreeKey,
                               startsAtLogin: startsAtLogin,
                               loginItemNeedsApproval: needsApproval,
+                              pillAlwaysVisible: pillAlwaysVisible,
                               updateCheckAvailable: updateCheck)
     }
 
@@ -48,6 +50,7 @@ struct MenuLayoutTests {
             .hotkey(trigger: "Right ⌘"),
             .handsFree(enabled: true),
             .vocabulary,
+            .pillAlwaysVisible(enabled: true),
             .separator,
             .copyLastTranscription,
             .history(count: 30),
@@ -73,6 +76,7 @@ struct MenuLayoutTests {
             .hotkey(trigger: "Right ⌘"),
             .handsFree(enabled: true),
             .vocabulary,
+            .pillAlwaysVisible(enabled: true),
             .separator,
             .copyLastTranscription,
             .history(count: 30),
@@ -113,6 +117,7 @@ struct MenuLayoutTests {
             .hotkey(trigger: "Right ⌘"),
             .handsFree(enabled: true),
             .vocabulary,
+            .pillAlwaysVisible(enabled: true),
             .separator,
             .startAtLogin(enabled: false),
             .quit,
@@ -151,6 +156,7 @@ struct MenuLayoutTests {
             .hotkey(trigger: "Right ⌘"),
             .handsFree(enabled: true),
             .vocabulary,
+            .pillAlwaysVisible(enabled: true),
             .separator,
             .startAtLogin(enabled: false),
             .quit,
@@ -192,6 +198,7 @@ struct MenuLayoutTests {
             .hotkey(trigger: "Right ⌘"),
             .handsFree(enabled: false),
             .vocabulary,
+            .pillAlwaysVisible(enabled: true),
             .separator,
             .startAtLogin(enabled: false),
             .quit,
@@ -225,6 +232,29 @@ struct MenuLayoutTests {
         #expect(on.contains(.gestureHint))
         #expect(!off.contains(.gestureHint), "it describes the lock, and there is no lock")
         #expect(off.contains(.trigger), "hold and speak is still what the key does")
+    }
+
+    @Test("the pill visibility item carries its own checkmark")
+    func pillAlwaysVisibleCheckmark() {
+        #expect(MenuLayout.rows(for: conditions(pillAlwaysVisible: true))
+            .contains(.pillAlwaysVisible(enabled: true)))
+        #expect(MenuLayout.rows(for: conditions(pillAlwaysVisible: false))
+            .contains(.pillAlwaysVisible(enabled: false)))
+    }
+
+    /// The title used to promise a position the body never looked at. The item
+    /// belongs at the root because it governs the pill everywhere. A place under
+    /// Hotkey would say it applies while dictating with that key. The index is
+    /// what pins it.
+    @Test("the pill visibility item sits at the root, right after Vocabulary")
+    func pillAlwaysVisibleSitsAtTheRoot() {
+        let rows = MenuLayout.rows(for: conditions())
+        guard let vocabulary = rows.firstIndex(of: .vocabulary) else {
+            Issue.record("no Vocabulary row: \(rows)")
+            return
+        }
+        #expect(rows.firstIndex(of: .pillAlwaysVisible(enabled: true)) == vocabulary + 1,
+                "got: \(rows)")
     }
 
     @Test("the login item carries its own checkmark")

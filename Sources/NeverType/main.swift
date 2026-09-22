@@ -266,8 +266,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.log(message)
         }
         monitor.start()
-        // Always on screen: an accessory app that dies changes nothing visually,
-        // so the idle pill is the only sign that it is still alive.
+        // On screen unless the person turned it off: an accessory app that
+        // dies changes nothing visually, so the idle pill is the only sign that
+        // it is still alive. `PillVisibility` decides, and names what turning
+        // it off gives up.
         overlay.showIdle()
         // After the orb exists, since one of the two hints lives on it.
         refreshHoverHint()
@@ -295,7 +297,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.render(.blocked)
             }
         }
-        log("ready. trigger: \(monitor.trigger.label) · hands-free: \(monitor.handsFreeEnabled ? "on" : "off")")
+        // The pill is on this line because `nevertype.log` is truncated at
+        // every launch: with the preference off and only the toggle's own line
+        // to go by, a report of "the orb disappeared" after a relaunch cannot
+        // be told from the one where it came back off screen.
+        log("ready. trigger: \(monitor.trigger.label) · hands-free: \(monitor.handsFreeEnabled ? "on" : "off")"
+            + " · pill: \(overlay.alwaysVisible ? "always visible" : "only while dictating")")
         // The two insertion preferences have no menu item, so this line is how
         // you confirm that a `defaults write` took effect. Effective values, not
         // what is stored: both are read through the rule that bounds them.
@@ -703,6 +710,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         log("sounds: \(Feedback.isEnabled ? "on" : "off")")
     }
 
+    /// "Icon" is the menu bar item's word everywhere else in this codebase,
+    /// and `render(_:)` already logs `icon → idle`. The floating panel is the
+    /// pill, in the log line as in the menu title.
+    @objc private func togglePillAlwaysVisible() {
+        overlay.alwaysVisible.toggle()
+        log("pill: \(overlay.alwaysVisible ? "always visible" : "shown only while dictating")")
+    }
+
     @objc private func clearHistory() {
         history.clear()
         // The audio is the other copy of what the user said, and it is the whole
@@ -810,6 +825,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             handsFreeKeyLabel: monitor.handsFreeTrigger?.label,
             startsAtLogin: loginState == .on,
             loginItemNeedsApproval: loginState == .needsApproval,
+            pillAlwaysVisible: overlay.alwaysVisible,
             updateCheckAvailable: UpdateCheck.isAvailable(repoRoot: Self.repoRoot))
 
         for row in MenuLayout.rows(for: conditions) {
@@ -867,6 +883,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ? "Vocabulary (\(vocabulary.terms.count) terms, \(vocabulary.replacements.count) replacements)…"
                 : "Vocabulary…"
             return action(title, #selector(openVocabulary))
+
+        case .pillAlwaysVisible(let enabled):
+            let item = action("Always Show Pill", #selector(togglePillAlwaysVisible))
+            item.state = enabled ? .on : .off
+            // The trade-off is not visible from the title, and in full screen
+            // it is the difference between having a menu and not having one.
+            item.toolTip = "Off, the pill shows only while you dictate. "
+                + "In full screen it is the only way to open this menu."
+            return item
 
         case .copyLastTranscription:
             let item = action("Copy Last Transcription", #selector(copyLastTranscript))
