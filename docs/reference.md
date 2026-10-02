@@ -225,6 +225,23 @@ Quit NeverType             ⌘Q
   saved and comes back on the next launch.
 - **Sounds**: a toggle in the same submenu, on by default, for whoever works in
   a shared room. The volume is fixed.
+- **Pause Media While Dictating**: below Sounds, on by default. When a
+  recording starts while an app is playing sound, the app sends pause, and when
+  the recording ends, kept or discarded, it sends play, but only after an app
+  that was playing has gone quiet. With nothing playing, nothing is sent, so
+  finishing a dictation never starts music out of nowhere. A call in Zoom keeps
+  putting out sound through the pause and never gets a play. The pause goes
+  through MediaRemote, the private framework behind the keyboard's play key;
+  telling whether anything is playing goes through CoreAudio, because
+  MediaRemote's own answer to that is `false` for apps outside Apple's list.
+  Measured with Spotify on macOS 27.0: the music stops at once, the output goes
+  quiet ~2.3 s after the pause, and comes back ~45 ms after play, so a dictation
+  shorter than 2.3 s waits that long before the music returns. A pause that
+  reached nothing is in the log: `media: 1 app kept playing through the pause;
+  not sending play`. One case still goes wrong. If you paused the music yourself
+  less than ~2.3 s before dictating, its output is still running, and the play
+  at the end starts it again. A Bluetooth headset cuts the music by itself when
+  the microphone opens, as the HFP note earlier in this file says.
 - **Hands-free: double tap**: the submenu holds the switch, on by default, and
   three lines of instruction under it: `Double-tap Right ⌘ to lock`, `Tap once
   to finish · Esc discards`, `Typing does not cancel while locked`. Under a

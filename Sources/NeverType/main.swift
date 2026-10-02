@@ -158,6 +158,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let monitor = HotkeyMonitor()
     private var accessibilityAlertGate = PresentationGate()
     private let recorder = AudioRecorder(destination: lastRecordingURL())
+    private let media = MediaPause()
     private let menu = NSMenu()
     private let overlay = RecordingOverlay()
     private let transcription = TranscriptionService()
@@ -302,7 +303,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // to go by, a report of "the orb disappeared" after a relaunch cannot
         // be told from the one where it came back off screen.
         log("ready. trigger: \(monitor.trigger.label) · hands-free: \(monitor.handsFreeEnabled ? "on" : "off")"
-            + " · pill: \(overlay.alwaysVisible ? "always visible" : "only while dictating")")
+            + " · pill: \(overlay.alwaysVisible ? "always visible" : "only while dictating")"
+            + " · pause media: \(Self.pausesMedia ? "on" : "off")")
         // The two insertion preferences have no menu item, so this line is how
         // you confirm that a `defaults write` took effect. Effective values, not
         // what is stored: both are read through the rule that bounds them.
@@ -379,6 +381,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             do {
                 try recorder.start()
+                // After the microphone opened, so a recording that failed to
+                // start leaves the music alone.
+                if Self.pausesMedia { logMediaStart(media.recordingStarted()) }
                 Feedback.started()
                 render(.recording)
                 overlay.show()
@@ -392,6 +397,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard recorder.isRecording else { return false }
             Feedback.stopped()
             let url = recorder.stop()
+            resumeMedia()
             render(.idle)
             guard url != nil else {
                 overlay.hide()
@@ -462,9 +468,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func discardRecording(reason: String) {
         Feedback.discarded()
         recorder.cancel()
+        resumeMedia()
         overlay.hide()
         render(.idle)
         log("cancelled: \(reason)")
+    }
+
+    private func logMediaStart(_ start: MediaPause.Start) {
+        switch start {
+        case .nothingPlaying: break
+        case .paused(let apps): log("media: paused (\(apps.count) app\(apps.count == 1 ? "" : "s") playing)")
+        case .keptPaused: log("media: still paused from the previous recording")
+        case .commandFailed: log("media: PAUSE FAILED: MediaRemote refused the command or is missing")
+        }
+    }
+
+    /// Plays the music again once the recording is over, kept or discarded.
+    ///
+    /// Not awaited by the caller: the wait for the player's quiet is up to
+    /// 3.5 s (`MediaPause`), and the transcription does not queue behind it.
+    /// Called with the preference off too, so music paused before the switch
+    /// is not left paused.
+    private func resumeMedia() {
+        Task { @MainActor in
+            switch await media.recordingEnded() {
+            case .nothingToResume, .superseded: break
+            case .resumed: log("media: resumed")
+            // The one reading that says the pause did nothing: if MediaRemote
+            // stops reaching other apps in a later macOS, this is the line.
+            case .stillPlaying(let apps):
+                log("media: \(apps.count) app\(apps.count == 1 ? "" : "s") kept playing through the pause; not sending play")
+            case .commandFailed: log("media: PLAY FAILED: MediaRemote refused the command")
+            }
+        }
     }
 
     /// Ends a recording whose gesture the monitor has just thrown away.
@@ -703,6 +739,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         UserDefaults.standard.set(monitor.handsFreeEnabled, forKey: Self.handsFreeKey)
         endOrphanRecording("hands-free switched with a recording running")
         log("hands-free: \(monitor.handsFreeEnabled ? "on" : "off")")
+    }
+
+    private static let pauseMediaKey = "pauseMedia"
+
+    /// On by default: music under the voice is what this exists to remove,
+    /// and absent means on, the shape of the sounds toggle.
+    private static var pausesMedia: Bool {
+        UserDefaults.standard.object(forKey: pauseMediaKey) as? Bool ?? true
+    }
+
+    @objc private func togglePauseMedia() {
+        UserDefaults.standard.set(!Self.pausesMedia, forKey: Self.pauseMediaKey)
+        log("pause media while dictating: \(Self.pausesMedia ? "on" : "off")")
     }
 
     @objc private func toggleSound() {
@@ -951,6 +1000,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let soundItem = action("Sounds", #selector(toggleSound))
         soundItem.state = Feedback.isEnabled ? .on : .off
         keyMenu.addItem(soundItem)
+        // Beside Sounds: both are about what the Mac does around a dictation.
+        let mediaItem = action("Pause Media While Dictating", #selector(togglePauseMedia))
+        mediaItem.state = Self.pausesMedia ? .on : .off
+        mediaItem.toolTip = "Pauses what is playing when you start recording and plays it again when you stop."
+        keyMenu.addItem(mediaItem)
         return keyMenu
     }
 
