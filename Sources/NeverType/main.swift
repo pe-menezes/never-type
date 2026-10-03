@@ -743,10 +743,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private static let pauseMediaKey = "pauseMedia"
 
-    /// On by default: music under the voice is what this exists to remove,
-    /// and absent means on, the shape of the sounds toggle.
+    /// Off by default, and absent means off, unlike the sounds toggle.
+    ///
+    /// The PR had it on. Three things turned it. People who dictate over
+    /// music call the music not stopping a quality, and the app does not
+    /// decide that for them. Reaching into another app is a side effect, and
+    /// the app's side effects are opt-in, the way the clipboard is given back.
+    /// And the reach is partial: `MediaPause.playingApps()` counts regular
+    /// apps only, and a browser plays through a helper process that
+    /// `NSRunningApplication` does not know, so on by default would have
+    /// paused Spotify and left YouTube playing. Measured 2026-10-02 with
+    /// Chrome 154 on macOS 26.6.2; the numbers are in `docs/reference.md`.
     private static var pausesMedia: Bool {
-        UserDefaults.standard.object(forKey: pauseMediaKey) as? Bool ?? true
+        UserDefaults.standard.object(forKey: pauseMediaKey) as? Bool ?? false
     }
 
     @objc private func togglePauseMedia() {
@@ -1003,7 +1012,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Beside Sounds: both are about what the Mac does around a dictation.
         let mediaItem = action("Pause Media While Dictating", #selector(togglePauseMedia))
         mediaItem.state = Self.pausesMedia ? .on : .off
-        mediaItem.toolTip = "Pauses what is playing when you start recording and plays it again when you stop."
+        mediaItem.toolTip = "Pauses the app that is playing when you start recording and plays it again when you stop. A browser tab keeps playing."
         keyMenu.addItem(mediaItem)
         return keyMenu
     }

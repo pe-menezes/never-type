@@ -3,6 +3,33 @@
 Registro das decisões de arquitetura, a mais recente primeiro. O backlog guarda
 a lista curta em "Decidido e fechado"; aqui fica o contexto de cada uma.
 
+### 2026-10-03: Pausar a música é opt-in, e só alcança app com ícone no Dock
+**Decision:** O item `Pause Media While Dictating` (PR #17, vcamaral) fica
+desligado por padrão, guardado em `UserDefaults` sob `pauseMedia`. Ligado, uma
+gravação que começa com um app tocando manda pause pelo MediaRemote, framework
+privado carregado por `dlopen`, o primeiro do app, e manda play quando a
+gravação termina e o app que tocava silenciou. Quem toca é lido no CoreAudio
+(`kAudioProcessPropertyIsRunningOutput`), só entre apps regulares. A regra vive
+em `Sources/NeverTypeCore/MediaPause.swift`.
+**Context:** O PR veio ligado por padrão. Três coisas viraram o padrão. Já
+apareceu gente dizendo que a música não parar é qualidade, e o app não decide
+isso por ninguém. Mexer em outro app é efeito colateral, e os efeitos
+colaterais do app são opt-in, do jeito que o clipboard é devolvido. E o alcance
+é parcial: navegador toca por um helper que o `NSRunningApplication` não
+conhece, então ligado por padrão pausaria o Spotify e deixaria o YouTube
+tocando (medido em 2026-10-02 com Chrome 154 no macOS 26.6.2; Arc e Safari
+inferidos, não medidos). O MediaRemote funciona sem entitlement no 26.6.2 e no
+27.0, 7 de 7 entre as duas máquinas, e não abre socket (`lsof -i` e `-U` vazios
+com comando em voo). A Apple fechou a consulta "está tocando?" no 15.4 e pode
+fechar o comando; o código trata símbolo ausente e loga o pause que não chegou.
+**Discarded alternatives:** Ligado por padrão (surpresa em quem atualiza, e
+comportamento desigual entre Spotify e navegador). Sem o filtro de app regular
+(um som de notificação terminando passaria por "o pause chegou", e o play
+ligaria um player que ninguém tinha ligado). O toggle de play/pause do teclado
+em vez do pause explícito (mandado no silêncio, liga a música). Resolver o app
+responsável pelo helper (cadeia de ppid resolve Chromium e não resolve o XPC do
+WebKit, que o launchd cria; fica para um PR próprio, se alguém pedir).
+
 ### 2026-09-18: Rede só no clique; aplicar é coisa do Terminal
 **Decision:** O app ganha o item de menu `Check for Updates…`, que roda `git
 fetch` no checkout de origem (caminho carimbado em `NeverTypeRepoRoot` no

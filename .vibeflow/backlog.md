@@ -855,6 +855,10 @@ oráculo de texto de `FocusHandbackTests` pode passar a cobrir o painel também.
 
 ## Decidido e fechado
 
+- **Pausar a música enquanto dita é opt-in**, desligado por padrão, e só
+  alcança app com ícone no Dock tocando do próprio processo; aba de navegador
+  não. Contexto e alternativas descartadas em `.vibeflow/decisions.md`
+  (2026-10-03).
 - **O gatilho é escolhido apertando, dentro do modo escuta**, e a segunda tecla
   de mãos-livres vem da mesma tabela. Contexto e alternativas descartadas em
   `.vibeflow/decisions.md` (2026-09-01).

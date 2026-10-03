@@ -225,20 +225,34 @@ Quit NeverType             ⌘Q
   saved and comes back on the next launch.
 - **Sounds**: a toggle in the same submenu, on by default, for whoever works in
   a shared room. The volume is fixed.
-- **Pause Media While Dictating**: below Sounds, on by default. When a
-  recording starts while an app is playing sound, the app sends pause, and when
-  the recording ends, kept or discarded, it sends play, but only after an app
-  that was playing has gone quiet. With nothing playing, nothing is sent, so
-  finishing a dictation never starts music out of nowhere. A call in Zoom keeps
-  putting out sound through the pause and never gets a play. The pause goes
-  through MediaRemote, the private framework behind the keyboard's play key;
-  telling whether anything is playing goes through CoreAudio, because
+- **Pause Media While Dictating**: below Sounds, off by default. On, a
+  recording that starts while an app is playing sound sends pause to it, and
+  the end of the recording, kept or discarded, sends play, but only after an
+  app that was playing has gone quiet. With nothing playing, nothing is sent,
+  so finishing a dictation never starts music out of nowhere. A call in Zoom
+  keeps putting out sound through the pause and never gets a play. The pause
+  goes through MediaRemote, the private framework behind the keyboard's play
+  key; telling whether anything is playing goes through CoreAudio, because
   MediaRemote's own answer to that is `false` for apps outside Apple's list.
   Measured with Spotify on macOS 27.0: the music stops at once, the output goes
   quiet ~2.3 s after the pause, and comes back ~45 ms after play, so a dictation
-  shorter than 2.3 s waits that long before the music returns. A pause that
-  reached nothing is in the log: `media: 1 app kept playing through the pause;
-  not sending play`. One case still goes wrong. If you paused the music yourself
+  shorter than 2.3 s waits that long before the music returns. Measured again
+  on macOS 26.6.2 on 2026-10-02: 2209 to 2316 ms to the quiet and 35 to 71 ms
+  back. A pause that reached nothing is in the log: `media: 1 app kept playing
+  through the pause; not sending play`. What it covers is an app with a Dock
+  tile that plays from its own process: Spotify, Music. A browser tab is not
+  covered. Chrome plays through `Google Chrome Helper`, a process CoreAudio
+  lists but `NSRunningApplication` does not know, so the app sees nothing
+  playing and sends nothing, and YouTube keeps playing under the voice exactly
+  as with the switch off (measured 2026-10-02, Chrome 154). Arc ships the same
+  helpers, and Safari plays through `com.apple.WebKit.GPU`, both inferred and
+  not measured. Off by default for three reasons: people who dictate over
+  music call the music not stopping a quality; reaching into another app is a
+  side effect, and the app's side effects are opt-in; and with the browser gap,
+  on by default would pause Spotify and leave YouTube playing. Two more costs
+  of turning it on. Every press of the trigger pauses the music, including the
+  press that turns into a shortcut or a short tap, so Right ⌘ V with Right ⌘ as
+  the key is a ~2.3 s hole in the music. And if you paused the music yourself
   less than ~2.3 s before dictating, its output is still running, and the play
   at the end starts it again. A Bluetooth headset cuts the music by itself when
   the microphone opens, as the HFP note earlier in this file says.
@@ -350,8 +364,9 @@ account and filesystem protections.
 **Clear History** deletes `historico.json` and `last.wav`, the two files that
 hold what you said.
 
-Outside that folder, `UserDefaults` holds six preferences: the key, hands-free,
-the sounds toggle, the pill's position, `clipboardRestoreDelay` and
+Outside that folder, `UserDefaults` holds nine keys: the trigger, hands-free
+and its second key, the sounds toggle, the pill's position and whether it is
+always visible, the media pause, `clipboardRestoreDelay` and
 `checkFocusBeforePaste`. None of them holds text. The `ultima-transcricao.txt`
 from earlier versions is deleted at launch.
 
@@ -369,10 +384,22 @@ where the menu's **Check for Updates…** runs `/usr/bin/git` (a `fetch`, then
 three questions answered from the checkout) and `/usr/bin/open -a Terminal` on
 `scripts/update.sh`. Both run only on that click, the fetch with a 30 s timeout,
 and nothing in the app runs them on a timer or at launch. The other patterns in
-the list still do not hit. The sources import AVFoundation, AppKit,
-Carbon.HIToolbox, Foundation, ServiceManagement, `os` and the bundled CWhisper,
-`Package.swift` declares no external package, and the three `Data(contentsOf:)`
-calls read `vocabulario.json`, `historico.json` and a test fixture from disk.
+the list still do not hit. Since 2026-10-02, `dlopen(` belongs on the list and
+hits once, in `Sources/NeverTypeCore/MediaPause.swift`: **Pause Media While
+Dictating** loads
+`/System/Library/PrivateFrameworks/MediaRemote.framework/MediaRemote` by path
+at run time and resolves `MRMediaRemoteSendCommand` from it, the first private
+framework in the app. Loaded that way it is invisible to `otool -L`, and `nm -u`
+shows only `_dlopen` and `_dlsym` for it, so the binary check below cannot
+vouch for it; a grep for `dlopen(` can, and a second hit would need the same
+reading as this one. MediaRemote talks to `mediaremoted` over XPC. Measured on
+2026-10-02 on macOS 26.6.2: `lsof -a -p PID -i` and `lsof -a -p PID -U` on a
+process holding a pause command listed no socket of either kind. The sources
+import AVFoundation, AppKit, Carbon.HIToolbox, CoreAudio, CoreGraphics,
+Foundation, ServiceManagement, `os` and the bundled CWhisper, `Package.swift`
+declares no external package, and the three `Data(contentsOf:)` calls read
+`vocabulario.json`, `historico.json` and a test fixture from disk.
+a test fixture from disk.
 
 A Definition of Done item on each spec covers the claim, in the sources and in
 the binary. CI builds the app and runs the suite, and it runs neither of those
