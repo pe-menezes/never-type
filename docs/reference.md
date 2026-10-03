@@ -207,6 +207,8 @@ the orb is the only one of the two that exists.
 Hotkey: Right ⌘            >
 Hands-free: double tap     >
 Vocabulary…
+Always Show Pill
+Pause Media While Dictating
 ──────────────
 Copy Last Transcription
 History (30)               >
@@ -225,8 +227,37 @@ Quit NeverType             ⌘Q
   saved and comes back on the next launch.
 - **Sounds**: a toggle in the same submenu, on by default, for whoever works in
   a shared room. The volume is fixed.
-- **Pause Media While Dictating**: below Sounds. A new install starts with it
-  on, and an install that ran before the switch existed starts with it off.
+- **Hands-free: double tap**: the submenu holds the switch, on by default, and
+  three lines of instruction under it: `Double-tap Right ⌘ to lock`, `Tap once
+  to finish · Esc discards`, `Typing does not cancel while locked`. Under a
+  separator comes the second key. While none is chosen, the item is **Choose a
+  hands-free key…**. With one chosen, the submenu shows the line `Tap Right ⌥
+  to lock, tap again to finish`, then **Change hands-free key…** and **Remove
+  hands-free key**, and the title reads **Hands-free: double tap or Right ⌥**,
+  so both ways in are taught from the menu itself. Turned off, the item reads
+  **Hands-free: off** and the submenu keeps one
+  line, `Right ⌘ only records while held`. The second key stays saved and does
+  nothing until the mode is on again. The choice is saved. This is the way out
+  for somebody who locked by accident: turning it off ends the recording that
+  was running.
+- **Vocabulary…**: opens the vocabulary window, with two tabs (**Vocabulary**,
+  for the terms, and **Replacements**), plus and minus buttons, and a save on
+  every edited cell. Closing gives the focus back to the app you were in, and
+  the counts show up in the item itself.
+- **Always Show Pill**: on by default. Off, the floating pill appears only while
+  you dictate and goes away the moment the text lands. What that costs is on the
+  tooltip and in `PillVisibility`: the pill is the only way to open this menu in
+  full screen, where macOS hides the menu bar, and the idle pill is the only
+  sign that an app with no Dock tile and no window is still running. VoiceOver
+  is a third cost, unmeasured: a hidden panel leaves the accessibility
+  hierarchy, so the progress the pill announces is out of reach until it comes
+  back. The line governs the pill alone. The menu bar icon is always there.
+- **Pause Media While Dictating**: at the root, below Always Show Pill, for the
+  reason that one sits there: it applies to every dictation, whichever key
+  starts it. It shipped beside Sounds, in the Hotkey submenu, and the author
+  opened the menu after updating and did not find it (2026-10-03). A new
+  install starts with it on, and an install that ran before the switch existed
+  starts with it off.
   Whoever already dictates with NeverType is used to the music going on under
   the voice, and some call that a quality, so an update leaves it off for them.
   Whoever installs now has no habit to break. The app tells the two apart at
@@ -265,31 +296,6 @@ Quit NeverType             ⌘Q
   paused until you press play. Only Spotify was measured, at ~2.3 s. A
   Bluetooth headset cuts the music by itself when the microphone opens, as the
   HFP note earlier in this file says.
-- **Hands-free: double tap**: the submenu holds the switch, on by default, and
-  three lines of instruction under it: `Double-tap Right ⌘ to lock`, `Tap once
-  to finish · Esc discards`, `Typing does not cancel while locked`. Under a
-  separator comes the second key. While none is chosen, the item is **Choose a
-  hands-free key…**. With one chosen, the submenu shows the line `Tap Right ⌥
-  to lock, tap again to finish`, then **Change hands-free key…** and **Remove
-  hands-free key**, and the title reads **Hands-free: double tap or Right ⌥**,
-  so both ways in are taught from the menu itself. Turned off, the item reads
-  **Hands-free: off** and the submenu keeps one
-  line, `Right ⌘ only records while held`. The second key stays saved and does
-  nothing until the mode is on again. The choice is saved. This is the way out
-  for somebody who locked by accident: turning it off ends the recording that
-  was running.
-- **Vocabulary…**: opens the vocabulary window, with two tabs (**Vocabulary**,
-  for the terms, and **Replacements**), plus and minus buttons, and a save on
-  every edited cell. Closing gives the focus back to the app you were in, and
-  the counts show up in the item itself.
-- **Always Show Pill**: on by default. Off, the floating pill appears only while
-  you dictate and goes away the moment the text lands. What that costs is on the
-  tooltip and in `PillVisibility`: the pill is the only way to open this menu in
-  full screen, where macOS hides the menu bar, and the idle pill is the only
-  sign that an app with no Dock tile and no window is still running. VoiceOver
-  is a third cost, unmeasured: a hidden panel leaves the accessibility
-  hierarchy, so the progress the pill announces is out of reach until it comes
-  back. The line governs the pill alone. The menu bar icon is always there.
 - **Copy Last Transcription**: appears from the first transcription on, with the
   preview in the tooltip.
 - **History**: the last 30, most recent first, with the time and a 44-character

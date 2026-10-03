@@ -28,6 +28,7 @@ struct MenuLayoutTests {
                             startsAtLogin: Bool = false,
                             needsApproval: Bool = false,
                             pillAlwaysVisible: Bool = true,
+                            pausesMedia: Bool = true,
                             updateCheck: Bool = false) -> MenuLayout.Conditions {
         MenuLayout.Conditions(microphoneAuthorized: microphone,
                               accessibilityAuthorized: accessibility,
@@ -39,6 +40,7 @@ struct MenuLayoutTests {
                               startsAtLogin: startsAtLogin,
                               loginItemNeedsApproval: needsApproval,
                               pillAlwaysVisible: pillAlwaysVisible,
+                              pausesMedia: pausesMedia,
                               updateCheckAvailable: updateCheck)
     }
 
@@ -51,6 +53,7 @@ struct MenuLayoutTests {
             .handsFree(enabled: true),
             .vocabulary,
             .pillAlwaysVisible(enabled: true),
+            .pauseMedia(enabled: true),
             .separator,
             .copyLastTranscription,
             .history(count: 30),
@@ -77,6 +80,7 @@ struct MenuLayoutTests {
             .handsFree(enabled: true),
             .vocabulary,
             .pillAlwaysVisible(enabled: true),
+            .pauseMedia(enabled: true),
             .separator,
             .copyLastTranscription,
             .history(count: 30),
@@ -118,6 +122,7 @@ struct MenuLayoutTests {
             .handsFree(enabled: true),
             .vocabulary,
             .pillAlwaysVisible(enabled: true),
+            .pauseMedia(enabled: true),
             .separator,
             .startAtLogin(enabled: false),
             .quit,
@@ -157,6 +162,7 @@ struct MenuLayoutTests {
             .handsFree(enabled: true),
             .vocabulary,
             .pillAlwaysVisible(enabled: true),
+            .pauseMedia(enabled: true),
             .separator,
             .startAtLogin(enabled: false),
             .quit,
@@ -199,6 +205,7 @@ struct MenuLayoutTests {
             .handsFree(enabled: false),
             .vocabulary,
             .pillAlwaysVisible(enabled: true),
+            .pauseMedia(enabled: true),
             .separator,
             .startAtLogin(enabled: false),
             .quit,
@@ -255,6 +262,26 @@ struct MenuLayoutTests {
         }
         #expect(rows.firstIndex(of: .pillAlwaysVisible(enabled: true)) == vocabulary + 1,
                 "got: \(rows)")
+    }
+
+    @Test("the pause media item carries its own checkmark")
+    func pauseMediaCheckmark() {
+        #expect(MenuLayout.rows(for: conditions(pausesMedia: true))
+            .contains(.pauseMedia(enabled: true)))
+        #expect(MenuLayout.rows(for: conditions(pausesMedia: false))
+            .contains(.pauseMedia(enabled: false)))
+    }
+
+    /// It shipped under Hotkey, beside Sounds, and the author opened the menu
+    /// after updating and did not find it. The index is what pins it.
+    @Test("the pause media item sits at the root, right after Always Show Pill")
+    func pauseMediaSitsAtTheRoot() {
+        let rows = MenuLayout.rows(for: conditions())
+        guard let pill = rows.firstIndex(of: .pillAlwaysVisible(enabled: true)) else {
+            Issue.record("no Always Show Pill row: \(rows)")
+            return
+        }
+        #expect(rows.firstIndex(of: .pauseMedia(enabled: true)) == pill + 1, "got: \(rows)")
     }
 
     @Test("the login item carries its own checkmark")

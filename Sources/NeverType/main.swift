@@ -895,6 +895,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             startsAtLogin: loginState == .on,
             loginItemNeedsApproval: loginState == .needsApproval,
             pillAlwaysVisible: overlay.alwaysVisible,
+            pausesMedia: Self.pausesMedia,
             updateCheckAvailable: UpdateCheck.isAvailable(repoRoot: Self.repoRoot))
 
         for row in MenuLayout.rows(for: conditions) {
@@ -962,6 +963,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 + "In full screen it is the only way to open this menu."
             return item
 
+        case .pauseMedia(let enabled):
+            let item = action("Pause Media While Dictating", #selector(togglePauseMedia))
+            item.state = enabled ? .on : .off
+            item.toolTip = "Pauses the app that is playing when you start recording and plays it again when you stop. A browser tab keeps playing."
+            return item
+
         case .copyLastTranscription:
             let item = action("Copy Last Transcription", #selector(copyLastTranscript))
             if let lastTranscript { item.toolTip = preview(of: lastTranscript) }
@@ -1020,11 +1027,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let soundItem = action("Sounds", #selector(toggleSound))
         soundItem.state = Feedback.isEnabled ? .on : .off
         keyMenu.addItem(soundItem)
-        // Beside Sounds: both are about what the Mac does around a dictation.
-        let mediaItem = action("Pause Media While Dictating", #selector(togglePauseMedia))
-        mediaItem.state = Self.pausesMedia ? .on : .off
-        mediaItem.toolTip = "Pauses the app that is playing when you start recording and plays it again when you stop. A browser tab keeps playing."
-        keyMenu.addItem(mediaItem)
         return keyMenu
     }
 

@@ -57,6 +57,10 @@ public enum MenuLayout {
         /// toggles here; `PillVisibility` holds the rule and what turning it
         /// off costs.
         public let pillAlwaysVisible: Bool
+        /// Whether a recording pauses the app that is playing. Queried at
+        /// every rebuild, like the other toggles here. `MediaPause.firstValue`
+        /// holds the rule for its first value on a Mac.
+        public let pausesMedia: Bool
         /// Whether the checkout this build came from is still there, with
         /// `scripts/update.sh` in it: `UpdateCheck.isAvailable`, read on every
         /// rebuild. A copy with no checkout has nothing to check against, so
@@ -73,6 +77,7 @@ public enum MenuLayout {
                     startsAtLogin: Bool,
                     loginItemNeedsApproval: Bool,
                     pillAlwaysVisible: Bool,
+                    pausesMedia: Bool,
                     updateCheckAvailable: Bool = false) {
             self.microphoneAuthorized = microphoneAuthorized
             self.accessibilityAuthorized = accessibilityAuthorized
@@ -84,6 +89,7 @@ public enum MenuLayout {
             self.startsAtLogin = startsAtLogin
             self.loginItemNeedsApproval = loginItemNeedsApproval
             self.pillAlwaysVisible = pillAlwaysVisible
+            self.pausesMedia = pausesMedia
             self.updateCheckAvailable = updateCheckAvailable
         }
     }
@@ -109,6 +115,12 @@ public enum MenuLayout {
         /// because it governs the pill everywhere. A place under Hotkey would
         /// say it applies while dictating with that key.
         case pillAlwaysVisible(enabled: Bool)
+        /// Whether a recording pauses the app that is playing. At the root for
+        /// the reason `pillAlwaysVisible` is: it applies to every dictation,
+        /// whichever key starts it. It shipped under Hotkey, beside Sounds,
+        /// and the author opened the menu after updating and did not find it
+        /// (2026-10-03).
+        case pauseMedia(enabled: Bool)
         case copyLastTranscription
         case history(count: Int)
         case model
@@ -160,6 +172,7 @@ public enum MenuLayout {
                                key: conditions.handsFreeEnabled ? conditions.handsFreeKeyLabel : nil))
         rows.append(.vocabulary)
         rows.append(.pillAlwaysVisible(enabled: conditions.pillAlwaysVisible))
+        rows.append(.pauseMedia(enabled: conditions.pausesMedia))
 
         // The block appears with the first transcription and the submenu with
         // the second: a "History (1)" holding the same text as the line above it
