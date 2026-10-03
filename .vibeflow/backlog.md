@@ -855,6 +855,11 @@ oráculo de texto de `FocusHandbackTests` pode passar a cobrir o painel também.
 
 ## Decidido e fechado
 
+- **Pausar a música enquanto dita começa ligado só em instalação nova.** Quem
+  já usava antes do item continua com a música seguindo, até ligar no menu. O
+  item alcança app com ícone no Dock tocando do próprio processo. Aba de
+  navegador fica de fora. Contexto e alternativas descartadas em
+  `.vibeflow/decisions.md` (2026-10-03).
 - **O gatilho é escolhido apertando, dentro do modo escuta**, e a segunda tecla
   de mãos-livres vem da mesma tabela. Contexto e alternativas descartadas em
   `.vibeflow/decisions.md` (2026-09-01).

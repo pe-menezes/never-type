@@ -225,6 +225,46 @@ Quit NeverType             ⌘Q
   saved and comes back on the next launch.
 - **Sounds**: a toggle in the same submenu, on by default, for whoever works in
   a shared room. The volume is fixed.
+- **Pause Media While Dictating**: below Sounds. A new install starts with it
+  on, and an install that ran before the switch existed starts with it off.
+  Whoever already dictates with NeverType is used to the music going on under
+  the voice, and some call that a quality, so an update leaves it off for them.
+  Whoever installs now has no habit to break. The app tells the two apart at
+  the first launch of a build that has the switch: `nevertype.log` already
+  being there means an earlier launch, because every launch since 2026-08-29
+  creates it and nothing in the app deletes it. The folder proves nothing,
+  since `install.sh` creates it with the model before the first launch. The
+  value is stored either way, the menu item changes it, and that first launch's
+  log says which way it went. On, a recording that starts while an app is
+  playing sound sends pause to it, and the end of the recording, kept or
+  discarded, sends play, but only after an app that was playing has gone quiet.
+  With nothing playing, nothing is sent, so finishing a dictation never starts
+  music out of nowhere. A call in Zoom keeps putting out sound through the
+  pause and never gets a play. The pause goes through MediaRemote, the private
+  framework behind the keyboard's play key; telling whether anything is playing
+  goes through CoreAudio, because MediaRemote's own answer to that is `false`
+  for apps outside Apple's list. Measured with Spotify on macOS 27.0: the music
+  stops at once, the output goes quiet ~2.3 s after the pause, and comes back
+  ~45 ms after play, so a dictation shorter than 2.3 s waits that long before
+  the music returns. Measured again on macOS 26.6.2 on 2026-10-02: 2209 to
+  2316 ms to the quiet and 35 to 71 ms back. A pause that reached nothing is in
+  the log: `media: 1 app kept playing through the pause; not sending play`.
+  What it covers is an app with a Dock tile that plays from its own process,
+  which Spotify does. A browser tab is not covered. Chrome plays through
+  `Google Chrome Helper`, a process CoreAudio lists but `NSRunningApplication`
+  does not know, so the app sees nothing playing and sends nothing, and YouTube
+  keeps playing under the voice exactly as with the switch off (measured
+  2026-10-02, Chrome 154). Arc ships the same helpers, and Safari plays through
+  `com.apple.WebKit.GPU`, both inferred and not measured. Three costs come with
+  it on. Every press of the trigger pauses the music, including the press that
+  turns into a shortcut or a short tap, so Right ⌘ V with Right ⌘ as the key is
+  a ~2.3 s hole in the music. If you paused the music yourself less than ~2.3 s
+  before dictating, its output is still running, and the play at the end starts
+  it again. And a player that takes longer than 3.5 s to go quiet after the
+  pause looks like one the pause never reached, so it gets no play and stays
+  paused until you press play. Only Spotify was measured, at ~2.3 s. A
+  Bluetooth headset cuts the music by itself when the microphone opens, as the
+  HFP note earlier in this file says.
 - **Hands-free: double tap**: the submenu holds the switch, on by default, and
   three lines of instruction under it: `Double-tap Right ⌘ to lock`, `Tap once
   to finish · Esc discards`, `Typing does not cancel while locked`. Under a
@@ -333,8 +373,9 @@ account and filesystem protections.
 **Clear History** deletes `historico.json` and `last.wav`, the two files that
 hold what you said.
 
-Outside that folder, `UserDefaults` holds six preferences: the key, hands-free,
-the sounds toggle, the pill's position, `clipboardRestoreDelay` and
+Outside that folder, `UserDefaults` holds nine keys: the trigger, hands-free
+and its second key, the sounds toggle, the pill's position and whether it is
+always visible, the media pause, `clipboardRestoreDelay` and
 `checkFocusBeforePaste`. None of them holds text. The `ultima-transcricao.txt`
 from earlier versions is deleted at launch.
 
@@ -352,10 +393,22 @@ where the menu's **Check for Updates…** runs `/usr/bin/git` (a `fetch`, then
 three questions answered from the checkout) and `/usr/bin/open -a Terminal` on
 `scripts/update.sh`. Both run only on that click, the fetch with a 30 s timeout,
 and nothing in the app runs them on a timer or at launch. The other patterns in
-the list still do not hit. The sources import AVFoundation, AppKit,
-Carbon.HIToolbox, Foundation, ServiceManagement, `os` and the bundled CWhisper,
-`Package.swift` declares no external package, and the three `Data(contentsOf:)`
-calls read `vocabulario.json`, `historico.json` and a test fixture from disk.
+the list still do not hit. Since 2026-10-02, `dlopen(` belongs on the list and
+hits once, in `Sources/NeverTypeCore/MediaPause.swift`: **Pause Media While
+Dictating** loads
+`/System/Library/PrivateFrameworks/MediaRemote.framework/MediaRemote` by path
+at run time and resolves `MRMediaRemoteSendCommand` from it, the first private
+framework in the app. Loaded that way it is invisible to `otool -L`, and `nm -u`
+shows only `_dlopen` and `_dlsym` for it, so the binary check below cannot
+vouch for it; a grep for `dlopen(` can, and a second hit would need the same
+reading as this one. MediaRemote talks to `mediaremoted` over XPC. Measured on
+2026-10-02 on macOS 26.6.2: `lsof -a -p PID -i` and `lsof -a -p PID -U` on a
+process holding a pause command listed no socket of either kind. The sources
+import AVFoundation, AppKit, Carbon.HIToolbox, CoreAudio, CoreGraphics,
+Foundation, ServiceManagement, `os` and the bundled CWhisper, `Package.swift`
+declares no external package, and the three `Data(contentsOf:)` calls read
+`vocabulario.json`, `historico.json` and a test fixture from disk.
+a test fixture from disk.
 
 A Definition of Done item on each spec covers the claim, in the sources and in
 the binary. CI builds the app and runs the suite, and it runs neither of those

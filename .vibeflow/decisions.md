@@ -3,6 +3,47 @@
 Registro das decisões de arquitetura, a mais recente primeiro. O backlog guarda
 a lista curta em "Decidido e fechado"; aqui fica o contexto de cada uma.
 
+### 2026-10-03: Pausar a música começa ligado só em instalação nova
+**Decision:** O item `Pause Media While Dictating` (PR #17, vcamaral) começa
+ligado numa instalação nova e desligado numa que rodou antes de o item existir.
+O app decide uma vez, no primeiro launch de um build que tem o item, e guarda o
+valor em `UserDefaults` sob `pauseMedia` nos dois casos. A prova de launch
+anterior é o `nevertype.log` já existir quando o app abre: todo launch desde
+2026-08-29 cria o arquivo (`startLog`, que responde se havia um antes de
+truncar), e nada no app ou nos scripts o apaga. A regra vive em
+`MediaPause.firstValue(stored:ranBefore:)`. Ligado, uma gravação que começa com
+um app tocando manda pause pelo MediaRemote, framework privado carregado por
+`dlopen`, o primeiro do app, e manda play quando a gravação termina e o app que
+tocava silenciou. Quem toca é lido no CoreAudio
+(`kAudioProcessPropertyIsRunningOutput`), só entre apps regulares.
+**Context:** O PR veio ligado para todo mundo. Na mesma revisão o padrão foi
+para desligado para todo mundo, por três razões: já apareceu gente dizendo que a
+música não parar é qualidade; mexer em outro app é efeito colateral; e o
+alcance é parcial, porque navegador toca por um helper que o
+`NSRunningApplication` não conhece (medido em 2026-10-02 com Chrome 154 no
+macOS 26.6.2; Arc e Safari inferidos, não medidos). O que fechou a decisão foi
+o medo de quebrar quem já usa: quem dita hoje está acostumado com a música
+seguindo, e um update que passa a pausá-la muda um hábito que ninguém pediu
+para mudar. Quem instala agora não tem hábito. O MediaRemote funciona sem
+entitlement no 26.6.2 e no 27.0, 7 de 7 entre as duas máquinas, e não abre
+socket (`lsof -i` e `-U` vazios com comando em voo). A Apple fechou a consulta
+"está tocando?" no 15.4 e pode fechar o comando; o código trata símbolo ausente
+e loga o pause que não chegou.
+**Discarded alternatives:** Ligado para todo mundo (a versão do PR: muda o
+hábito de quem já usa). Desligado para todo mundo (a primeira correção desta
+revisão: quem instala agora só acha o item se for procurar no submenu).
+Reconhecer quem já usa pelas chaves em `UserDefaults` (só existem depois que a
+pessoa muda algum ajuste; neste Mac são quatro, todas de mudanças). Reconhecer
+pela pasta em Application Support (o `install.sh` cria a pasta com o modelo
+antes do primeiro launch). O `install.sh` gravar o padrão (divide a regra entre
+shell e Swift, e deixa de fora quem roda o build direto). Sem o filtro de app
+regular (um som de notificação terminando passaria por "o pause chegou", e o
+play ligaria um player que ninguém tinha ligado). O toggle de play/pause do
+teclado no lugar do pause explícito (mandado no silêncio, liga a música).
+Resolver o app responsável pelo helper do navegador (a cadeia de ppid chega ao
+app no Chromium; o XPC do WebKit é filho do launchd e fica fora dela). Fica
+para um PR próprio, se alguém pedir.
+
 ### 2026-09-18: Rede só no clique; aplicar é coisa do Terminal
 **Decision:** O app ganha o item de menu `Check for Updates…`, que roda `git
 fetch` no checkout de origem (caminho carimbado em `NeverTypeRepoRoot` no
