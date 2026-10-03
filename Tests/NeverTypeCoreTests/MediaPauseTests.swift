@@ -187,6 +187,10 @@ struct MediaPauseTests {
         // The first value comes from what `startLog` saw before it truncated
         // the log. Read anywhere later, every launch looks like an old one.
         #expect(source.components(separatedBy: "MediaPause.firstValue(").count - 1 == 1)
+        // One item, built from `MenuLayout`'s root row. A second one back in
+        // the Hotkey submenu would be two switches for one preference.
+        #expect(source.components(separatedBy: "\"Pause Media While Dictating\"").count - 1 == 1,
+                "expected the menu item once, at the root")
         #expect(source.contains("let ranBefore = startLog()")
                     && source.contains("storeFirstPauseMedia(ranBefore: ranBefore)"),
                 "the first value has to come from what startLog saw before truncating the log")
