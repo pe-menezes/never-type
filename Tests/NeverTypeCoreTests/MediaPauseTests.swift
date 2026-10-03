@@ -153,7 +153,27 @@ struct MediaPauseTests {
         #expect(media.sent == [.pause, .play])
     }
 
-    @Test("the app wires the pause into start, release and every discard")
+    @Test("a new install starts with the pause on")
+    func newInstallStartsOn() {
+        #expect(MediaPause.firstValue(stored: nil, ranBefore: false) == true)
+    }
+
+    @Test("an install that ran before the switch existed keeps the music playing")
+    func earlierInstallStaysOff() {
+        #expect(MediaPause.firstValue(stored: nil, ranBefore: true) == false)
+    }
+
+    @Test("a stored value is never overwritten, whichever it is and whatever the log says")
+    func storedValueStays() {
+        for stored in [true, false] {
+            for ranBefore in [true, false] {
+                #expect(MediaPause.firstValue(stored: stored, ranBefore: ranBefore) == nil,
+                        "stored \(stored), ran before \(ranBefore): expected nothing to store")
+            }
+        }
+    }
+
+    @Test("the app wires the pause into start, release, every discard and the first launch")
     func appWiring() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
@@ -164,5 +184,11 @@ struct MediaPauseTests {
         #expect(source.components(separatedBy: "media.recordingStarted()").count - 1 == 1)
         #expect(source.components(separatedBy: "resumeMedia()").count - 1 == 3,
                 "expected the definition plus release and discard")
+        // The first value comes from what `startLog` saw before it truncated
+        // the log. Read anywhere later, every launch looks like an old one.
+        #expect(source.components(separatedBy: "MediaPause.firstValue(").count - 1 == 1)
+        #expect(source.contains("let ranBefore = startLog()")
+                    && source.contains("storeFirstPauseMedia(ranBefore: ranBefore)"),
+                "the first value has to come from what startLog saw before truncating the log")
     }
 }

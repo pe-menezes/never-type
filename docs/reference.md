@@ -225,37 +225,43 @@ Quit NeverType             ⌘Q
   saved and comes back on the next launch.
 - **Sounds**: a toggle in the same submenu, on by default, for whoever works in
   a shared room. The volume is fixed.
-- **Pause Media While Dictating**: below Sounds, off by default. On, a
-  recording that starts while an app is playing sound sends pause to it, and
-  the end of the recording, kept or discarded, sends play, but only after an
-  app that was playing has gone quiet. With nothing playing, nothing is sent,
-  so finishing a dictation never starts music out of nowhere. A call in Zoom
-  keeps putting out sound through the pause and never gets a play. The pause
-  goes through MediaRemote, the private framework behind the keyboard's play
-  key; telling whether anything is playing goes through CoreAudio, because
-  MediaRemote's own answer to that is `false` for apps outside Apple's list.
-  Measured with Spotify on macOS 27.0: the music stops at once, the output goes
-  quiet ~2.3 s after the pause, and comes back ~45 ms after play, so a dictation
-  shorter than 2.3 s waits that long before the music returns. Measured again
-  on macOS 26.6.2 on 2026-10-02: 2209 to 2316 ms to the quiet and 35 to 71 ms
-  back. A pause that reached nothing is in the log: `media: 1 app kept playing
-  through the pause; not sending play`. What it covers is an app with a Dock
-  tile that plays from its own process: Spotify, Music. A browser tab is not
-  covered. Chrome plays through `Google Chrome Helper`, a process CoreAudio
-  lists but `NSRunningApplication` does not know, so the app sees nothing
-  playing and sends nothing, and YouTube keeps playing under the voice exactly
-  as with the switch off (measured 2026-10-02, Chrome 154). Arc ships the same
-  helpers, and Safari plays through `com.apple.WebKit.GPU`, both inferred and
-  not measured. Off by default for three reasons: people who dictate over
-  music call the music not stopping a quality; reaching into another app is a
-  side effect, and the app's side effects are opt-in; and with the browser gap,
-  on by default would pause Spotify and leave YouTube playing. Two more costs
-  of turning it on. Every press of the trigger pauses the music, including the
-  press that turns into a shortcut or a short tap, so Right ⌘ V with Right ⌘ as
-  the key is a ~2.3 s hole in the music. And if you paused the music yourself
-  less than ~2.3 s before dictating, its output is still running, and the play
-  at the end starts it again. A Bluetooth headset cuts the music by itself when
-  the microphone opens, as the HFP note earlier in this file says.
+- **Pause Media While Dictating**: below Sounds. A new install starts with it
+  on, and an install that ran before the switch existed starts with it off.
+  Whoever already dictates with NeverType is used to the music going on under
+  the voice, and some call that a quality, so an update leaves it off for them.
+  Whoever installs now has no habit to break. The app tells the two apart at
+  the first launch of a build that has the switch: `nevertype.log` already
+  being there means an earlier launch, because every launch since 2026-08-29
+  creates it and nothing in the app deletes it. The folder proves nothing,
+  since `install.sh` creates it with the model before the first launch. The
+  value is stored either way, the menu item changes it, and that first launch's
+  log says which way it went. On, a recording that starts while an app is
+  playing sound sends pause to it, and the end of the recording, kept or
+  discarded, sends play, but only after an app that was playing has gone quiet.
+  With nothing playing, nothing is sent, so finishing a dictation never starts
+  music out of nowhere. A call in Zoom keeps putting out sound through the
+  pause and never gets a play. The pause goes through MediaRemote, the private
+  framework behind the keyboard's play key; telling whether anything is playing
+  goes through CoreAudio, because MediaRemote's own answer to that is `false`
+  for apps outside Apple's list. Measured with Spotify on macOS 27.0: the music
+  stops at once, the output goes quiet ~2.3 s after the pause, and comes back
+  ~45 ms after play, so a dictation shorter than 2.3 s waits that long before
+  the music returns. Measured again on macOS 26.6.2 on 2026-10-02: 2209 to
+  2316 ms to the quiet and 35 to 71 ms back. A pause that reached nothing is in
+  the log: `media: 1 app kept playing through the pause; not sending play`.
+  What it covers is an app with a Dock tile that plays from its own process,
+  which Spotify does. A browser tab is not covered. Chrome plays through
+  `Google Chrome Helper`, a process CoreAudio lists but `NSRunningApplication`
+  does not know, so the app sees nothing playing and sends nothing, and YouTube
+  keeps playing under the voice exactly as with the switch off (measured
+  2026-10-02, Chrome 154). Arc ships the same helpers, and Safari plays through
+  `com.apple.WebKit.GPU`, both inferred and not measured. Two costs come with
+  it on. Every press of the trigger pauses the music, including the press that
+  turns into a shortcut or a short tap, so Right ⌘ V with Right ⌘ as the key is
+  a ~2.3 s hole in the music. And if you paused the music yourself less than
+  ~2.3 s before dictating, its output is still running, and the play at the end
+  starts it again. A Bluetooth headset cuts the music by itself when the
+  microphone opens, as the HFP note earlier in this file says.
 - **Hands-free: double tap**: the submenu holds the switch, on by default, and
   three lines of instruction under it: `Double-tap Right ⌘ to lock`, `Tap once
   to finish · Esc discards`, `Typing does not cancel while locked`. Under a

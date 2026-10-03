@@ -241,8 +241,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        startLog()
+        let ranBefore = startLog()
         removeLegacyTranscriptFile()
+        storeFirstPauseMedia(ranBefore: ranBefore)
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         render(.idle)
         // The menu rebuilds itself when opened (menuNeedsUpdate), so it never
@@ -743,19 +744,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private static let pauseMediaKey = "pauseMedia"
 
-    /// Off by default, and absent means off, unlike the sounds toggle.
+    /// Absent reads as off, the behavior every install had before the switch.
     ///
-    /// The PR had it on. Three things turned it. People who dictate over
-    /// music call the music not stopping a quality, and the app does not
-    /// decide that for them. Reaching into another app is a side effect, and
-    /// the app's side effects are opt-in, the way the clipboard is given back.
-    /// And the reach is partial: `MediaPause.playingApps()` counts regular
-    /// apps only, and a browser plays through a helper process that
-    /// `NSRunningApplication` does not know, so on by default would have
-    /// paused Spotify and left YouTube playing. Measured 2026-10-02 with
-    /// Chrome 154 on macOS 26.6.2; the numbers are in `docs/reference.md`.
+    /// The first launch of a build that has the switch stores a value
+    /// (`storeFirstPauseMedia`), so absent only lasts if that never ran. The
+    /// PR had the switch on for everyone, and an update that starts pausing
+    /// the music breaks the habit of whoever already dictates over it. Some
+    /// call the music going on a quality. The reach is partial too: a browser
+    /// tab keeps playing (`MediaPause.playingApps()`, numbers in
+    /// `docs/reference.md`).
     private static var pausesMedia: Bool {
         UserDefaults.standard.object(forKey: pauseMediaKey) as? Bool ?? false
+    }
+
+    /// Stores the switch's first value, once (`MediaPause.firstValue`). The
+    /// line lands only in the first launch's log, since the log is truncated
+    /// on every launch.
+    private func storeFirstPauseMedia(ranBefore: Bool) {
+        let stored = UserDefaults.standard.object(forKey: Self.pauseMediaKey) as? Bool
+        guard let first = MediaPause.firstValue(stored: stored, ranBefore: ranBefore) else { return }
+        UserDefaults.standard.set(first, forKey: Self.pauseMediaKey)
+        log("pause media while dictating: " + (first
+            ? "on, a new install (no log from an earlier launch)"
+            : "off, kept for an install that ran before the switch existed"))
     }
 
     @objc private func togglePauseMedia() {
@@ -1261,10 +1272,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         .deletingLastPathComponent()
         .appendingPathComponent("nevertype.log")
 
-    private func startLog() {
+    /// Creates the log, or truncates the previous launch's, and answers
+    /// whether there was one.
+    ///
+    /// The answer is the proof that NeverType ran on this Mac before, read
+    /// here because the truncation below erases it: every launch since the
+    /// app took this name (2026-08-29) creates the file, and nothing in the
+    /// app or its scripts deletes it, "Clear History" included. The folder
+    /// proves nothing. The lock above creates it on this launch, and
+    /// `install.sh` creates it with the model before the first one. The
+    /// pause-media switch reads the answer (`storeFirstPauseMedia`).
+    private func startLog() -> Bool {
+        let existed = FileManager.default.fileExists(atPath: Self.logURL.path)
         try? FileManager.default.createDirectory(
             at: Self.logURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         FileManager.default.createFile(atPath: Self.logURL.path, contents: nil)
+        return existed
     }
 }
 

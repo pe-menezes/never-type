@@ -132,6 +132,27 @@ public final class MediaPause {
         }
     }
 
+    // MARK: - The first value
+
+    /// The switch's first value on this Mac, decided at the first launch of a
+    /// build that has it and stored either way.
+    ///
+    /// A new install starts with the pause on. An install that ran before the
+    /// switch existed starts with it off. Whoever already dictates with
+    /// NeverType is used to the music going on under the voice, and some call
+    /// that a quality. An update that started pausing it would break a habit
+    /// nobody asked to change. Whoever installs now has no habit to break.
+    /// `ranBefore` is whether the log of an earlier launch was there when this
+    /// one started (`startLog` in `main.swift`).
+    ///
+    /// - Returns: the value to store, or nil when one is already stored. A
+    ///   stored value is the person's, or this rule's from an earlier launch,
+    ///   and neither is overwritten.
+    nonisolated public static func firstValue(stored: Bool?, ranBefore: Bool) -> Bool? {
+        guard stored == nil else { return nil }
+        return !ranBefore
+    }
+
     // MARK: - System
 
     /// Regular apps putting out sound right now, this process excluded.
