@@ -255,13 +255,16 @@ Quit NeverType             ⌘Q
   does not know, so the app sees nothing playing and sends nothing, and YouTube
   keeps playing under the voice exactly as with the switch off (measured
   2026-10-02, Chrome 154). Arc ships the same helpers, and Safari plays through
-  `com.apple.WebKit.GPU`, both inferred and not measured. Two costs come with
+  `com.apple.WebKit.GPU`, both inferred and not measured. Three costs come with
   it on. Every press of the trigger pauses the music, including the press that
   turns into a shortcut or a short tap, so Right ⌘ V with Right ⌘ as the key is
-  a ~2.3 s hole in the music. And if you paused the music yourself less than
-  ~2.3 s before dictating, its output is still running, and the play at the end
-  starts it again. A Bluetooth headset cuts the music by itself when the
-  microphone opens, as the HFP note earlier in this file says.
+  a ~2.3 s hole in the music. If you paused the music yourself less than ~2.3 s
+  before dictating, its output is still running, and the play at the end starts
+  it again. And a player that takes longer than 3.5 s to go quiet after the
+  pause looks like one the pause never reached, so it gets no play and stays
+  paused until you press play. Only Spotify was measured, at ~2.3 s. A
+  Bluetooth headset cuts the music by itself when the microphone opens, as the
+  HFP note earlier in this file says.
 - **Hands-free: double tap**: the submenu holds the switch, on by default, and
   three lines of instruction under it: `Double-tap Right ⌘ to lock`, `Tap once
   to finish · Esc discards`, `Typing does not cancel while locked`. Under a

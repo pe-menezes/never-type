@@ -81,13 +81,19 @@ public final class MediaPause {
     /// - Parameters:
     ///   - settle: how long after the pause an app still playing counts as one
     ///     the pause did not reach. 3.5 s against Spotify's measured ~2.3 s.
-    ///   - poll: how often the output is read while waiting.
+    ///   - poll: how often the output is read while waiting. 200 ms: each
+    ///     read walks every audio process on the system, on the main actor,
+    ///     ~5 ms at the median and 67 ms at worst over 100 reads (42
+    ///     processes, macOS 26.6.2, 2026-10-02). At 50 ms, the first version
+    ///     of this, that was a tenth of the main thread for up to 3.5 s, while
+    ///     the transcription lands and the ⌘V goes out. Play now goes out at
+    ///     most 200 ms after the quiet, against a quiet of ~2.3 s.
     public init(playingApps: @escaping @MainActor () -> Set<pid_t> = MediaPause.playingApps,
                 send: @escaping @MainActor (Command) -> Bool = MediaPause.sendMediaRemote,
                 now: @escaping () -> ContinuousClock.Instant = { .now },
                 sleep: @escaping @MainActor (Duration) async -> Void = { try? await Task.sleep(for: $0) },
                 settle: Duration = .milliseconds(3500),
-                poll: Duration = .milliseconds(50)) {
+                poll: Duration = .milliseconds(200)) {
         self.playingApps = playingApps
         self.send = send
         self.now = now
