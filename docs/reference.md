@@ -338,6 +338,14 @@ Quit NeverType             ⌘Q
     The Microphone page is not offered here: until the prompt is answered the
     app may not be in that list, and it has no + to add it.
   - Microphone denied or restricted: **Open Microphone Settings…**.
+
+  While either one is missing, the menu bar icon is slashed. The app reads both
+  again every second until they are granted. For Accessibility, the slash goes
+  away by itself about a second after the switch is turned on in System
+  Settings, with no key press and no relaunch. For the Microphone, turning the
+  switch on with the app open makes macOS offer **Quit & Reopen**, and the app
+  that opens again reads the permission at launch. A slash from the model or
+  from Metal (below, under Diagnostics) stays.
 - **turned off in Login Items**, with **Open Login Items…** under it, when the
   login item is registered and you turned it off in System Settings.
 
@@ -365,7 +373,8 @@ key down.
 
 Two launch failures open with the icon slashed. The ggml device enumeration at
 launch may list no Metal device, and the model may fail to load. Both say so in
-the log, and on the "Model:" line under Option.
+the log, and on the "Model:" line under Option. Granting a permission does not
+clear this slash.
 
 ## What stays on disk
 

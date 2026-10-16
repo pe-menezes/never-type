@@ -184,7 +184,8 @@ Esta é a mais fácil de não notar, e é o modo de falha mais provável de uma
 instalação nova. Sem ela o app não consegue inserir texto. Se a pessoa tentar
 ditar mesmo assim, a gravação é bloqueada antes de capturar áudio, e um aviso
 oferece abrir a página certa dos Ajustes. O ícone cortado, a linha
-"Accessibility: missing" no menu e o `nevertype.log` repetem o diagnóstico.
+"Accessibility: missing" no menu e o `nevertype.log` repetem o diagnóstico, e o
+corte some sozinho cerca de um segundo depois de ligar a Acessibilidade.
 
 > Abra **Ajustes do Sistema › Privacidade e Segurança › Acessibilidade** e
 > **ligue o NeverType** na lista. Se ele não estiver lá, clique no **+** e escolha

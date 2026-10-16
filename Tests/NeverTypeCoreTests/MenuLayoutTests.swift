@@ -212,7 +212,10 @@ struct MenuLayoutTests {
         try Self.expectAlert("private func showMicrophoneRequiredAlert() {", in: source,
                              title: "\"NeverType needs Microphone access\"",
                              text: "\"Recording did not start. Enable NeverType in System Settings › Privacy & Security › Microphone, then try again.\"",
-                             buttons: ["\"Open System Settings\"", "\"Not Now\""])
+                             buttons: ["\"Open System Settings\"", "\"Not Now\""],
+                             shown: ["if alert.runModal() == .alertFirstButtonReturn {",
+                                     "openMicrophoneSettings()",
+                                     "}"])
         #expect(try Self.body(of: "private func showMicrophoneRequiredAlert() {", in: source)
             .contains("openMicrophoneSettings()"))
 
@@ -258,7 +261,9 @@ struct MenuLayoutTests {
         try Self.expectAlert("private func showMicrophoneWaitingAlert() {", in: source,
                              title: "\"NeverType is waiting for the microphone answer\"",
                              text: "\"Recording did not start. The macOS prompt may be behind other windows. If there is none, quit NeverType and open it again: it asks at launch.\"",
-                             buttons: ["\"OK\""])
+                             buttons: ["\"OK\""],
+                             shown: ["_ = alert.runModal()"],
+                             logged: ["log(\"microphone: waiting alert shown\")"])
     }
 
     /// The `permissions:` line at launch, before the prompts, and the call
@@ -279,6 +284,416 @@ struct MenuLayoutTests {
         #expect(writer.contains("log(line)"), "the line has to reach the log:\n\(writer)")
     }
 
+    /// The icon slashed with both permissions granted, until the first trigger
+    /// (2026-10-16 08:28). The app now re-reads the two permissions while one
+    /// is missing, and each change writes the `permissions:` line and redraws
+    /// by the Core rule, which keeps the model's slash (`StatusIcon`). The
+    /// watch stops itself in Core; what is held here is that the app starts
+    /// it, reads the system with it, and redraws from what it reads.
+    ///
+    /// Audits A1 and A2 of part 1b: calls looked for anywhere in a body, or a
+    /// line held while the condition around it was not, let sabotages through
+    /// with every test green, two of them bringing back the slash of 08:28.
+    /// The decisions live in Core, under test, and every binding left here is
+    /// held line by line and whole, like `expectAlert`: a condition negated,
+    /// branches swapped, a call deleted, an exit ahead of it or a constant in
+    /// place of a system read each change a line.
+    @Test("the app re-reads the permissions while one is missing, and redraws by the Core rule")
+    func permissionWatchWiring() throws {
+        let source = try Self.mainSource()
+
+        let property = try Self.body(of: "private lazy var permissionWatch = PermissionWatch(", in: source)
+        #expect(Self.codeLines(property) == [
+            "read: { PermissionReading.current },",
+            "onChange: { [weak self] reading in self?.permissionsChanged(reading) })",
+        ], "the watch reads the system every second, the default, and a change reaches the app:\n\(property)")
+
+        let changed = try Self.body(of: "private func permissionsChanged(_ reading: PermissionReading) {", in: source)
+        #expect(Self.codeLines(changed) == [
+            "logPermissionsIfChanged(microphone: reading.microphone, accessibility: reading.accessibilityGranted)",
+            "renderResting(reading)",
+        ], "a change writes the permissions line and redraws, and nothing else:\n\(changed)")
+
+        // The signature too: its default is the system read every caller
+        // but the watch relies on.
+        let resting = try Self.body(of: "private func renderResting(_ permissions: PermissionReading = .current) {", in: source)
+        #expect(Self.codeLines(resting) == [
+            "if let visual = StatusIcon.redraw(permissions: permissions, recording: recorder.isRecording,",
+            "transcribing: transcriptionSession.isTranscribing, model: modelState) {",
+            "render(visual)",
+            "}",
+        ], "the resting icon is what the Core rule says, drawn as it says:\n\(resting)")
+    }
+
+    /// Launch, whole: the lock, the status item, the monitor and the pill,
+    /// then the permissions (the line, the prompts in their order with the
+    /// system reads, the redraw by the rule, the line again and the watch) and
+    /// the model load ending by the Core rule. Audit M10 moved the watch into
+    /// the model's failure branch, and the case of 08:28 went unwatched.
+    ///
+    /// Held from the first line to the last. Reaudit 2 of part 1b: with a
+    /// window of lines found by an anchor, an exit or an always-false `if`
+    /// written just outside it switched off the prompts, the watch or the
+    /// model load, with the 296 tests green (X-AB1 to X-AB3, X-MD1, X-MD2).
+    @Test("launch asks in order, redraws by the rule, watches and loads the model, held whole")
+    func launchWiring() throws {
+        let source = try Self.mainSource()
+        let launch = try Self.body(of: "func applicationDidFinishLaunching(_ notification: Notification) {", in: source)
+        #expect(Self.codeLines(launch) == [
+            "guard Self.acquireInstanceLock() else {",
+            "NSRunningApplication",
+            ".runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? \"com.nevertype.app\")",
+            ".first { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }?",
+            ".activate()",
+            "NSApp.terminate(nil)",
+            "return",
+            "}",
+            "let ranBefore = startLog()",
+            "removeLegacyTranscriptFile()",
+            "storeFirstPauseMedia(ranBefore: ranBefore)",
+            "statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)",
+            "render(.idle)",
+            "menu.delegate = self",
+            "statusItem.menu = menu",
+            "overlay.menu = menu",
+            "if let saved = HotkeyMonitor.Trigger.named(UserDefaults.standard.string(forKey: Self.triggerKey)) {",
+            "setTrigger(saved)",
+            "}",
+            "setHandsFreeTrigger(HotkeyMonitor.Trigger.named(UserDefaults.standard.string(forKey: Self.handsFreeTriggerKey)))",
+            "monitor.handsFreeEnabled = Self.handsFreeIsOn",
+            "monitor.onEvent = { [weak self] event in self?.handle(event) ?? false }",
+            "recorder.onLevel = { [weak self] level in self?.overlay.push(level: level) }",
+            "recorder.onError = { [weak self] message in",
+            "self?.overlay.hide()",
+            "self?.render(.blocked)",
+            "self?.log(message)",
+            "}",
+            "monitor.start()",
+            "overlay.showIdle()",
+            "refreshHoverHint()",
+            "logPermissionsIfChanged()",
+            "Task { @MainActor in",
+            "await LaunchPermissions.run(",
+            "microphone: { MicrophoneAccess.current },",
+            "accessibilityGranted: { HotkeyMonitor.hasAccessibilityPermission },",
+            "requestMicrophone: { await self.microphoneRequest.ask { await self.askForMicrophone() } },",
+            "requestAccessibility: { self.warnIfAccessibilityMissing() })",
+            "self.renderResting()",
+            "self.logPermissionsIfChanged()",
+            "self.permissionWatch.start()",
+            "}",
+            "Task {",
+            "await transcription.prepare()",
+            "let status = await transcription.currentStatus()",
+            "self.modelStatus = status",
+            "self.log(\"model: \\(status)\")",
+            "self.modelState = await ModelState.afterLoad(",
+            "loaded: { await self.transcription.didLoad() },",
+            "devices: { await self.transcription.deviceList() },",
+            "metalActive: { await self.transcription.isMetalActive() },",
+            "log: { self.log($0) })",
+            "self.renderResting()",
+            "}",
+            "log(\"ready. trigger: \\(monitor.trigger.label) · hands-free: \\(monitor.handsFreeEnabled ? \"on\" : \"off\")\"",
+            "+ \" · pill: \\(overlay.alwaysVisible ? \"always visible\" : \"only while dictating\")\"",
+            "+ \" · pause media: \\(Self.pausesMedia ? \"on\" : \"off\")\")",
+            "log(\"insertion: clipboard given back after \\(TextInjector.restoreDelay) s · focus checked before pasting: \\(PasteTarget.isCheckEnabled ? \"yes\" : \"no\")\")",
+        ], "launch, line by line:\n\(launch)")
+    }
+
+    /// The model state is recorded in one place, the end of the load held
+    /// whole in `launchWiring`. Audit A2 of part 1b: `if loaded {` turned into
+    /// `if !loaded {` there slashed every working Mac with the suite green.
+    @Test("the model state is recorded once, at the end of the load")
+    func modelLoadWiring() throws {
+        let source = try Self.mainSource()
+        let assignments = source.components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.hasPrefix("//") && $0.contains("modelState =") }
+        #expect(assignments == [
+            "private var modelState = ModelState.loading",
+            "self.modelState = await ModelState.afterLoad(",
+        ], "the model state is recorded once, at the end of the load: \(assignments)")
+    }
+
+    /// The trigger, from the reads to the recording: read once, write the
+    /// line, watch again, decide, and each refusal draws the slash, says why
+    /// and reaches its alert or the new request, returning the refusal.
+    /// Audit M11 of part 1b moved the watch into `.startRecording`; S14 to S17
+    /// and D1a to D1f of part 1 cut the way to each alert.
+    @Test("the trigger reads, watches, decides, and each refusal reaches its way out")
+    func triggerWiring() throws {
+        let source = try Self.mainSource()
+        let handle = try Self.body(of: "private func handle(_ event: HotkeyMonitor.Event) -> Bool {", in: source)
+        let lines = Self.codeLines(handle)
+        let start = try #require(lines.firstIndex(of: "try recorder.start()"), "no recording on the trigger:\n\(handle)")
+        #expect(Array(lines[...start]) == [
+            "switch event {",
+            "case .pressed:",
+            "let microphone = MicrophoneAccess.current",
+            "let accessibility = HotkeyMonitor.hasAccessibilityPermission",
+            "logPermissionsIfChanged(microphone: microphone, accessibility: accessibility)",
+            "permissionWatch.start()",
+            "switch DictationAttempt.decide(",
+            "microphone: microphone,",
+            "accessibilityAuthorized: accessibility,",
+            "isTranscribing: transcriptionSession.isTranscribing,",
+            "microphoneRequestPending: microphoneRequest.isPending",
+            ") {",
+            "case .waitForTranscription:",
+            "log(\"transcription in progress: wait for the result before recording again\")",
+            "return false",
+            "case .showAccessibilityWarning:",
+            "render(.blocked)",
+            "log(\"Accessibility not granted: recording blocked before capturing audio\")",
+            "Task { @MainActor [weak self] in",
+            "self?.showAccessibilityRequiredAlert()",
+            "}",
+            "return false",
+            "case .requestMicrophoneAccess:",
+            "render(.blocked)",
+            "log(\"microphone not answered yet: recording did not start, asking again\")",
+            "Task { @MainActor [weak self] in",
+            "self?.askAgainForMicrophone()",
+            "}",
+            "return false",
+            "case .showMicrophoneWaitingAlert:",
+            "render(.blocked)",
+            "log(\"microphone request still open: recording did not start\")",
+            "Task { @MainActor [weak self] in",
+            "self?.showMicrophoneWaitingAlert()",
+            "}",
+            "return false",
+            "case .showMicrophoneWarning:",
+            "render(.blocked)",
+            "log(\"microphone \\(microphone.rawValue): recording blocked before capturing audio\")",
+            "Task { @MainActor [weak self] in",
+            "self?.showMicrophoneRequiredAlert()",
+            "}",
+            "return false",
+            "case .startRecording:",
+            "break",
+            "}",
+            "do {",
+            "try recorder.start()",
+        ], "the trigger, from the reads to the recording:\n\(handle)")
+        #expect(lines.filter { $0.contains("permissionWatch.start()") }.count == 1,
+                "the trigger starts the watch once, before the decision:\n\(handle)")
+    }
+
+    /// Asking again, from the trigger or the menu: the request, the alert
+    /// when no answer comes, then the redraw by the rule (audit L6 of part 1),
+    /// the line and the watch.
+    @Test("asking again for the microphone requests, alerts, redraws by the rule and watches")
+    func askAgainWiring() throws {
+        let source = try Self.mainSource()
+        let again = try Self.body(of: "private func askAgainForMicrophone() {", in: source)
+        #expect(Self.codeLines(again) == [
+            "Task { @MainActor in",
+            "await self.microphoneRequest.askAgain(",
+            "request: { await self.askForMicrophone() },",
+            "onNoAnswer: { self.showMicrophoneWaitingAlert() })",
+            "self.renderResting()",
+            "self.logPermissionsIfChanged()",
+            "self.permissionWatch.start()",
+            "}",
+        ], "asking again:\n\(again)")
+        let ask = try Self.body(of: "private func askForMicrophone() async {", in: source)
+        #expect(Self.codeLines(ask) == ["_ = await AVCaptureDevice.requestAccess(for: .audio)"],
+                "the prompt is the microphone's:\n\(ask)")
+        let menuAction = try Self.body(of: "@objc private func askForMicrophoneFromMenu() {", in: source)
+        #expect(Self.codeLines(menuAction) == ["askAgainForMicrophone()"])
+    }
+
+    /// The `permissions:` line: written from the system reads unless the
+    /// caller passes its own, and only when it changed.
+    @Test("the permissions line is written from the system reads")
+    func permissionLineWriterWiring() throws {
+        let source = try Self.mainSource()
+        let writer = try Self.body(of: "private func logPermissionsIfChanged(microphone: MicrophoneAccess = .current,", in: source)
+        #expect(Self.codeLines(writer) == [
+            "accessibility: Bool = HotkeyMonitor.hasAccessibilityPermission) {",
+            "if let line = permissionLog.lineIfChanged(microphone: microphone, accessibilityGranted: accessibility) {",
+            "log(line)",
+            "}",
+        ], "the permissions line:\n\(writer)")
+    }
+
+    /// The launch warning for Accessibility, and the alert the trigger shows:
+    /// nothing in a test showed either, and a negated guard here asked for a
+    /// permission already granted or never asked for the missing one.
+    @Test("a missing Accessibility is warned at launch, and its alert opens its page")
+    func accessibilityWarningWiring() throws {
+        let source = try Self.mainSource()
+        let warn = try Self.body(of: "private func warnIfAccessibilityMissing() {", in: source)
+        #expect(Self.codeLines(warn) == [
+            "guard !HotkeyMonitor.hasAccessibilityPermission else { return }",
+            "render(.blocked)",
+            "log(\"Accessibility not granted: dictation is blocked until it is enabled.\")",
+            "HotkeyMonitor.requestAccessibilityPermission()",
+        ], "the launch warning:\n\(warn)")
+        try Self.expectAlert("private func showAccessibilityRequiredAlert() {", in: source,
+                             title: "\"NeverType needs Accessibility access\"",
+                             text: "\"Recording did not start. Enable NeverType in System Settings › Privacy & Security › Accessibility, then try again.\"",
+                             buttons: ["\"Open System Settings\"", "\"Not Now\""],
+                             shown: ["if alert.runModal() == .alertFirstButtonReturn {",
+                                     "openAccessibilitySettings()",
+                                     "}"])
+    }
+
+    /// The menu's two permission lines come from the system reads of the
+    /// moment it opens, and only from them, and every row the layout returns
+    /// becomes an item. Held whole: reaudit 2 of part 1b put an exit ahead of
+    /// the loop over the rows, below the lines then held, and the menu opened
+    /// empty with the suite green (X-MN1).
+    @Test("the menu reads both permissions from the system when it opens, held whole")
+    func menuPermissionConditionsWiring() throws {
+        let source = try Self.mainSource()
+        let rebuild = try Self.body(of: "private func rebuildMenu() {", in: source)
+        #expect(Self.codeLines(rebuild) == [
+            "menu.removeAllItems()",
+            "logPermissionsIfChanged()",
+            "let loginState = loginItemState",
+            "let conditions = MenuLayout.Conditions(",
+            "microphone: MicrophoneAccess.current,",
+            "accessibilityAuthorized: HotkeyMonitor.hasAccessibilityPermission,",
+            "showsDiagnostics: NSEvent.modifierFlags.contains(.option),",
+            "historyCount: history.entries.count,",
+            "triggerLabel: monitor.trigger.label,",
+            "handsFreeEnabled: monitor.handsFreeEnabled,",
+            "handsFreeKeyLabel: monitor.handsFreeTrigger?.label,",
+            "startsAtLogin: loginState == .on,",
+            "loginItemNeedsApproval: loginState == .needsApproval,",
+            "pillAlwaysVisible: overlay.alwaysVisible,",
+            "pausesMedia: Self.pausesMedia,",
+            "updateCheckAvailable: UpdateCheck.isAvailable(repoRoot: Self.repoRoot))",
+            "for row in MenuLayout.rows(for: conditions) {",
+            "menu.addItem(item(for: row))",
+            "}",
+        ], "the menu rebuild, line by line:\n\(rebuild)")
+    }
+
+    /// Each row to its item, the permission ones to their own action. Held
+    /// whole: reaudit 2 of part 1b pointed the Accessibility item at the
+    /// Microphone page and stayed green (X-AV2).
+    @Test("each menu row becomes its item, each permission item opens its own page")
+    func menuItemsWiring() throws {
+        let source = try Self.mainSource()
+        let items = try Self.body(of: "private func item(for row: MenuLayout.Row) -> NSMenuItem {", in: source)
+        #expect(Self.codeLines(items) == [
+            "switch row {",
+            "case .separator:",
+            "return .separator()",
+            "case .accessibilityMissing:",
+            "return disabled(\"Accessibility: missing\")",
+            "case .openAccessibilitySettings:",
+            "return action(\"Open Accessibility Settings…\", #selector(openAccessibilitySettings))",
+            "case .microphoneMissing:",
+            "return disabled(\"Microphone: missing\")",
+            "case .openMicrophoneSettings:",
+            "return action(\"Open Microphone Settings…\", #selector(openMicrophoneSettings))",
+            "case .askForMicrophone:",
+            "return action(\"Ask for Microphone Access…\", #selector(askForMicrophoneFromMenu))",
+            "case .trigger:",
+            "return disabled(\"Trigger: \\(monitor.trigger.label) (hold and speak)\")",
+            "case .gestureHint:",
+            "return disabled(\"  double-tap locks · tap to finish · Esc discards\")",
+            "case .hotkey(let trigger):",
+            "let item = NSMenuItem(title: \"Hotkey: \\(trigger)\", action: nil, keyEquivalent: \"\")",
+            "item.submenu = hotkeyMenu()",
+            "return item",
+            "case .handsFree(let enabled, let key):",
+            "let title: String",
+            "if !enabled {",
+            "title = \"Hands-free: off\"",
+            "} else if let key {",
+            "title = \"Hands-free: double tap or \\(key)\"",
+            "} else {",
+            "title = \"Hands-free: double tap\"",
+            "}",
+            "let item = NSMenuItem(title: title, action: nil, keyEquivalent: \"\")",
+            "item.submenu = handsFreeMenu(enabled: enabled)",
+            "return item",
+            "case .vocabulary:",
+            "let counts = vocabulary.terms.count + vocabulary.replacements.count",
+            "let title = counts > 0",
+            "? \"Vocabulary (\\(vocabulary.terms.count) terms, \\(vocabulary.replacements.count) replacements)…\"",
+            ": \"Vocabulary…\"",
+            "return action(title, #selector(openVocabulary))",
+            "case .pillAlwaysVisible(let enabled):",
+            "let item = action(\"Always Show Pill\", #selector(togglePillAlwaysVisible))",
+            "item.state = enabled ? .on : .off",
+            "item.toolTip = \"Off, the pill shows only while you dictate. \"",
+            "+ \"In full screen it is the only way to open this menu.\"",
+            "return item",
+            "case .pauseMedia(let enabled):",
+            "let item = action(\"Pause Media While Dictating\", #selector(togglePauseMedia))",
+            "item.state = enabled ? .on : .off",
+            "item.toolTip = \"Pauses the app that is playing when you start recording and plays it again when you stop. A browser tab keeps playing.\"",
+            "return item",
+            "case .copyLastTranscription:",
+            "let item = action(\"Copy Last Transcription\", #selector(copyLastTranscript))",
+            "if let lastTranscript { item.toolTip = preview(of: lastTranscript) }",
+            "return item",
+            "case .history(let count):",
+            "let item = NSMenuItem(title: \"History (\\(count))\", action: nil, keyEquivalent: \"\")",
+            "item.submenu = historyMenu()",
+            "return item",
+            "case .model:",
+            "return disabled(\"Model: \\(modelStatus)\")",
+            "case .version:",
+            "return disabled(\"Version: \\(Self.buildCommit)\")",
+            "case .startAtLogin(let enabled):",
+            "let item = action(\"Start NeverType with macOS\", #selector(toggleLoginItem))",
+            "item.state = enabled ? .on : .off",
+            "return item",
+            "case .loginItemTurnedOff:",
+            "return disabled(\"  turned off in Login Items\")",
+            "case .openLoginItems:",
+            "return action(\"Open Login Items…\", #selector(openLoginItemsSettings))",
+            "case .checkForUpdates:",
+            "return action(\"Check for Updates…\", #selector(checkForUpdates))",
+            "case .quit:",
+            "return action(\"Quit NeverType\", #selector(quitNeverType), keyEquivalent: \"q\")",
+            "}",
+        ], "the menu items, line by line:\n\(items)")
+    }
+
+    /// The two Settings pages. Reaudit 2 of part 1b sent the Accessibility
+    /// one to the Microphone page and stayed green (X-AV1).
+    @Test("each Settings opener opens its own privacy page")
+    func settingsPagesWiring() throws {
+        let source = try Self.mainSource()
+        let accessibility = try Self.body(of: "@objc private func openAccessibilitySettings() {", in: source)
+        #expect(Self.codeLines(accessibility) == [
+            "let url = URL(string: \"x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility\")!",
+            "NSWorkspace.shared.open(url)",
+        ], "the Accessibility page:\n\(accessibility)")
+        let microphone = try Self.body(of: "@objc private func openMicrophoneSettings() {", in: source)
+        #expect(Self.codeLines(microphone) == [
+            "let url = URL(string: \"x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone\")!",
+            "NSWorkspace.shared.open(url)",
+        ], "the Microphone page:\n\(microphone)")
+    }
+
+    /// Audit N2 of part 1: a call commented out counted as the call, and the
+    /// sabotage S14c survived.
+    @Test("a commented-out line counts neither as the call nor as the marker")
+    func bodyIgnoresComments() throws {
+        let source = """
+        // func wired() {
+        func wired() {
+            // self?.showAlert()
+            /// self?.showAlert()
+                // self?.showAlert()
+            other()
+        }
+        """
+        let body = try Self.body(of: "func wired() {", in: source)
+        #expect(!body.contains("showAlert()"), "a commented call counted:\n\(body)")
+        #expect(body.contains("other()"))
+    }
+
     // MARK: - Reading main.swift
 
     private static func mainSource() throws -> String {
@@ -291,8 +706,13 @@ struct MenuLayoutTests {
     /// The lines after `marker`, up to the first one indented no deeper than
     /// the marker's own line: the body of a function or of a `case`. The marker
     /// has to be unique, or the body found could be the wrong one.
+    ///
+    /// Lines that are only a comment are dropped first, the marker's own
+    /// included: a call commented out is not the call (audit N2 of part 1,
+    /// where `// self?.showMicrophoneRequiredAlert()` kept the test green).
     private static func body(of marker: String, in source: String) throws -> String {
         let lines = source.components(separatedBy: "\n")
+            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
         let hits = lines.indices.filter { lines[$0].contains(marker) }
         try #require(hits.count == 1, "expected \"\(marker)\" once in main.swift, found \(hits.count)")
         let start = hits[0]
@@ -306,12 +726,36 @@ struct MenuLayoutTests {
         return body.joined(separator: "\n")
     }
 
+    /// The code lines of a body, trimmed, blank lines dropped: what the
+    /// line-by-line oracles compare.
+    private static func codeLines(_ body: String) -> [String] {
+        body.components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+    }
+
     /// A permission alert: behind the shared gate, with its title, text and
     /// buttons, shown modally, and with no way out before it is shown (audit
     /// S17 put a `return` ahead of it and stayed green).
+    ///
+    /// The whole body is held line by line too: audit A2 of part 1b found the
+    /// branch after `runModal()` negated, or opening the other permission's
+    /// page, and the gate negated, all green.
     private static func expectAlert(_ marker: String, in source: String,
-                                    title: String, text: String, buttons: [String]) throws {
+                                    title: String, text: String, buttons: [String],
+                                    shown: [String], logged: [String] = []) throws {
         let alert = try body(of: marker, in: source)
+        let expected = ["guard permissionAlertGate.begin() else { return }",
+                        "defer { permissionAlertGate.end() }"]
+            + logged
+            + ["NSApp.activate(ignoringOtherApps: true)",
+               "let alert = NSAlert()",
+               "alert.alertStyle = .warning",
+               "alert.messageText = \(title)",
+               "alert.informativeText = \(text)"]
+            + buttons.map { "alert.addButton(withTitle: \($0))" }
+            + shown
+        #expect(codeLines(alert) == expected, "\(marker): the alert, line by line:\n\(alert)")
         let lines = alert.components(separatedBy: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
         #expect(lines.first == "guard permissionAlertGate.begin() else { return }",
                 "\(marker): the shared gate has to come first, so two alerts never stack")
