@@ -222,18 +222,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         try? FileManager.default.removeItem(at: Self.legacyTranscriptURL)
     }
 
-    /// Queried from the system every time, instead of kept in a variable.
-    ///
-    /// The previous version kept the state in a flag filled during launch, and
-    /// the menu was built before that — so it showed "Microphone: missing" with
-    /// the permission granted and recording working. Permission state also
-    /// changes from outside, in System Settings, without telling the app.
-    /// Asking is cheap and never goes stale.
-    private var micAuthorized: Bool {
-        MicrophoneAccess.current == .authorized
-    }
-
-    /// Queried from the system every time, same as the microphone.
+    /// Queried from the system every time, same as the permissions
+    /// (`MicrophoneAccess.current`, `PermissionReading.current`).
     ///
     /// The user turns the app off in System Settings › Login Items without the
     /// app finding out. A checkmark kept in a variable would start lying from
@@ -923,9 +913,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// The icon at rest, by `StatusIcon.redraw`: slashed while a permission is
     /// missing, the model failed to load or there is no Metal, and nothing
-    /// drawn while dictating, where the icon says recording and the end of
-    /// the dictation redraws it. The decision is the Core's, under test; this
-    /// only draws it (audit A1 of part 1b).
+    /// drawn while dictating. While recording the icon is the waveform, and
+    /// the release draws the normal icon without this rule (audit B3 of part
+    /// 1b); a transcription that succeeds redraws nothing, so a reading that
+    /// arrives meanwhile waits for the next redraw (audits B7 and B8). The
+    /// decision is the Core's, under test; this only draws it (audit A1).
     private func renderResting(_ permissions: PermissionReading = .current) {
         if let visual = StatusIcon.redraw(permissions: permissions, recording: recorder.isRecording,
                                           transcribing: transcriptionSession.isTranscribing, model: modelState) {

@@ -24,18 +24,21 @@ cópia envelhece em silêncio. Consultar é barato; mentir para o usuário não 
 **Permissão é propriedade computada, não flag:**
 
 ```swift
-// Sources/NeverType/main.swift — micAuthorized
-/// Consultado ao sistema toda vez, em vez de guardado numa variável.
-///
-/// A versão anterior guardava o estado numa flag preenchida durante o
-/// lançamento, e o menu era montado antes disso — então exibia "Microfone:
-/// faltando" com a permissão concedida e a gravação funcionando. Estado de
-/// permissão também muda por fora, nos Ajustes do Sistema, sem avisar o app.
-/// Perguntar é barato e nunca desatualiza.
-private var micAuthorized: Bool {
-    AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+// Sources/NeverTypeCore/Permissions.swift — MicrophoneAccess.current
+/// Queried from the system on every read, never kept: the person changes it
+/// in System Settings without the app hearing about it
+/// (`.vibeflow/patterns/estado-consultado.md`).
+public static var current: MicrophoneAccess {
+    MicrophoneAccess(AVCaptureDevice.authorizationStatus(for: .audio))
 }
 ```
+
+Quem lê chama `MicrophoneAccess.current` no ponto em que precisa (o gatilho, a
+abertura do menu, a abertura do app), e as duas permissões juntas saem de
+`PermissionReading.current` (`StatusIcon.swift`). Uma versão anterior guardava
+o estado numa flag preenchida durante o lançamento, e o menu era montado antes
+disso: exibia "Microfone: faltando" com a permissão concedida e a gravação
+funcionando.
 
 **Interface se remonta ao ser aberta**, em vez de tentar acompanhar mudanças:
 

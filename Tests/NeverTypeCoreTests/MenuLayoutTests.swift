@@ -325,20 +325,52 @@ struct MenuLayoutTests {
         ], "the resting icon is what the Core rule says, drawn as it says:\n\(resting)")
     }
 
-    /// The permissions at launch: the line, the prompts in their order with
-    /// the system reads, then the redraw by the rule, the line again and the
-    /// watch. Audit M10 moved the watch into the model's failure branch, and
-    /// the case of 08:28 went unwatched.
-    @Test("launch asks in order, then redraws by the rule and starts watching")
-    func launchPermissionsWiring() throws {
+    /// Launch, whole: the lock, the status item, the monitor and the pill,
+    /// then the permissions (the line, the prompts in their order with the
+    /// system reads, the redraw by the rule, the line again and the watch) and
+    /// the model load ending by the Core rule. Audit M10 moved the watch into
+    /// the model's failure branch, and the case of 08:28 went unwatched.
+    ///
+    /// Held from the first line to the last. Reaudit 2 of part 1b: with a
+    /// window of lines found by an anchor, an exit or an always-false `if`
+    /// written just outside it switched off the prompts, the watch or the
+    /// model load, with the 296 tests green (X-AB1 to X-AB3, X-MD1, X-MD2).
+    @Test("launch asks in order, redraws by the rule, watches and loads the model, held whole")
+    func launchWiring() throws {
         let source = try Self.mainSource()
         let launch = try Self.body(of: "func applicationDidFinishLaunching(_ notification: Notification) {", in: source)
-        let lines = Self.codeLines(launch)
-        #expect(!launch.contains("if !self.micAuthorized { self.render(.blocked) }"),
-                "the launch redraw went back to looking at the microphone alone")
-        let run = try #require(lines.firstIndex(of: "await LaunchPermissions.run("), "no launch prompts:\n\(launch)")
-        try #require(run >= 2)
-        #expect(Array(lines[(run - 2)...].prefix(11)) == [
+        #expect(Self.codeLines(launch) == [
+            "guard Self.acquireInstanceLock() else {",
+            "NSRunningApplication",
+            ".runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? \"com.nevertype.app\")",
+            ".first { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }?",
+            ".activate()",
+            "NSApp.terminate(nil)",
+            "return",
+            "}",
+            "let ranBefore = startLog()",
+            "removeLegacyTranscriptFile()",
+            "storeFirstPauseMedia(ranBefore: ranBefore)",
+            "statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)",
+            "render(.idle)",
+            "menu.delegate = self",
+            "statusItem.menu = menu",
+            "overlay.menu = menu",
+            "if let saved = HotkeyMonitor.Trigger.named(UserDefaults.standard.string(forKey: Self.triggerKey)) {",
+            "setTrigger(saved)",
+            "}",
+            "setHandsFreeTrigger(HotkeyMonitor.Trigger.named(UserDefaults.standard.string(forKey: Self.handsFreeTriggerKey)))",
+            "monitor.handsFreeEnabled = Self.handsFreeIsOn",
+            "monitor.onEvent = { [weak self] event in self?.handle(event) ?? false }",
+            "recorder.onLevel = { [weak self] level in self?.overlay.push(level: level) }",
+            "recorder.onError = { [weak self] message in",
+            "self?.overlay.hide()",
+            "self?.render(.blocked)",
+            "self?.log(message)",
+            "}",
+            "monitor.start()",
+            "overlay.showIdle()",
+            "refreshHoverHint()",
             "logPermissionsIfChanged()",
             "Task { @MainActor in",
             "await LaunchPermissions.run(",
@@ -350,24 +382,6 @@ struct MenuLayoutTests {
             "self.logPermissionsIfChanged()",
             "self.permissionWatch.start()",
             "}",
-        ], "launch: the line, the prompts, then redraw, the line and the watch, in that Task:\n\(launch)")
-        #expect(lines.filter { $0.contains("LaunchPermissions") }.count == 1)
-        #expect(lines.filter { $0.contains("permissionWatch") }.count == 1,
-                "the watch starts once at launch, after the prompts:\n\(launch)")
-    }
-
-    /// The end of the model load: the state comes from the Core, which asks
-    /// Metal only of a loaded model, from the app's own reads, and the icon is
-    /// redrawn from it. Audit A2 of part 1b: `if loaded {` turned into
-    /// `if !loaded {` here slashed every working Mac with the suite green.
-    @Test("the model load ends by the Core rule, from the app's reads, and redraws")
-    func modelLoadWiring() throws {
-        let source = try Self.mainSource()
-        let launch = try Self.body(of: "func applicationDidFinishLaunching(_ notification: Notification) {", in: source)
-        let lines = Self.codeLines(launch)
-        let prepare = try #require(lines.firstIndex(of: "await transcription.prepare()"), "no model load:\n\(launch)")
-        try #require(prepare >= 1)
-        #expect(Array(lines[(prepare - 1)...].prefix(12)) == [
             "Task {",
             "await transcription.prepare()",
             "let status = await transcription.currentStatus()",
@@ -380,7 +394,19 @@ struct MenuLayoutTests {
             "log: { self.log($0) })",
             "self.renderResting()",
             "}",
-        ], "the model state comes from the Core with the app's reads, and the icon follows:\n\(launch)")
+            "log(\"ready. trigger: \\(monitor.trigger.label) · hands-free: \\(monitor.handsFreeEnabled ? \"on\" : \"off\")\"",
+            "+ \" · pill: \\(overlay.alwaysVisible ? \"always visible\" : \"only while dictating\")\"",
+            "+ \" · pause media: \\(Self.pausesMedia ? \"on\" : \"off\")\")",
+            "log(\"insertion: clipboard given back after \\(TextInjector.restoreDelay) s · focus checked before pasting: \\(PasteTarget.isCheckEnabled ? \"yes\" : \"no\")\")",
+        ], "launch, line by line:\n\(launch)")
+    }
+
+    /// The model state is recorded in one place, the end of the load held
+    /// whole in `launchWiring`. Audit A2 of part 1b: `if loaded {` turned into
+    /// `if !loaded {` there slashed every working Mac with the suite green.
+    @Test("the model state is recorded once, at the end of the load")
+    func modelLoadWiring() throws {
+        let source = try Self.mainSource()
         let assignments = source.components(separatedBy: "\n")
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.hasPrefix("//") && $0.contains("modelState =") }
@@ -516,24 +542,138 @@ struct MenuLayoutTests {
     }
 
     /// The menu's two permission lines come from the system reads of the
-    /// moment it opens, and only from them.
-    @Test("the menu reads both permissions from the system when it opens")
+    /// moment it opens, and only from them, and every row the layout returns
+    /// becomes an item. Held whole: reaudit 2 of part 1b put an exit ahead of
+    /// the loop over the rows, below the lines then held, and the menu opened
+    /// empty with the suite green (X-MN1).
+    @Test("the menu reads both permissions from the system when it opens, held whole")
     func menuPermissionConditionsWiring() throws {
         let source = try Self.mainSource()
         let rebuild = try Self.body(of: "private func rebuildMenu() {", in: source)
-        let lines = Self.codeLines(rebuild)
-        #expect(Array(lines.prefix(6)) == [
+        #expect(Self.codeLines(rebuild) == [
             "menu.removeAllItems()",
             "logPermissionsIfChanged()",
             "let loginState = loginItemState",
             "let conditions = MenuLayout.Conditions(",
             "microphone: MicrophoneAccess.current,",
             "accessibilityAuthorized: HotkeyMonitor.hasAccessibilityPermission,",
-        ], "the menu's permission conditions:\n\(rebuild)")
-        #expect(lines.filter { $0.contains("conditions") } == [
-            "let conditions = MenuLayout.Conditions(",
+            "showsDiagnostics: NSEvent.modifierFlags.contains(.option),",
+            "historyCount: history.entries.count,",
+            "triggerLabel: monitor.trigger.label,",
+            "handsFreeEnabled: monitor.handsFreeEnabled,",
+            "handsFreeKeyLabel: monitor.handsFreeTrigger?.label,",
+            "startsAtLogin: loginState == .on,",
+            "loginItemNeedsApproval: loginState == .needsApproval,",
+            "pillAlwaysVisible: overlay.alwaysVisible,",
+            "pausesMedia: Self.pausesMedia,",
+            "updateCheckAvailable: UpdateCheck.isAvailable(repoRoot: Self.repoRoot))",
             "for row in MenuLayout.rows(for: conditions) {",
-        ], "the conditions go to the layout as read:\n\(rebuild)")
+            "menu.addItem(item(for: row))",
+            "}",
+        ], "the menu rebuild, line by line:\n\(rebuild)")
+    }
+
+    /// Each row to its item, the permission ones to their own action. Held
+    /// whole: reaudit 2 of part 1b pointed the Accessibility item at the
+    /// Microphone page and stayed green (X-AV2).
+    @Test("each menu row becomes its item, each permission item opens its own page")
+    func menuItemsWiring() throws {
+        let source = try Self.mainSource()
+        let items = try Self.body(of: "private func item(for row: MenuLayout.Row) -> NSMenuItem {", in: source)
+        #expect(Self.codeLines(items) == [
+            "switch row {",
+            "case .separator:",
+            "return .separator()",
+            "case .accessibilityMissing:",
+            "return disabled(\"Accessibility: missing\")",
+            "case .openAccessibilitySettings:",
+            "return action(\"Open Accessibility Settings…\", #selector(openAccessibilitySettings))",
+            "case .microphoneMissing:",
+            "return disabled(\"Microphone: missing\")",
+            "case .openMicrophoneSettings:",
+            "return action(\"Open Microphone Settings…\", #selector(openMicrophoneSettings))",
+            "case .askForMicrophone:",
+            "return action(\"Ask for Microphone Access…\", #selector(askForMicrophoneFromMenu))",
+            "case .trigger:",
+            "return disabled(\"Trigger: \\(monitor.trigger.label) (hold and speak)\")",
+            "case .gestureHint:",
+            "return disabled(\"  double-tap locks · tap to finish · Esc discards\")",
+            "case .hotkey(let trigger):",
+            "let item = NSMenuItem(title: \"Hotkey: \\(trigger)\", action: nil, keyEquivalent: \"\")",
+            "item.submenu = hotkeyMenu()",
+            "return item",
+            "case .handsFree(let enabled, let key):",
+            "let title: String",
+            "if !enabled {",
+            "title = \"Hands-free: off\"",
+            "} else if let key {",
+            "title = \"Hands-free: double tap or \\(key)\"",
+            "} else {",
+            "title = \"Hands-free: double tap\"",
+            "}",
+            "let item = NSMenuItem(title: title, action: nil, keyEquivalent: \"\")",
+            "item.submenu = handsFreeMenu(enabled: enabled)",
+            "return item",
+            "case .vocabulary:",
+            "let counts = vocabulary.terms.count + vocabulary.replacements.count",
+            "let title = counts > 0",
+            "? \"Vocabulary (\\(vocabulary.terms.count) terms, \\(vocabulary.replacements.count) replacements)…\"",
+            ": \"Vocabulary…\"",
+            "return action(title, #selector(openVocabulary))",
+            "case .pillAlwaysVisible(let enabled):",
+            "let item = action(\"Always Show Pill\", #selector(togglePillAlwaysVisible))",
+            "item.state = enabled ? .on : .off",
+            "item.toolTip = \"Off, the pill shows only while you dictate. \"",
+            "+ \"In full screen it is the only way to open this menu.\"",
+            "return item",
+            "case .pauseMedia(let enabled):",
+            "let item = action(\"Pause Media While Dictating\", #selector(togglePauseMedia))",
+            "item.state = enabled ? .on : .off",
+            "item.toolTip = \"Pauses the app that is playing when you start recording and plays it again when you stop. A browser tab keeps playing.\"",
+            "return item",
+            "case .copyLastTranscription:",
+            "let item = action(\"Copy Last Transcription\", #selector(copyLastTranscript))",
+            "if let lastTranscript { item.toolTip = preview(of: lastTranscript) }",
+            "return item",
+            "case .history(let count):",
+            "let item = NSMenuItem(title: \"History (\\(count))\", action: nil, keyEquivalent: \"\")",
+            "item.submenu = historyMenu()",
+            "return item",
+            "case .model:",
+            "return disabled(\"Model: \\(modelStatus)\")",
+            "case .version:",
+            "return disabled(\"Version: \\(Self.buildCommit)\")",
+            "case .startAtLogin(let enabled):",
+            "let item = action(\"Start NeverType with macOS\", #selector(toggleLoginItem))",
+            "item.state = enabled ? .on : .off",
+            "return item",
+            "case .loginItemTurnedOff:",
+            "return disabled(\"  turned off in Login Items\")",
+            "case .openLoginItems:",
+            "return action(\"Open Login Items…\", #selector(openLoginItemsSettings))",
+            "case .checkForUpdates:",
+            "return action(\"Check for Updates…\", #selector(checkForUpdates))",
+            "case .quit:",
+            "return action(\"Quit NeverType\", #selector(quitNeverType), keyEquivalent: \"q\")",
+            "}",
+        ], "the menu items, line by line:\n\(items)")
+    }
+
+    /// The two Settings pages. Reaudit 2 of part 1b sent the Accessibility
+    /// one to the Microphone page and stayed green (X-AV1).
+    @Test("each Settings opener opens its own privacy page")
+    func settingsPagesWiring() throws {
+        let source = try Self.mainSource()
+        let accessibility = try Self.body(of: "@objc private func openAccessibilitySettings() {", in: source)
+        #expect(Self.codeLines(accessibility) == [
+            "let url = URL(string: \"x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility\")!",
+            "NSWorkspace.shared.open(url)",
+        ], "the Accessibility page:\n\(accessibility)")
+        let microphone = try Self.body(of: "@objc private func openMicrophoneSettings() {", in: source)
+        #expect(Self.codeLines(microphone) == [
+            "let url = URL(string: \"x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone\")!",
+            "NSWorkspace.shared.open(url)",
+        ], "the Microphone page:\n\(microphone)")
     }
 
     /// Audit N2 of part 1: a call commented out counted as the call, and the
