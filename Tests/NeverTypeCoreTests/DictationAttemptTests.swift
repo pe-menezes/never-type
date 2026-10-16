@@ -68,6 +68,62 @@ struct DictationAttemptTests {
         #expect(decision == .showAccessibilityWarning)
     }
 
+    /// Audit D1, 2026-10-15: with the launch prompt still open, a second
+    /// request joins the first and shows nothing, so the trigger was the
+    /// slashed icon and nothing else. With a request in flight the trigger
+    /// says so in the app's own words instead.
+    @Test("with a microphone request in flight, the trigger shows the waiting alert",
+          arguments: [true, false])
+    func pendingRequestShowsTheWaitingAlert(accessibility: Bool) {
+        let decision = DictationAttempt.decide(
+            microphone: .notDetermined,
+            accessibilityAuthorized: accessibility,
+            microphoneRequestPending: true)
+
+        #expect(decision == .showMicrophoneWaitingAlert,
+                "accessibility \(accessibility): expected the waiting alert, got \(decision)")
+        #expect(!decision.startsRecording)
+    }
+
+    /// The Accessibility alert opens System Settings on top of everything, and
+    /// with the microphone prompt still up that covers it: the same race the
+    /// launch order removed. Microphone first, as at launch.
+    @Test("with no microphone request in flight, missing Accessibility keeps its place")
+    func noPendingRequestKeepsAccessibilityFirst() {
+        let decision = DictationAttempt.decide(
+            microphone: .notDetermined,
+            accessibilityAuthorized: false,
+            microphoneRequestPending: false)
+
+        #expect(decision == .showAccessibilityWarning)
+    }
+
+    /// The flag is the app's own and can lag the system by one turn: the
+    /// answer has arrived, the request has not returned yet. The system's
+    /// reading wins.
+    @Test("a microphone already answered ignores a request still marked in flight",
+          arguments: [MicrophoneAccess.authorized, .denied, .restricted])
+    func answeredMicrophoneIgnoresThePendingFlag(access: MicrophoneAccess) {
+        let decision = DictationAttempt.decide(
+            microphone: access,
+            accessibilityAuthorized: true,
+            microphoneRequestPending: true)
+
+        #expect(decision == DictationAttempt.decide(microphone: access, accessibilityAuthorized: true),
+                "\(access): got \(decision)")
+    }
+
+    @Test("a transcription in progress waits, even with a microphone request in flight")
+    func transcriptionWaitsBeforeThePendingRequest() {
+        let decision = DictationAttempt.decide(
+            microphone: .notDetermined,
+            accessibilityAuthorized: true,
+            isTranscribing: true,
+            microphoneRequestPending: true)
+
+        #expect(decision == .waitForTranscription)
+    }
+
     @Test("a transcription in progress waits, before any permission is asked")
     func transcriptionWaitsFirst() {
         let decision = DictationAttempt.decide(

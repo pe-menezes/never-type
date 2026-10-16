@@ -163,9 +163,8 @@ else
       ok "microphone: authorized" ;;
     notDetermined)
       warn "microphone: never answered. The macOS prompt did not appear, or nobody clicked it.
-      Hold the trigger once: the app asks again. If no prompt appears within about
-      10 seconds, open System Settings › Privacy & Security › Microphone and turn on
-      NeverType." ;;
+      Quit NeverType and open it again: it asks for the microphone at launch.
+      System Settings may not list NeverType under Microphone until it is answered." ;;
     denied)
       warn "microphone: denied. macOS will not ask again.
       Open System Settings › Privacy & Security › Microphone and turn on NeverType." ;;
@@ -199,8 +198,11 @@ info "The part only you can verify"
 cat <<'MSG'
   The permissions above are what NeverType last read, not proof that dictation
   works. With either one missing, a trigger is blocked before recording and an
-  alert offers to open the right System Settings page. The menu also says
-  "Accessibility: missing" or "Microphone: missing", each with its settings item.
+  alert says why. Accessibility missing, or the microphone denied or
+  restricted: the alert offers to open the right System Settings page. The
+  microphone never answered: the app asks again, and if no answer comes the
+  alert says to quit NeverType and open it again. The menu also says "Accessibility: missing" or "Microphone:
+  missing", each with its item under it.
 
   Prove it by dictating:
 

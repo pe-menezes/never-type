@@ -330,9 +330,14 @@ Quit NeverType             ⌘Q
 
 - **Accessibility: missing** and **Microphone: missing**, queried from the system
   every time the menu opens. Granted, they take no line at all. Missing, they
-  open the menu, above everything else, and **Open Accessibility Settings…**
-  comes right under the Accessibility one. The microphone has no item of its
-  own: macOS asks for it once, at the first launch.
+  open the menu, above everything else, each with its item right under it:
+  - Accessibility missing: **Open Accessibility Settings…**.
+  - Microphone never answered: **Ask for Microphone Access…**, which shows the
+    macOS prompt again. If a request is already open, or no answer comes
+    within 10 seconds, an alert says the app is waiting, with one button, OK.
+    The Microphone page is not offered here: until the prompt is answered the
+    app may not be in that list, and it has no + to add it.
+  - Microphone denied or restricted: **Open Microphone Settings…**.
 - **turned off in Login Items**, with **Open Login Items…** under it, when the
   login item is registered and you turned it off in System Settings.
 

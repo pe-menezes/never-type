@@ -163,15 +163,24 @@ require your interaction.**
 
 > macOS is going to ask whether NeverType may use the microphone. Click
 > **Allow**. Without it there is no audio.
->
-> If no prompt appears within about 10 seconds, open **System Settings ›
-> Privacy & Security › Microphone** and **turn on NeverType** in the list.
 
-Do not move on to Accessibility until the person confirms one of the two. If
-the microphone is still missing later, holding the key asks again while macOS
-has no answer, and once it was denied an alert offers to open the Microphone
-page. The menu line "Microphone: missing" comes with **Open Microphone
-Settings…** under it.
+If no prompt appears within about 10 seconds, run
+`bash scripts/verify-install.sh` and follow what it says about the microphone:
+
+- **never answered**: ask the person to quit NeverType from the menu bar menu
+  and open it again. It asks for the microphone at launch. Do not send them to
+  System Settings: until the prompt is answered NeverType may not be in the
+  Microphone list, and that page has no **+** to add it.
+- **denied**: ask the person to open **System Settings › Privacy & Security ›
+  Microphone** and **turn on NeverType** in the list.
+
+Do not move on to Accessibility until the person confirms the microphone is
+allowed. If it is still missing later, holding the key asks again while macOS
+has no answer, and an alert says the app is waiting when a prompt is already
+open or no answer comes within 10 seconds. Once it was denied, an alert offers
+to open the Microphone page instead. The menu line "Microphone: missing" comes
+with **Ask for Microphone Access…** under it while it was never answered, and
+with **Open Microphone Settings…** once it was denied.
 
 ### Accessibility: STOP AND ASK
 

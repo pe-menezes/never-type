@@ -216,7 +216,7 @@ struct PermissionsPart1AuditTests {
     @Test("each reading of the app's line gets its own verdict in the script",
           arguments: [
             (MicrophoneAccess.authorized, true, ["ok microphone: authorized", "ok accessibility: granted"]),
-            (.notDetermined, true, ["microphone: never answered", "about\n      10 seconds", "ok accessibility: granted"]),
+            (.notDetermined, true, ["microphone: never answered", "Quit NeverType and open it again: it asks for the microphone at launch.", "ok accessibility: granted"]),
             (.denied, false, ["microphone: denied", "accessibility: missing"]),
             (.restricted, true, ["microphone: restricted", "ok accessibility: granted"]),
           ])
@@ -229,6 +229,24 @@ struct PermissionsPart1AuditTests {
         }
         #expect(!section.contains("unreadable"), "\(mic)/\(ax): the script could not read the line:\n\(section)")
         #expect(!section.contains("no permissions line"), "\(mic)/\(ax): the line was not found:\n\(section)")
+    }
+
+    /// Reaudit 1, B2: never answered, the app may not be in the Microphone
+    /// list and that page has no + button, so the script must not send the
+    /// person there. Before the fix it did ("open System Settings › Privacy &
+    /// Security › Microphone and turn on NeverType"), and the probe above only
+    /// asks for the new sentence, never for the old one to be gone. Denied is
+    /// the control: there the Microphone page is the way out.
+    @Test("never answered, the script does not send the person to the Microphone page")
+    func neverAnsweredIsNotSentToTheMicrophonePage() throws {
+        let unanswered = Self.permissionsSection(try Self.verify(log: Self.appLog([(.notDetermined, true)])))
+        let denied = Self.permissionsSection(try Self.verify(log: Self.appLog([(.denied, true)])))
+        let page = "Privacy & Security › Microphone"
+
+        #expect(unanswered.contains("microphone: never answered"), "got:\n\(unanswered)")
+        #expect(!unanswered.contains(page), "never answered, sent to the Microphone page:\n\(unanswered)")
+        #expect(!unanswered.contains("turn on NeverType"), "never answered, told to turn it on:\n\(unanswered)")
+        #expect(denied.contains(page), "the control lost its way out, so this probe proves nothing:\n\(denied)")
     }
 
     /// The log keeps every reading of the session; only the newest one is the

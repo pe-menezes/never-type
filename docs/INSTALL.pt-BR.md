@@ -158,15 +158,25 @@ exigem sua interação.**
 
 > O macOS vai perguntar se o NeverType pode usar o microfone. Clique em
 > **Permitir**. Sem isso não há áudio.
->
-> Se o pedido não aparecer em uns 10 segundos, abra **Ajustes do Sistema ›
-> Privacidade e Segurança › Microfone** e **ligue o NeverType** na lista.
 
-Não passe para a Acessibilidade sem que a pessoa confirme uma das duas coisas.
-Se o microfone ainda faltar depois, segurar a tecla pede de novo enquanto o
-macOS não tiver resposta, e depois de uma recusa um aviso oferece abrir a
-página do Microfone. A linha "Microphone: missing" no menu vem com **Open
-Microphone Settings…** embaixo.
+Se o pedido não aparecer em uns 10 segundos, rode
+`bash scripts/verify-install.sh` e siga o que ele diz sobre o microfone:
+
+- **nunca respondido** (`never answered`): peça à pessoa que feche o NeverType
+  pelo menu da barra e abra de novo. Ele pede o microfone na abertura. Não mande
+  a pessoa aos Ajustes: até o pedido ser respondido, o NeverType pode não estar
+  na lista do Microfone, e essa página não tem **+** para adicioná-lo.
+- **negado** (`denied`): peça à pessoa que abra **Ajustes do Sistema ›
+  Privacidade e Segurança › Microfone** e **ligue o NeverType** na lista.
+
+Não passe para a Acessibilidade sem que a pessoa confirme que o microfone está
+permitido. Se ele ainda faltar depois, segurar a tecla pede de novo enquanto o
+macOS não tiver resposta, e um aviso diz que o app está esperando quando já há
+um pedido aberto ou quando a resposta não vem em 10 segundos. Depois de uma
+recusa, o aviso oferece abrir a página do Microfone. A linha "Microphone:
+missing" no menu vem com **Ask for Microphone Access…** embaixo enquanto o
+microfone nunca foi respondido, e com **Open Microphone Settings…** depois de
+uma recusa.
 
 ### Acessibilidade: PARE E PEÇA
 

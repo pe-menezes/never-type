@@ -65,6 +65,69 @@ public enum LaunchPermissions {
     }
 }
 
+/// Whether this process has a microphone request open, and what a trigger
+/// does about it.
+///
+/// Audit D1, 2026-10-15: with the launch prompt still open, a trigger asked
+/// again, the second request joined the first and nothing new showed; and when
+/// the prompt never appeared at all, every trigger was the slashed icon and
+/// nothing else, which is the case this front started from. Now a trigger that
+/// finds a request open says so at once, and one that asks again says so when
+/// the wait ends with no answer.
+///
+/// What it keeps is about this process, never about the system: a request it
+/// started and that has not returned. The permission itself is still read from
+/// macOS every time (`.vibeflow/patterns/estado-consultado.md`).
+///
+/// The request and the wait come in as parameters, so a test holds the prompt
+/// open and ends the wait itself, with no clock
+/// (`.vibeflow/patterns/nucleo-testavel.md`).
+@MainActor
+public final class MicrophoneRequest {
+    public private(set) var isPending = false
+
+    public init() {}
+
+    /// The launch request: marked as in flight while it runs, with no limit.
+    /// A limit here would bring the two prompts back together for whoever
+    /// takes a while to read the first one (audit L5).
+    public func ask(_ request: () async -> Void) async {
+        isPending = true
+        defer { isPending = false }
+        await request()
+    }
+
+    /// A trigger, or the menu item, with the microphone never answered.
+    ///
+    /// With a request already in flight, `onNoAnswer` runs at once and nothing
+    /// is asked. Otherwise the request starts, and if it has not returned when
+    /// `wait` does, `onNoAnswer` runs, once. An answer first shows nothing.
+    /// Returns when the request returns.
+    public func askAgain(request: @escaping @MainActor () async -> Void,
+                         wait: @escaping @MainActor () async -> Void = MicrophoneRequest.tenSeconds,
+                         onNoAnswer: @escaping @MainActor () -> Void) async {
+        guard !isPending else {
+            onNoAnswer()
+            return
+        }
+        isPending = true
+        let timer = Task { @MainActor [weak self] in
+            await wait()
+            guard !Task.isCancelled, let self, self.isPending else { return }
+            onNoAnswer()
+        }
+        await request()
+        isPending = false
+        timer.cancel()
+    }
+
+    /// Long enough for a prompt that is on screen to be read and clicked,
+    /// short enough that a trigger with nothing showing does not look dead.
+    public static let tenSeconds: @MainActor () async -> Void = {
+        try? await Task.sleep(for: .seconds(10))
+    }
+}
+
 /// The `permissions:` line of `nevertype.log`, and when to write it.
 ///
 /// The log said nothing about the microphone, so a person whose trigger did
