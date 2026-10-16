@@ -323,22 +323,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let status = await transcription.currentStatus()
             self.modelStatus = status
             self.log("model: \(status)")
-            // The Metal warning only applies if the model loaded. Before, a
-            // missing model also triggered "no Metal" — sending whoever was
-            // debugging in the wrong direction.
-            let loaded = await self.transcription.didLoad()
-            var metalActive = false
-            if loaded {
-                self.log("ggml devices: \(await self.transcription.deviceList())")
-                metalActive = await self.transcription.isMetalActive()
-                if !metalActive {
-                    self.log("WARNING: without Metal, transcription runs on the CPU and is ~11x slower.")
-                }
-            }
-            // The state, and the icon from it, by the Core rule: with the
-            // branches here, `.ready` and `.noMetal` swapped stayed green
-            // (audit A1 of part 1b).
-            self.modelState = ModelState(loaded: loaded, metalActive: metalActive)
+            // The state, and the icon from it, by the Core rule, which asks
+            // Metal only of a loaded model: with the branches here, `.ready`
+            // and `.noMetal` swapped (audit A1 of part 1b) and `if loaded {`
+            // negated (audit A2) stayed green.
+            self.modelState = await ModelState.afterLoad(
+                loaded: { await self.transcription.didLoad() },
+                devices: { await self.transcription.deviceList() },
+                metalActive: { await self.transcription.isMetalActive() },
+                log: { self.log($0) })
             self.renderResting()
         }
         // The pill is on this line because `nevertype.log` is truncated at

@@ -48,6 +48,29 @@ public enum ModelState: Equatable, Sendable {
             self = .noMetal
         }
     }
+
+    /// How the load ended, from the app's own reads.
+    ///
+    /// The reads come in as calls, so Metal is asked only once the model
+    /// loaded. With the condition in the app, `if loaded {` turned into
+    /// `if !loaded {` left the icon slashed on every working Mac, and the
+    /// suite stayed green (audit A2 of part 1b).
+    @MainActor
+    public static func afterLoad(loaded: () async -> Bool,
+                                 devices: () async -> String,
+                                 metalActive: () async -> Bool,
+                                 log: (String) -> Void) async -> ModelState {
+        // A missing model used to log "no Metal" as well, which sent whoever
+        // was debugging the wrong way.
+        guard await loaded() else { return .notLoaded }
+        let list = await devices()
+        log("ggml devices: \(list)")
+        let metal = await metalActive()
+        if !metal {
+            log("WARNING: without Metal, transcription runs on the CPU and is ~11x slower.")
+        }
+        return ModelState(loaded: true, metalActive: metal)
+    }
 }
 
 /// What the app draws in the menu bar: the brand, the live waveform, or the
@@ -87,8 +110,10 @@ public enum StatusIcon: Equatable, Sendable {
     }
 
     /// What to draw at rest with this reading, or nothing while a dictation
-    /// holds the icon: it says recording or transcribing then, and the end of
-    /// the dictation redraws it.
+    /// is on. While recording the icon is the waveform, and the release draws
+    /// the normal icon, without this rule (audit B3 of part 1b). While
+    /// transcribing, nothing redraws when the transcription succeeds, so a
+    /// reading that arrives then waits for the next redraw (audit B7).
     ///
     /// In the app, an early return or an inverted guard here brought back the
     /// slash of 2026-10-16 08:28 with every test green (audit A1 of part 1b).

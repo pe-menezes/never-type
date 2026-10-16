@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import NeverTypeCore
 
@@ -71,6 +72,89 @@ struct StatusIconTests {
     func modelStateFromTheLoad(loaded: Bool, metalActive: Bool, expected: ModelState) {
         #expect(ModelState(loaded: loaded, metalActive: metalActive) == expected,
                 "loaded \(loaded), Metal \(metalActive)")
+    }
+
+    /// The app's reads at the end of the load, in the test's hands: how many
+    /// times each one was made, and the log lines.
+    @MainActor
+    private final class Load {
+        let loaded: Bool
+        let metal: Bool
+        var loadedReads = 0
+        var deviceReads = 0
+        var metalReads = 0
+        var lines: [String] = []
+
+        init(loaded: Bool, metal: Bool) {
+            self.loaded = loaded
+            self.metal = metal
+        }
+
+        func finish() async -> ModelState {
+            await ModelState.afterLoad(
+                loaded: { self.loadedReads += 1; return self.loaded },
+                devices: { self.deviceReads += 1; return "MTL0, BLAS, CPU" },
+                metalActive: { self.metalReads += 1; return self.metal },
+                log: { self.lines.append($0) })
+        }
+    }
+
+    /// Audit A2 of part 1b, sabotages M14 and M15: the condition that keeps
+    /// Metal out of a failed load lived in the app, where `if !loaded {` slashed
+    /// every working Mac and `metalActive = loaded` hid a CPU run, both green.
+    @Test("a model that did not load ends not loaded, and Metal is never asked",
+          arguments: [true, false])
+    @MainActor
+    func afterLoadNotLoaded(metal: Bool) async {
+        let load = Load(loaded: false, metal: metal)
+        #expect(await load.finish() == .notLoaded)
+        #expect(load.loadedReads == 1)
+        #expect(load.metalReads == 0, "Metal asked with no model")
+        #expect(load.deviceReads == 0)
+        #expect(load.lines.isEmpty, "\(load.lines)")
+    }
+
+    @Test("a loaded model with Metal is ready, and the log names the devices")
+    @MainActor
+    func afterLoadReady() async {
+        let load = Load(loaded: true, metal: true)
+        #expect(await load.finish() == .ready)
+        #expect(load.loadedReads == 1 && load.metalReads == 1 && load.deviceReads == 1)
+        #expect(load.lines == ["ggml devices: MTL0, BLAS, CPU"])
+    }
+
+    @Test("a loaded model without Metal keeps the slash, and the log warns")
+    @MainActor
+    func afterLoadNoMetal() async {
+        let load = Load(loaded: true, metal: false)
+        #expect(await load.finish() == .noMetal)
+        #expect(load.loadedReads == 1 && load.metalReads == 1 && load.deviceReads == 1)
+        #expect(load.lines == [
+            "ggml devices: MTL0, BLAS, CPU",
+            "WARNING: without Metal, transcription runs on the CPU and is ~11x slower.",
+        ])
+    }
+
+    /// The watch reads the system through `PermissionReading.current`, which
+    /// no test runs (TCC stays out of tests). A constant in either read would
+    /// leave the icon as it is forever with every behavior test green, so its
+    /// text is held here, as `MenuLayoutTests` holds the executable target.
+    @Test("the reading the app watches is the system's, both permissions")
+    func currentReadsTheSystem() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let source = try String(contentsOf: root.appendingPathComponent("Sources/NeverTypeCore/StatusIcon.swift"),
+                                encoding: .utf8)
+        let lines = source.components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && !$0.hasPrefix("//") }
+        let start = try #require(lines.firstIndex(of: "public static var current: PermissionReading {"))
+        #expect(Array(lines[start...].prefix(4)) == [
+            "public static var current: PermissionReading {",
+            "PermissionReading(microphone: .current,",
+            "accessibilityGranted: HotkeyMonitor.hasAccessibilityPermission)",
+            "}",
+        ])
     }
 
     /// The case of 2026-10-16 08:28, as the app sees it when the watch hands

@@ -129,3 +129,178 @@ Briefing: vault `.claude/threads/never-type-permissoes-conserto-1b-briefing.md`.
 * `cd ~/Projects/apps/never-type-permissoes && python3 scripts/test-count-swift-warnings.py`
 
 ## Estado do conserto 1: FEITO (o teste manual do TCC segue com o Pedro)
+
+---
+
+## Conserto 2 (16/10)
+Briefing: vault `.claude/threads/never-type-permissoes-conserto-2-1b-briefing.md`. Achados: A2 e a classe dele (reauditoria `never-type-permissoes-1b-reaudit-1.md`), B7 (comentário de `StatusIcon.redraw`). B1, B3, B4 e B6 ficam fora (tarefa). Volta 2 de 2.
+
+### Marco D0: leitura (09:26)
+* Lidos: briefing do conserto 2, reauditoria e auditoria da 1b, tabelas de sabotagem da parte 1 (auditoria, reauditoria e progresso da parte 1, onde estão D1c, D1e e D1f), este progresso (conserto 1), briefing do conserto 1, `CLAUDE.md`, `nucleo-testavel.md`, `verificacao-estrutural.md`, dev-remoto princípios 1, 6 e 7.
+* `git log --oneline -3`: `bbfec96`, `3e87fb4`, `e6d9431`. `git status --short`: só `?? models`. Shas iguais aos da reauditoria (`main.swift` fad16d7a, `StatusIcon.swift` b4d425d9, `MenuLayoutTests.swift` e38fdb2f, `StatusIconTests.swift` f9c39d90). Cópia do estado de partida em `<scratchpad>/conserto2-1b/bak0/` (mais `Permissions.swift` 44236b27, `DictationAttempt.swift` a3aa59da, `MenuLayout.swift` 1c7a6dec).
+* Plano:
+  * A2 sai para o Core: `ModelState.afterLoad(loaded:devices:metalActive:log:)`, `@MainActor`, recebe as leituras como chamadas e só consulta o Metal (e a lista de devices) com o modelo carregado; escreve as duas linhas de log de hoje (`ggml devices:` e o `WARNING` sem Metal). O `main.swift` só grava o que ela devolve e redesenha. Teste de comportamento em `StatusIconTests`.
+  * O resto da classe é ligação (chamar `NSAlert`, `render`, `Task`), sem decisão sobrando para o Core: o oráculo de `MenuLayoutTests` passa a prender cada ligação linha a linha, inteira (bloco das permissões na abertura, fim do modelo, gatilho do `case .pressed:` até `case .startRecording: break`, `askAgainForMicrophone`, `askForMicrophone`, `askForMicrophoneFromMenu`, `permissionsChanged`, `renderResting` com a assinatura, `logPermissionsIfChanged` com a assinatura, a propriedade `permissionWatch`, `warnIfAccessibilityMissing`, os três avisos inteiros com o portão, e as duas condições de permissão do menu).
+  * `PermissionReading.current` (Core, desta frente) é a fronteira com o TCC e não se executa em teste: oráculo de texto sobre as duas leituras.
+  * Varredura: `<scratchpad>/conserto2-1b/sweep.py` com as mutações em `muts.py`; cada uma por troca exata com contagem 1, `swift build --build-tests` (morte só conta com build verde), `swift test --skip-build --filter` das seis suítes da parte com `--xunit-output` para nomear o teste que pegou, desfeita por cópia de `bak/` com sha conferido. Roda duas vezes: "antes" (código e testes de partida) e "depois".
+
+### Marco D1: varredura "antes"
+* `python3 -I <scratchpad>/conserto2-1b/sweep.py antes bak0 antes.jsonl`, 101 mutações sobre o código e os testes de partida (`bak0`). Resultado completo na tabela do marco D4. Placar: 59 mortas, 41 sobreviventes, 1 sem build. Sobreviviam: M14, M15 (o A2) e mais 39 na classe, entre elas L2, L3, L5 (as leituras e o pedido da Acessibilidade na abertura), MD3, T7, T9, T10, TA1 a TA4, TR3, TW3, TM4, TS1, TS2, S17v (gatilho), AG6, AG7, AF1, RR5, LW2 a LW4, PR1, PR2, W1 a W4, G1, R1, R3, R4, R5 (avisos) e MC1m a MC4m (menu). P3 (intervalo de 60 s na propriedade) não compila e foi descartada (B1 já diz que o valor de um segundo não tem prova sem relógio).
+
+### Marco D2: vermelho
+* Esboço no Core: `ModelState.afterLoad(loaded:devices:metalActive:log:)` devolvendo `.loading` sem chamar nada. `main.swift` intocado.
+* Testes novos em `StatusIconTests`: `afterLoadNotLoaded` (dois casos: `.notLoaded`, Metal e devices nunca consultados, log vazio), `afterLoadReady`, `afterLoadNoMetal` (estado, uma leitura de cada, as linhas de log exatas), e `currentReadsTheSystem` (oráculo de texto de `PermissionReading.current`).
+* `MenuLayoutTests`: `permissionWatchWiring` reescrito (propriedade inteira, `permissionsChanged`, `renderResting` com a assinatura); novos `launchPermissionsWiring`, `modelLoadWiring`, `triggerWiring`, `askAgainWiring`, `permissionLineWriterWiring`, `accessibilityWarningWiring`, `menuPermissionConditionsWiring`; `expectAlert` compara o corpo inteiro linha a linha (`shown:` e `logged:` novos) e passa a valer também para o aviso da Acessibilidade.
+* `swift build --build-tests` ok; `swift test --skip-build --filter "StatusIconTests|MenuLayoutTests|PermissionsTests|DictationAttemptTests|PermissionsPart1AuditTests|PermissionsPart1bAuditTests"`: **80 testes em 6 suítes, falhou com 12 issues**; vermelhos: os três `afterLoad*` e `modelLoadWiring`. Os oráculos novos sobre ligações que já estavam certas passam no código de partida, como devem: são endurecimento, provado pela varredura (a mutação que sobrevivia no "antes" morre no "depois").
+
+### Marco D3: verde
+* `StatusIcon.swift`: `ModelState.afterLoad` (`@MainActor`; `guard await loaded() else { return .notLoaded }`, depois a linha `ggml devices:`, a leitura do Metal, o `WARNING` sem Metal, e `ModelState(loaded: true, metalActive:)`). Comentário de `StatusIcon.redraw` corrigido (B7): a gravação é redesenhada pelo `.released` com o ícone normal, fora da regra (B3), e o fim da transcrição com sucesso não redesenha (B7).
+* `main.swift`: a `Task` do modelo grava `ModelState.afterLoad(...)` com as quatro chamadas do app e redesenha; o `if loaded {` e o `var metalActive` saíram. As linhas de log e a ordem delas são as mesmas de antes.
+* `swift build --build-tests` sem erro; mesmo filtro: **80 testes em 6 suítes, passou**.
+* Estado entregue copiado em `<scratchpad>/conserto2-1b/bak1/`: `main.swift` ca37b8f9, `StatusIcon.swift` ac60fa3e, `MenuLayoutTests.swift` 99020d81, `StatusIconTests.swift` a33cab34 (os outros três iguais ao `bak0`).
+
+### Marco D4: varredura "depois"
+* `python3 -I <scratchpad>/conserto2-1b/sweep.py depois bak1 depois.jsonl`: 110 mutações (as 101 do "antes", com as do modelo reescritas na forma nova, mais 9 que só existem na forma nova: M14c, M15c, MD4, MD5, MC1 a MC5). **109 mortas, 0 sobreviventes, 1 sem build (P3, descartada).** Toda morta tem build verde (0 `error:`) e o teste que a pegou nomeado pelo `--xunit-output`. Cada mutação aplicada por troca exata com contagem 1 e desfeita por cópia de `bak1/`, sha conferido depois de cada uma (gravado no `depois.jsonl`); no fim, os sete arquivos com o sha do `bak1`.
+* M14, M14c, M15 e M15c também com a suíte inteira (`SWEEP_FILTER=.`): as quatro deixam vermelha a suíte de 296 testes em 32 suítes (`modelLoadWiring` para as duas do `main.swift`; `afterLoad*` para as duas do Core).
+* Ligações: `abertura` (bloco das permissões na abertura), `modelo` (fim do carregamento), `gatilho`, `askAgain` (com `askForMicrophone` e o item do menu), `permissionsChanged`, `renderResting`, `linha permissions` (`logPermissionsIfChanged`), `releitura` (propriedade e `PermissionReading.current`), `warnIfAccessibilityMissing`, `avisos` (os três e o portão), `menu` (condições de permissão). Arquivo: `main` é `Sources/NeverType/main.swift`, `icon` é `StatusIcon.swift`, `dict` é `DictationAttempt.swift` (o `PresentationGate`), `menu` é `MenuLayout.swift`. "antes" é o código e os testes de partida (`3e87fb4` mais a reauditoria), "depois" é o entregue.
+
+| id | ligação | arquivo | mutação | antes | depois |
+|---|---|---|---|---|---|
+| L1-S16 | abertura | main | sem a linha `permissions:` antes da `Task` (S16) | morre (permissionLineWiring) | morre (launchPermissionsWiring, permissionLineWiring) |
+| L2 | abertura | main | `microphone: { MicrophoneAccess.authorized }` (constante) | **sobrevive** | morre (launchPermissionsWiring) |
+| L3 | abertura | main | `accessibilityGranted: { true }` (constante) | **sobrevive** | morre (launchPermissionsWiring) |
+| L4-D1c | abertura | main | pedido sem `microphoneRequest.ask` (D1c) | morre (undeterminedMicrophoneWiring) | morre (launchPermissionsWiring, undeterminedMicrophoneWiring) |
+| L5 | abertura | main | `requestAccessibility: { }` (chamada apagada) | **sobrevive** | morre (launchPermissionsWiring) |
+| L6 | abertura | main | sem `renderResting()` depois dos pedidos | morre (permissionWatchWiring) | morre (launchPermissionsWiring) |
+| L7 | abertura | main | sem a segunda linha `permissions:` | morre (permissionLineWiring, permissionWatchWiring) | morre (launchPermissionsWiring, permissionLineWiring) |
+| L8-M3 | abertura | main | sem `permissionWatch.start()` (M3) | morre (permissionWatchWiring) | morre (launchPermissionsWiring) |
+| L9 | abertura | main | saída antes de `LaunchPermissions.run(` | morre (permissionWatchWiring) | morre (launchPermissionsWiring) |
+| L10-M10b | abertura | main | `start()` antes dos pedidos | morre (permissionWatchWiring) | morre (launchPermissionsWiring) |
+| M9 | abertura | main | volta `if !self.micAuthorized { self.render(.blocked) }` | morre (permissionWatchWiring) | morre (launchPermissionsWiring) |
+| M10 | abertura | main | `start()` só no modelo que falhou (M10) | morre (permissionWatchWiring) | morre (launchPermissionsWiring, modelLoadWiring) |
+| M14 | modelo | main | **`if !loaded`** (antes) / `loaded: { !(await didLoad()) }` (depois) | **sobrevive** | morre (modelLoadWiring) |
+| M14c | modelo | icon | Core: `guard !(await loaded())` | n/a | morre (afterLoadNoMetal, afterLoadNotLoaded, afterLoadReady) |
+| M15 | modelo | main | **`metalActive = loaded`** (antes) / `metalActive: { await didLoad() }` (depois) | **sobrevive** | morre (modelLoadWiring) |
+| M15c | modelo | icon | Core: `metalActive: true` no estado final | n/a | morre (afterLoadNoMetal) |
+| M5a | modelo | icon | Core: `.ready` e `.noMetal` trocados | morre (modelStateFromTheLoad) | morre (afterLoadNoMetal, afterLoadReady, modelStateFromTheLoad) |
+| M5b | modelo | main | Metal negado no `main.swift` | morre (permissionWatchWiring) | morre (modelLoadWiring) |
+| MD1 | modelo | main | `loaded` constante `true` | morre (permissionWatchWiring) | morre (modelLoadWiring) |
+| MD2 | modelo | main | Metal constante `true` | morre (permissionWatchWiring) | morre (modelLoadWiring) |
+| MD3 | modelo | main | saída antes de gravar o `modelState` | **sobrevive** | morre (modelLoadWiring) |
+| M12 | modelo | main | sem `renderResting()` depois do modelo | morre (permissionWatchWiring) | morre (modelLoadWiring) |
+| M16 | modelo | main | `renderResting()` antes de gravar o estado | morre (permissionWatchWiring) | morre (modelLoadWiring) |
+| MD4 | modelo | main | `log: { _ in }` | n/a | morre (modelLoadWiring) |
+| MD5 | modelo | main | `devices: { "" }` (constante) | n/a | morre (modelLoadWiring) |
+| MC1 | modelo | icon | Core: Metal consultado antes do `guard` (sem modelo) | n/a | morre (afterLoadNoMetal, afterLoadNotLoaded, afterLoadReady) |
+| MC2 | modelo | icon | Core: `if metal` (aviso invertido) | n/a | morre (afterLoadNoMetal, afterLoadReady) |
+| MC3 | modelo | icon | Core: sem o `WARNING` | n/a | morre (afterLoadNoMetal) |
+| MC4 | modelo | icon | Core: sem a linha `ggml devices:` | n/a | morre (afterLoadNoMetal, afterLoadReady) |
+| MC5 | modelo | icon | Core: devices lidos antes do `guard` | n/a | morre (afterLoadNoMetal, afterLoadNotLoaded, afterLoadReady) |
+| T1 | gatilho | main | `let microphone = .authorized` (constante) | morre (permissionWatchWiring) | morre (triggerWiring) |
+| T2 | gatilho | main | `let accessibility = true` (constante) | morre (permissionWatchWiring) | morre (triggerWiring) |
+| T3 | gatilho | main | sem a linha `permissions:` no gatilho | morre (permissionWatchWiring) | morre (triggerWiring) |
+| T4-M4 | gatilho | main | sem `permissionWatch.start()` (M4) | morre (permissionWatchWiring) | morre (triggerWiring) |
+| M11 | gatilho | main | `start()` só em `.startRecording` (M11) | morre (permissionWatchWiring) | morre (triggerWiring) |
+| T6 | gatilho | main | saída antes do `switch DictationAttempt.decide(` | morre (permissionWatchWiring) | morre (triggerWiring) |
+| T7 | gatilho | main | `isTranscribing: false` | **sobrevive** | morre (triggerWiring) |
+| D1d | gatilho | main | `microphoneRequestPending: false` (D1d) | morre (undeterminedMicrophoneWiring) | morre (triggerWiring, undeterminedMicrophoneWiring) |
+| T9 | gatilho | main | `accessibilityAuthorized: !accessibility` | **sobrevive** | morre (triggerWiring) |
+| T10 | gatilho | main | `microphone: .authorized` na decisão | **sobrevive** | morre (triggerWiring) |
+| TA1 | gatilho | main | Acessibilidade: sem `render(.blocked)` | **sobrevive** | morre (triggerWiring) |
+| TA2 | gatilho | main | Acessibilidade: sem o aviso | **sobrevive** | morre (triggerWiring) |
+| TA3 | gatilho | main | Acessibilidade: `return true` | **sobrevive** | morre (triggerWiring) |
+| TA4 | gatilho | main | Acessibilidade: abre o aviso do microfone (ramos trocados) | **sobrevive** | morre (triggerWiring) |
+| S15 | gatilho | main | indeciso sem `askAgainForMicrophone()` (S15) | morre (undeterminedMicrophoneWiring) | morre (triggerWiring, undeterminedMicrophoneWiring) |
+| TR2 | gatilho | main | indeciso mostra o aviso de espera (ramos trocados) | morre (undeterminedMicrophoneWiring) | morre (triggerWiring, undeterminedMicrophoneWiring) |
+| TR3 | gatilho | main | indeciso: sem `render(.blocked)` | **sobrevive** | morre (triggerWiring) |
+| D1a | gatilho | main | pedido aberto sem o aviso de espera (D1a) | morre (undeterminedMicrophoneWiring) | morre (triggerWiring, undeterminedMicrophoneWiring) |
+| V1 | gatilho | main | pedido aberto pede de novo (ramos trocados) | morre (undeterminedMicrophoneWiring) | morre (triggerWiring, undeterminedMicrophoneWiring) |
+| TW3 | gatilho | main | pedido aberto: sem `render(.blocked)` | **sobrevive** | morre (triggerWiring) |
+| S14 | gatilho | main | negado sem `showMicrophoneRequiredAlert()` (S14) | morre (microphoneWiring) | morre (microphoneWiring, triggerWiring) |
+| S14c | gatilho | main | a chamada do aviso comentada (S14c) | morre (microphoneWiring) | morre (microphoneWiring, triggerWiring) |
+| S17v | gatilho | main | saída antes do aviso do negado, no gatilho | **sobrevive** | morre (triggerWiring) |
+| TM4 | gatilho | main | negado: sem `render(.blocked)` | **sobrevive** | morre (triggerWiring) |
+| TS1 | gatilho | main | `.startRecording` devolve `false` (saída antes de gravar) | **sobrevive** | morre (triggerWiring) |
+| TS2 | gatilho | main | `.waitForTranscription` vira `break` (grava durante a transcrição) | **sobrevive** | morre (triggerWiring) |
+| AG1 | askAgain | main | `request: { }` | morre (undeterminedMicrophoneWiring) | morre (askAgainWiring, undeterminedMicrophoneWiring) |
+| D1b | askAgain | main | `onNoAnswer: { }` (D1b) | morre (undeterminedMicrophoneWiring) | morre (askAgainWiring, undeterminedMicrophoneWiring) |
+| AG3 | askAgain | main | sem `renderResting()` | morre (permissionWatchWiring) | morre (askAgainWiring) |
+| AG4-L6 | askAgain | main | `render(.idle)` no lugar da regra (L6) | morre (permissionWatchWiring) | morre (askAgainWiring) |
+| M6 | askAgain | main | sem `permissionWatch.start()` (M6) | morre (permissionWatchWiring) | morre (askAgainWiring) |
+| AG6 | askAgain | main | saída antes do `askAgain(` | **sobrevive** | morre (askAgainWiring) |
+| AG7 | askAgain | main | sem a linha `permissions:` | **sobrevive** | morre (askAgainWiring) |
+| MA1 | askAgain | main | item do menu sem `askAgainForMicrophone()` | morre (undeterminedMicrophoneWiring) | morre (askAgainWiring, undeterminedMicrophoneWiring) |
+| AF1 | askAgain | main | `requestAccess(for: .video)` | **sobrevive** | morre (askAgainWiring) |
+| M8a | permissionsChanged | main | `if reading.isComplete { return }` antes do redesenho (M8) | morre (permissionWatchWiring) | morre (permissionWatchWiring) |
+| PC2 | permissionsChanged | main | sem a linha `permissions:` | morre (permissionWatchWiring) | morre (permissionWatchWiring) |
+| PC3 | permissionsChanged | main | leitura constante no redesenho | morre (permissionWatchWiring) | morre (permissionWatchWiring) |
+| PC4 | permissionsChanged | main | sem `renderResting(reading)` | morre (permissionWatchWiring) | morre (permissionWatchWiring) |
+| M2a | renderResting | main | `recording: !recorder.isRecording` (M2) | morre (permissionWatchWiring) | morre (permissionWatchWiring) |
+| M1b | renderResting | main | mapeamento invertido no `render` (M1) | morre (permissionWatchWiring) | morre (permissionWatchWiring) |
+| M13 | renderResting | main | `transcribing: false` | morre (permissionWatchWiring) | morre (permissionWatchWiring) |
+| RR4 | renderResting | main | `model: .ready` (constante) | morre (permissionWatchWiring) | morre (permissionWatchWiring) |
+| RR5 | renderResting | main | padrão do parâmetro constante no lugar de `.current` | **sobrevive** | morre (permissionWatchWiring) |
+| RR6 | renderResting | main | sem `render(visual)` | morre (permissionWatchWiring) | morre (permissionWatchWiring) |
+| RR7 | renderResting | main | saída antes do `StatusIcon.redraw(` | morre (permissionWatchWiring) | morre (permissionWatchWiring) |
+| M2c | renderResting | icon | Core: guarda sem a transcrição | morre (noRedrawWhileDictating) | morre (noRedrawWhileDictating) |
+| M8c | renderResting | icon | Core: `if permissions.isComplete { return nil }` | morre (redrawAtRest) | morre (redrawAtRest) |
+| M1a | renderResting | icon | Core: `StatusIcon.visual` invertido | morre (redrawAtRest, restingVisual) | morre (redrawAtRest, restingVisual) |
+| LW1 | linha permissions | main | sem `log(line)` | morre (permissionLineWiring) | morre (permissionLineWiring, permissionLineWriterWiring) |
+| LW2 | linha permissions | main | padrão `microphone: .authorized` | **sobrevive** | morre (permissionLineWriterWiring) |
+| LW3 | linha permissions | main | padrão `accessibility: true` | **sobrevive** | morre (permissionLineWriterWiring) |
+| LW4 | linha permissions | main | `accessibilityGranted: true` na linha | **sobrevive** | morre (permissionLineWriterWiring) |
+| P1 | releitura | main | `read:` constante completa | morre (permissionWatchWiring) | morre (permissionWatchWiring) |
+| P2 | releitura | main | `onChange: { _ in }` | morre (permissionWatchWiring) | morre (permissionWatchWiring) |
+| P3 | releitura | main | intervalo de 60 s na propriedade | não compila | não compila |
+| PR1 | releitura | icon | Core: `PermissionReading.current` com microfone constante | **sobrevive** | morre (currentReadsTheSystem) |
+| PR2 | releitura | icon | Core: `PermissionReading.current` com Acessibilidade constante | **sobrevive** | morre (currentReadsTheSystem) |
+| W1 | warnIfAccessibilityMissing | main | `guard HotkeyMonitor.hasAccessibilityPermission` (negado) | **sobrevive** | morre (accessibilityWarningWiring) |
+| W2 | warnIfAccessibilityMissing | main | sem `render(.blocked)` | **sobrevive** | morre (accessibilityWarningWiring) |
+| W3 | warnIfAccessibilityMissing | main | sem `requestAccessibilityPermission()` | **sobrevive** | morre (accessibilityWarningWiring) |
+| W4 | warnIfAccessibilityMissing | main | saída antes do pedido | **sobrevive** | morre (accessibilityWarningWiring) |
+| G1 | avisos | main | Acessibilidade: `guard !permissionAlertGate.begin()` | **sobrevive** | morre (accessibilityWarningWiring) |
+| G2 | avisos | main | microfone: sem o `defer` do portão | morre (microphoneWiring) | morre (microphoneWiring) |
+| D1f | avisos | main | espera: sem o portão (D1f) | morre (undeterminedMicrophoneWiring) | morre (undeterminedMicrophoneWiring) |
+| R1 | avisos | main | Acessibilidade: `runModal() !=` | **sobrevive** | morre (accessibilityWarningWiring) |
+| R2 | avisos | main | microfone: sem `openMicrophoneSettings()` | morre (microphoneWiring) | morre (microphoneWiring) |
+| R3 | avisos | main | Acessibilidade abre a página do microfone (ramos trocados) | **sobrevive** | morre (accessibilityWarningWiring) |
+| R4 | avisos | main | microfone: `runModal() !=` | **sobrevive** | morre (microphoneWiring) |
+| D1e | avisos | main | espera: saída antes do `runModal` (D1e) | morre (undeterminedMicrophoneWiring) | morre (undeterminedMicrophoneWiring) |
+| S17 | avisos | main | `if microphoneRequest.isPending { return }` antes do aviso do negado (S17) | morre (microphoneWiring) | morre (microphoneWiring) |
+| R5 | avisos | main | Acessibilidade: saída antes do aviso | **sobrevive** | morre (accessibilityWarningWiring) |
+| GC1 | avisos | dict | Core: `begin()` sempre verdadeiro | morre (warningPresentationRejectsReentry) | morre (warningPresentationRejectsReentry) |
+| GC2 | avisos | dict | Core: `end()` vazio | morre (warningPresentationRejectsReentry) | morre (warningPresentationRejectsReentry) |
+| MC1m | menu | main | `microphone: .authorized` (constante) | **sobrevive** | morre (menuPermissionConditionsWiring) |
+| MC2m | menu | main | `accessibilityAuthorized: true` (constante) | **sobrevive** | morre (menuPermissionConditionsWiring) |
+| MC3m | menu | main | Acessibilidade negada | **sobrevive** | morre (menuPermissionConditionsWiring) |
+| MC4m | menu | main | sem a linha `permissions:` ao abrir | **sobrevive** | morre (menuPermissionConditionsWiring) |
+| ML1 | menu | menu | Core: `if conditions.accessibilityAuthorized` (negado) | morre (accessibilityMissing, bothPermissionsMissing, handsFreeOff, microphoneMissing, nothingTranscribedYet, optionShowsTheDiagnostics, theDefaultMenu, undeterminedMicrophoneAsksAgain) | morre (accessibilityMissing, bothPermissionsMissing, handsFreeOff, microphoneMissing, nothingTranscribedYet, optionShowsTheDiagnostics, theDefaultMenu, undeterminedMicrophoneAsksAgain) |
+| ML2 | menu | menu | Core: indeciso oferece a página (ramos trocados) | morre (bothPermissionsMissing, undeterminedMicrophoneAsksAgain) | morre (bothPermissionsMissing, undeterminedMicrophoneAsksAgain) |
+
+### Marco D5: prova final (09:43)
+* `swift build`: exit 0. `swift test`: exit 0, **296 testes em 32 suítes, passou** (285 da reauditoria mais 11 novos: 4 em `StatusIconTests` com 5 casos, 7 em `MenuLayoutTests`; `permissionWatchWiring` reescrito, não somado).
+* `python3 scripts/test-count-swift-warnings.py`: 9 testes, OK.
+* Build limpo `swift build --build-tests --scratch-path <scratchpad>/conserto2-1b/build-clean` (exit 0) + `python3 scripts/count-swift-warnings.py <log>`: **4**, a mesma lista (`AudioRecorder.swift` 1:1, 402:29, 402:41; `PasteTarget.swift` 159:28). Scratch apagado.
+* Travessão e aspas curvas nas linhas adicionadas (`git diff -U0 | grep '^+'`): 0.
+* `git status --short`: `main.swift`, `StatusIcon.swift`, `MenuLayoutTests.swift`, `StatusIconTests.swift` e este progresso modificados; `?? models`. `git diff --stat` em `docs/`, `scripts/`, `Package.swift`, README e `Tests/NeverTypeCoreTests/Audit/`: vazio. As sondas da auditoria seguem intactas e verdes.
+
+### Decisões do conserto 2
+* A única decisão que ainda morava no `main.swift` era a do fim do modelo (o A2): saiu para o Core (`ModelState.afterLoad`), com teste de comportamento que conta as leituras (Metal e devices nunca consultados sem modelo) e confere as linhas de log. O resto da classe é ligação (desenhar, escrever o log, abrir `NSAlert`, criar a `Task`), sem condição de permissão ou de modelo que pudesse ir para o Core além das que já estão lá (`DictationAttempt.decide`, `StatusIcon.redraw`, `LaunchPermissions.run`, `MicrophoneRequest`, `PresentationGate`, `MenuLayout.rows`). Por isso o resto ficou com oráculo linha a linha, inteiro, no molde do `expectAlert`.
+* Os oráculos inteiros prendem também o texto das linhas de log e dos avisos dentro das ligações. Mudar uma frase de log no gatilho passa a exigir mudar o teste junto. É o preço de prender a ligação inteira: um oráculo parcial foi o que deixou o A1 e o A2 passarem.
+* `PermissionReading.current` (Core, desta frente) é a fronteira com o TCC, que não entra em teste: ficou com oráculo de texto em `StatusIconTests.currentReadsTheSystem`, o mesmo tipo de prova dos oráculos do `main.swift`. PR1 e PR2 morrem nele.
+* Comportamento do app: sem mudança. As linhas `ggml devices:` e `WARNING: without Metal…` saem na mesma ordem e nas mesmas condições; o estado e o redesenho são os mesmos do conserto 1. Nada a declarar como ressalva.
+* B7: só o comentário de `StatusIcon.redraw` mudou; o redesenho que falta no fim da transcrição segue com o B3.
+* Sondas presas à forma: nenhuma das sondas da auditoria (`Tests/NeverTypeCoreTests/Audit/`) olha o `main.swift` nem o `StatusIcon.swift`; nada a registrar.
+
+### Fora da parte (conserto 2)
+* B1, B3, B4 e B6 seguem como tarefa. P3 (o intervalo de um segundo trocado na propriedade) não compila na forma tentada; o valor de um segundo segue sem prova (B1).
+* `MicrophoneAccess.current` (parte 1) é a outra leitura do TCC no Core e não tem oráculo de texto; ficou fora por ser da parte 1, não desta frente.
+* `body(of:in:)` segue aceitando comentário de bloco e comentário no fim da linha (B6). Os oráculos inteiros deste conserto comparam linhas de código aparadas, então um comentário no fim de uma linha presa deixa o teste vermelho, não verde.
+
+### Comandos de prova (conserto 2)
+* `cd ~/Projects/apps/never-type-permissoes && swift test --filter "StatusIconTests|MenuLayoutTests|PermissionsTests|DictationAttemptTests|PermissionsPart1AuditTests|PermissionsPart1bAuditTests"`
+* `cd ~/Projects/apps/never-type-permissoes && python3 -I <scratchpad>/conserto2-1b/sweep.py depois <scratchpad>/conserto2-1b/bak1 <saida>.jsonl [ids]` (mutações em `muts.py`, tabela por `table.py`; `SWEEP_FILTER=.` roda a suíte inteira)
+* `cd ~/Projects/apps/never-type-permissoes && swift build && swift test`
+* `cd ~/Projects/apps/never-type-permissoes && python3 scripts/test-count-swift-warnings.py`
+
+## Estado do conserto 2: FEITO (o teste manual do TCC segue com o Pedro)
