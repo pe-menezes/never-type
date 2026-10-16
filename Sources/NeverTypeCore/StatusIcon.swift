@@ -34,6 +34,28 @@ public enum ModelState: Equatable, Sendable {
     case ready
     case notLoaded
     case noMetal
+
+    /// How a finished load ends. Metal only counts once the model loaded:
+    /// a missing model used to log "no Metal" as well, which sent whoever was
+    /// debugging the wrong way. The branches lived in the app, where audit A1
+    /// of part 1b swapped `.ready` and `.noMetal` and no test noticed.
+    public init(loaded: Bool, metalActive: Bool) {
+        if !loaded {
+            self = .notLoaded
+        } else if metalActive {
+            self = .ready
+        } else {
+            self = .noMetal
+        }
+    }
+}
+
+/// What the app draws in the menu bar: the brand, the live waveform, or the
+/// slashed brand.
+public enum StatusVisual: Equatable, Sendable {
+    case idle
+    case recording
+    case blocked
 }
 
 /// The menu bar icon at rest, when nothing is recording.
@@ -54,6 +76,26 @@ public enum StatusIcon: Equatable, Sendable {
         case .loading, .ready: return .normal
         case .notLoaded, .noMetal: return .slashed
         }
+    }
+
+    /// The icon at rest as the app draws it.
+    public var visual: StatusVisual {
+        switch self {
+        case .normal: return .idle
+        case .slashed: return .blocked
+        }
+    }
+
+    /// What to draw at rest with this reading, or nothing while a dictation
+    /// holds the icon: it says recording or transcribing then, and the end of
+    /// the dictation redraws it.
+    ///
+    /// In the app, an early return or an inverted guard here brought back the
+    /// slash of 2026-10-16 08:28 with every test green (audit A1 of part 1b).
+    public static func redraw(permissions: PermissionReading, recording: Bool, transcribing: Bool,
+                              model: ModelState) -> StatusVisual? {
+        guard !recording, !transcribing else { return nil }
+        return resting(permissions: permissions, model: model).visual
     }
 }
 

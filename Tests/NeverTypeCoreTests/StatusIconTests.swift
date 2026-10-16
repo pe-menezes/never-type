@@ -52,6 +52,60 @@ struct StatusIconTests {
         #expect(!PermissionReading(microphone: .authorized, accessibilityGranted: false).isComplete)
     }
 
+    // MARK: - What the app draws
+
+    /// Audit A1 of part 1b, sabotage M1: the mapping inverted in the app drew
+    /// the slash over a working app and nothing caught it.
+    @Test("the normal icon draws the brand, and the slashed one the slashed brand")
+    func restingVisual() {
+        #expect(StatusIcon.normal.visual == .idle)
+        #expect(StatusIcon.slashed.visual == .blocked)
+    }
+
+    /// Audit A1 of part 1b, sabotage M5: `.ready` and `.noMetal` swapped in
+    /// the app recorded a CPU run as ready, and granting a permission then
+    /// cleared the Metal slash.
+    @Test("a finished load is ready only with the model loaded and Metal active",
+          arguments: [(true, true, ModelState.ready), (true, false, .noMetal),
+                      (false, false, .notLoaded), (false, true, .notLoaded)])
+    func modelStateFromTheLoad(loaded: Bool, metalActive: Bool, expected: ModelState) {
+        #expect(ModelState(loaded: loaded, metalActive: metalActive) == expected,
+                "loaded \(loaded), Metal \(metalActive)")
+    }
+
+    /// The case of 2026-10-16 08:28, as the app sees it when the watch hands
+    /// over the reading with both granted: the normal icon, drawn now.
+    /// Audit A1 of part 1b, sabotages M8 and M2: an early exit on the complete
+    /// reading, or the dictation guard inverted, left the slash in place.
+    @Test("a reading at rest is drawn by the rule, the grant included")
+    func redrawAtRest() {
+        #expect(StatusIcon.redraw(permissions: Self.granted, recording: false, transcribing: false,
+                                  model: .ready) == .idle)
+        #expect(StatusIcon.redraw(permissions: Self.granted, recording: false, transcribing: false,
+                                  model: .loading) == .idle)
+        #expect(StatusIcon.redraw(permissions: Self.granted, recording: false, transcribing: false,
+                                  model: .noMetal) == .blocked)
+        #expect(StatusIcon.redraw(permissions: Self.granted, recording: false, transcribing: false,
+                                  model: .notLoaded) == .blocked)
+        let missing = PermissionReading(microphone: .authorized, accessibilityGranted: false)
+        #expect(StatusIcon.redraw(permissions: missing, recording: false, transcribing: false,
+                                  model: .ready) == .blocked)
+    }
+
+    /// While dictating the icon says recording or transcribing, and the end of
+    /// the dictation redraws it; a reading arriving then draws nothing.
+    @Test("nothing is drawn while recording or transcribing",
+          arguments: [(true, false), (false, true), (true, true)])
+    func noRedrawWhileDictating(recording: Bool, transcribing: Bool) {
+        for permissions in [Self.granted, PermissionReading(microphone: .denied, accessibilityGranted: false)] {
+            for model in [ModelState.loading, .ready, .notLoaded, .noMetal] {
+                #expect(StatusIcon.redraw(permissions: permissions, recording: recording,
+                                          transcribing: transcribing, model: model) == nil,
+                        "\(permissions) with \(model) drew over a dictation")
+            }
+        }
+    }
+
     // MARK: - The watch
 
     /// The system reading and the interval, both in the test's hands. Each

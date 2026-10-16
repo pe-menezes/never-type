@@ -326,19 +326,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // The Metal warning only applies if the model loaded. Before, a
             // missing model also triggered "no Metal" — sending whoever was
             // debugging in the wrong direction.
-            if await self.transcription.didLoad() {
+            let loaded = await self.transcription.didLoad()
+            var metalActive = false
+            if loaded {
                 self.log("ggml devices: \(await self.transcription.deviceList())")
-                if await !self.transcription.isMetalActive() {
+                metalActive = await self.transcription.isMetalActive()
+                if !metalActive {
                     self.log("WARNING: without Metal, transcription runs on the CPU and is ~11x slower.")
-                    self.modelState = .noMetal
-                    self.render(.blocked)
-                } else {
-                    self.modelState = .ready
                 }
-            } else {
-                self.modelState = .notLoaded
-                self.render(.blocked)
             }
+            // The state, and the icon from it, by the Core rule: with the
+            // branches here, `.ready` and `.noMetal` swapped stayed green
+            // (audit A1 of part 1b).
+            self.modelState = ModelState(loaded: loaded, metalActive: metalActive)
+            self.renderResting()
         }
         // The pill is on this line because `nevertype.log` is truncated at
         // every launch: with the preference off and only the toggle's own line
@@ -355,7 +356,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Visual states
 
-    private enum Visual { case idle, recording, blocked }
+    /// The three states live in Core (`StatusVisual`), so the icon at rest
+    /// is mapped there, under test (audit A1 of part 1b inverted the mapping
+    /// here and stayed green).
+    private typealias Visual = StatusVisual
 
     private func render(_ state: Visual) {
         guard let button = statusItem.button else {
@@ -918,18 +922,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// A reading from the watch that differs from the one before: the line in
-    /// the log, and the icon redrawn. Not while dictating, where the icon says
-    /// recording and the end of the dictation redraws it.
+    /// the log, and the icon redrawn.
     private func permissionsChanged(_ reading: PermissionReading) {
         logPermissionsIfChanged(microphone: reading.microphone, accessibility: reading.accessibilityGranted)
-        guard !recorder.isRecording, !transcriptionSession.isTranscribing else { return }
         renderResting(reading)
     }
 
-    /// The icon at rest, by `StatusIcon`: slashed while a permission is
-    /// missing, the model failed to load or there is no Metal.
+    /// The icon at rest, by `StatusIcon.redraw`: slashed while a permission is
+    /// missing, the model failed to load or there is no Metal, and nothing
+    /// drawn while dictating, where the icon says recording and the end of
+    /// the dictation redraws it. The decision is the Core's, under test; this
+    /// only draws it (audit A1 of part 1b).
     private func renderResting(_ permissions: PermissionReading = .current) {
-        render(StatusIcon.resting(permissions: permissions, model: modelState) == .normal ? .idle : .blocked)
+        if let visual = StatusIcon.redraw(permissions: permissions, recording: recorder.isRecording,
+                                          transcribing: transcriptionSession.isTranscribing, model: modelState) {
+            render(visual)
+        }
     }
 
     /// Writes the `permissions:` line when a reading differs from the last one

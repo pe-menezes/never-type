@@ -297,31 +297,74 @@ struct MenuLayoutTests {
         #expect(!property.contains("interval:"),
                 "the app re-reads every second, the default:\n\(property)")
 
+        // Audit A1 of part 1b: each call used to be looked for anywhere in its
+        // body, and six sabotages stayed green, two of them bringing back the
+        // slash of 08:28 (an early return ahead of the redraw, the dictation
+        // guard inverted). The decisions moved to Core (`StatusIcon.redraw`,
+        // `ModelState(loaded:metalActive:)`, `StatusIcon.visual`), and what is
+        // left here is held line by line, like `expectAlert`.
         let changed = try Self.body(of: "private func permissionsChanged(_ reading: PermissionReading) {", in: source)
-        #expect(changed.contains("logPermissionsIfChanged(microphone: reading.microphone, accessibility: reading.accessibilityGranted)"),
-                "a change has to write the permissions line:\n\(changed)")
-        #expect(changed.contains("renderResting(reading)"), "a change has to redraw the icon:\n\(changed)")
+        #expect(Self.codeLines(changed) == [
+            "logPermissionsIfChanged(microphone: reading.microphone, accessibility: reading.accessibilityGranted)",
+            "renderResting(reading)",
+        ], "a change writes the permissions line and redraws, and nothing else:\n\(changed)")
 
         let resting = try Self.body(of: "private func renderResting(", in: source)
-        #expect(resting.contains("StatusIcon.resting(permissions: permissions, model: modelState)"),
-                "the resting icon is the Core rule's:\n\(resting)")
-        #expect(resting.contains("render("))
+        #expect(Self.codeLines(resting) == [
+            "if let visual = StatusIcon.redraw(permissions: permissions, recording: recorder.isRecording,",
+            "transcribing: transcriptionSession.isTranscribing, model: modelState) {",
+            "render(visual)",
+            "}",
+        ], "the resting icon is what the Core rule says, drawn as it says:\n\(resting)")
 
         let launch = try Self.body(of: "func applicationDidFinishLaunching(_ notification: Notification) {", in: source)
-        let run = try #require(launch.range(of: "LaunchPermissions.run("))
-        let afterPrompts = launch[run.upperBound...]
-        #expect(afterPrompts.contains("self.permissionWatch.start()"),
-                "the watch has to start after the launch prompts:\n\(launch)")
-        #expect(afterPrompts.contains("self.renderResting()"))
+        let launchLines = Self.codeLines(launch)
         #expect(!launch.contains("if !self.micAuthorized { self.render(.blocked) }"),
                 "the launch redraw went back to looking at the microphone alone")
-        for state in ["self.modelState = .ready", "self.modelState = .noMetal", "self.modelState = .notLoaded"] {
-            #expect(launch.contains(state), "the model load has to record \(state)")
-        }
+        // Inside the permissions `Task`, right after the prompts: anywhere
+        // else in launch (audit M10, in the model's failure branch) the
+        // reported case is not watched.
+        let run = try #require(launchLines.firstIndex(of: "await LaunchPermissions.run("),
+                               "no launch prompts:\n\(launch)")
+        #expect(run > 0 && launchLines[run - 1] == "Task { @MainActor in",
+                "the prompts have to run in their own Task:\n\(launch)")
+        let lastArgument = try #require(launchLines[run...].firstIndex { $0.hasPrefix("requestAccessibility: ") })
+        #expect(Array(launchLines[(lastArgument + 1)...].prefix(4)) == [
+            "self.renderResting()",
+            "self.logPermissionsIfChanged()",
+            "self.permissionWatch.start()",
+            "}",
+        ], "after the prompts: redraw, the permissions line, start watching, and the Task ends:\n\(launch)")
+        #expect(launchLines.filter { $0.contains("permissionWatch.start()") }.count == 1,
+                "the watch starts once at launch, after the prompts:\n\(launch)")
+        // The model load: its state comes from the Core, recorded once, and
+        // the icon redrawn from it (audit M5 swapped `.ready` and `.noMetal`).
+        #expect(launchLines.filter { $0.contains("modelState") } == [
+            "self.modelState = ModelState(loaded: loaded, metalActive: metalActive)",
+        ], "the model state is recorded once, by the Core:\n\(launch)")
+        let recorded = try #require(launchLines.firstIndex(of: "self.modelState = ModelState(loaded: loaded, metalActive: metalActive)"))
+        #expect(launchLines.indices.contains(recorded + 1) && launchLines[recorded + 1] == "self.renderResting()",
+                "the icon is redrawn once the model state is known:\n\(launch)")
+        #expect(launchLines.contains("let loaded = await self.transcription.didLoad()"))
+        #expect(launchLines.contains("metalActive = await self.transcription.isMetalActive()"))
 
+        // The trigger: watch again before deciding, on every press (audit
+        // M11 moved it into `.startRecording`, which never has one missing).
         let handle = try Self.body(of: "private func handle(_ event: HotkeyMonitor.Event) -> Bool {", in: source)
-        #expect(handle.contains("permissionWatch.start()"),
-                "a trigger that finds a permission missing has to watch again:\n\(handle)")
+        let handleLines = Self.codeLines(handle)
+        let decide = try #require(handleLines.firstIndex(of: "switch DictationAttempt.decide("),
+                                  "no decision on the trigger:\n\(handle)")
+        #expect(Array(handleLines[...decide]) == [
+            "switch event {",
+            "case .pressed:",
+            "let microphone = MicrophoneAccess.current",
+            "let accessibility = HotkeyMonitor.hasAccessibilityPermission",
+            "logPermissionsIfChanged(microphone: microphone, accessibility: accessibility)",
+            "permissionWatch.start()",
+            "switch DictationAttempt.decide(",
+        ], "a press reads, writes the line and starts watching before deciding:\n\(handle)")
+        #expect(handleLines.filter { $0.contains("permissionWatch.start()") }.count == 1,
+                "the trigger starts the watch once, before the decision:\n\(handle)")
 
         // Audit L6 of part 1: the normal icon drawn over a model failure.
         let again = try Self.body(of: "private func askAgainForMicrophone() {", in: source)
@@ -378,6 +421,14 @@ struct MenuLayoutTests {
             body.append(line)
         }
         return body.joined(separator: "\n")
+    }
+
+    /// The code lines of a body, trimmed, blank lines dropped: what the
+    /// line-by-line oracles compare.
+    private static func codeLines(_ body: String) -> [String] {
+        body.components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
     }
 
     /// A permission alert: behind the shared gate, with its title, text and
