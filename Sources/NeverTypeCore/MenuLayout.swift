@@ -24,7 +24,9 @@ public enum MenuLayout {
     /// queried from the system on every rebuild, because all three change from
     /// outside the app, and this type is the snapshot of one such reading.
     public struct Conditions: Equatable, Sendable {
-        public let microphoneAuthorized: Bool
+        /// The four answers, not a yes or no: never answered and denied have
+        /// different ways out (audit B2).
+        public let microphone: MicrophoneAccess
         public let accessibilityAuthorized: Bool
         /// The Option key, held as the menu opens.
         public let showsDiagnostics: Bool
@@ -67,7 +69,7 @@ public enum MenuLayout {
         /// the line is left out rather than shown disabled.
         public let updateCheckAvailable: Bool
 
-        public init(microphoneAuthorized: Bool,
+        public init(microphone: MicrophoneAccess,
                     accessibilityAuthorized: Bool,
                     showsDiagnostics: Bool,
                     historyCount: Int,
@@ -79,7 +81,7 @@ public enum MenuLayout {
                     pillAlwaysVisible: Bool,
                     pausesMedia: Bool,
                     updateCheckAvailable: Bool = false) {
-            self.microphoneAuthorized = microphoneAuthorized
+            self.microphone = microphone
             self.accessibilityAuthorized = accessibilityAuthorized
             self.showsDiagnostics = showsDiagnostics
             self.historyCount = historyCount
@@ -100,6 +102,11 @@ public enum MenuLayout {
         case accessibilityMissing
         case openAccessibilitySettings
         case microphoneMissing
+        case openMicrophoneSettings
+        /// The microphone never answered. The app may not be in the Microphone
+        /// list yet, and that page has no + button, so the way out is the
+        /// prompt (audit B2).
+        case askForMicrophone
         case trigger
         case gestureHint
         /// Carries the chosen key, because the title is where the gesture is
@@ -151,10 +158,21 @@ public enum MenuLayout {
             rows.append(.accessibilityMissing)
             rows.append(.openAccessibilitySettings)
         }
-        // No way out under this one: the microphone prompt is the system's, it
-        // is asked for once at launch, and the app has no settings item for it.
-        if !conditions.microphoneAuthorized {
+        // With its way out under it, like Accessibility. It used to come alone,
+        // on the idea that macOS asks once at launch and that settles it; on
+        // 2026-10-15 a person never saw that prompt and the menu offered
+        // nothing.
+        // Never answered, the way out is the prompt: the Microphone page may
+        // not list the app yet, and it has no + button to add it.
+        switch conditions.microphone {
+        case .authorized:
+            break
+        case .notDetermined:
             rows.append(.microphoneMissing)
+            rows.append(.askForMicrophone)
+        case .denied, .restricted:
+            rows.append(.microphoneMissing)
+            rows.append(.openMicrophoneSettings)
         }
         if !rows.isEmpty { rows.append(.separator) }
 

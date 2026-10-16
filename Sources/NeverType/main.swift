@@ -156,7 +156,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // `isVisible = true` and `frame.width = 30`, and still nothing is drawn.
     private var statusItem: NSStatusItem!
     private let monitor = HotkeyMonitor()
-    private var accessibilityAlertGate = PresentationGate()
+    /// One permission alert at a time, whichever permission it is about.
+    private var permissionAlertGate = PresentationGate()
+    /// Only the last `permissions:` line written, so the log does not repeat
+    /// it on every key press. Never read to decide anything: every reading
+    /// that goes into it is queried from the system at that moment.
+    private var permissionLog = PermissionLog()
+    /// Whether this process has a microphone request open, so a trigger can
+    /// say it is waiting instead of joining it in silence. About the request,
+    /// never the permission, which is still read from the system every time.
+    private let microphoneRequest = MicrophoneRequest()
     private let recorder = AudioRecorder(destination: lastRecordingURL())
     private let media = MediaPause()
     private let menu = NSMenu()
@@ -210,7 +219,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// changes from outside, in System Settings, without telling the app.
     /// Asking is cheap and never goes stale.
     private var micAuthorized: Bool {
-        AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+        MicrophoneAccess.current == .authorized
     }
 
     /// Queried from the system every time, same as the microphone.
@@ -276,8 +285,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // After the orb exists, since one of the two hints lives on it.
         refreshHoverHint()
 
-        requestMicrophoneAccess()
-        warnIfAccessibilityMissing()
+        // The microphone answer first, and only then Accessibility. Both
+        // prompts used to start on two consecutive lines, the first without
+        // waiting; Accessibility opens System Settings on top of everything,
+        // and on 2026-10-15 a person installing through an agent saw that one
+        // and never the microphone prompt. `LaunchPermissions` holds the order.
+        logPermissionsIfChanged()
+        Task { @MainActor in
+            await LaunchPermissions.run(
+                microphone: { MicrophoneAccess.current },
+                accessibilityGranted: { HotkeyMonitor.hasAccessibilityPermission },
+                requestMicrophone: { await self.microphoneRequest.ask { await self.askForMicrophone() } },
+                requestAccessibility: { self.warnIfAccessibilityMissing() })
+            if !self.micAuthorized { self.render(.blocked) }
+            self.logPermissionsIfChanged()
+        }
 
         // Load and warm up off the main thread: it is hundreds of MB and a
         // throwaway inference. Blocking here would freeze the menu bar.
@@ -355,10 +377,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func handle(_ event: HotkeyMonitor.Event) -> Bool {
         switch event {
         case .pressed:
+            // Read once for both uses, so the log line and the decision agree.
+            let microphone = MicrophoneAccess.current
+            let accessibility = HotkeyMonitor.hasAccessibilityPermission
+            logPermissionsIfChanged(microphone: microphone, accessibility: accessibility)
             switch DictationAttempt.decide(
-                microphoneAuthorized: micAuthorized,
-                accessibilityAuthorized: HotkeyMonitor.hasAccessibilityPermission,
-                isTranscribing: transcriptionSession.isTranscribing
+                microphone: microphone,
+                accessibilityAuthorized: accessibility,
+                isTranscribing: transcriptionSession.isTranscribing,
+                microphoneRequestPending: microphoneRequest.isPending
             ) {
             case .waitForTranscription:
                 log("transcription in progress: wait for the result before recording again")
@@ -373,9 +400,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self?.showAccessibilityRequiredAlert()
                 }
                 return false
+            case .requestMicrophoneAccess:
+                render(.blocked)
+                log("microphone not answered yet: recording did not start, asking again")
+                // The system prompt is the only place this answer can be given.
+                // Asked after returning, for the same reason as the alert above.
+                Task { @MainActor [weak self] in
+                    self?.askAgainForMicrophone()
+                }
+                return false
+            case .showMicrophoneWaitingAlert:
+                render(.blocked)
+                log("microphone request still open: recording did not start")
+                Task { @MainActor [weak self] in
+                    self?.showMicrophoneWaitingAlert()
+                }
+                return false
             case .showMicrophoneWarning:
                 render(.blocked)
-                log("microphone not authorized — dictation ignored")
+                log("microphone \(microphone.rawValue): recording blocked before capturing audio")
+                Task { @MainActor [weak self] in
+                    self?.showMicrophoneRequiredAlert()
+                }
                 return false
             case .startRecording:
                 break
@@ -814,11 +860,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Permissions
 
-    private func requestMicrophoneAccess() {
-        guard AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined else {
-            if !micAuthorized { render(.blocked) }
-            return
-        }
+    /// Shows the system prompt and returns once it is answered.
+    ///
+    /// Only meaningful while the answer is not determined: denied or restricted,
+    /// macOS returns at once without showing anything. The callers check first.
+    private func askForMicrophone() async {
         // The async API, not the closure one.
         //
         // A closure written inside a `@MainActor` method **inherits** that
@@ -830,9 +876,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         //
         // With `await` there is no closure to inherit isolation, and resumption
         // happens on the main actor by construction.
+        _ = await AVCaptureDevice.requestAccess(for: .audio)
+    }
+
+    /// The trigger and the menu item with the microphone never answered: asks
+    /// again, and when no answer comes within the wait, or a request was
+    /// already open, says so (audit D1). `MicrophoneRequest` holds the rule.
+    private func askAgainForMicrophone() {
         Task { @MainActor in
-            let granted = await AVCaptureDevice.requestAccess(for: .audio)
-            self.render(granted ? .idle : .blocked)
+            await self.microphoneRequest.askAgain(
+                request: { await self.askForMicrophone() },
+                onNoAnswer: { self.showMicrophoneWaitingAlert() })
+            self.render(self.micAuthorized ? .idle : .blocked)
+            self.logPermissionsIfChanged()
+        }
+    }
+
+    /// Writes the `permissions:` line when a reading differs from the last one
+    /// written: at launch, after each prompt is answered, on each trigger and
+    /// each time the menu opens. Those are the moments the app looks; a change
+    /// made in System Settings in between shows up at the next one.
+    private func logPermissionsIfChanged(microphone: MicrophoneAccess = .current,
+                                         accessibility: Bool = HotkeyMonitor.hasAccessibilityPermission) {
+        if let line = permissionLog.lineIfChanged(microphone: microphone, accessibilityGranted: accessibility) {
+            log(line)
         }
     }
 
@@ -853,8 +920,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// the exact repair path instead of letting the user discover the permission
     /// only after reading diagnostics elsewhere.
     private func showAccessibilityRequiredAlert() {
-        guard accessibilityAlertGate.begin() else { return }
-        defer { accessibilityAlertGate.end() }
+        guard permissionAlertGate.begin() else { return }
+        defer { permissionAlertGate.end() }
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
         alert.alertStyle = .warning
@@ -867,6 +934,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// The same alert for the microphone, once macOS will no longer show its
+    /// own prompt (denied or restricted). Before, the trigger only changed the
+    /// icon and wrote a log line, and a person whose prompt never appeared had
+    /// a key that did nothing (2026-10-15).
+    private func showMicrophoneRequiredAlert() {
+        guard permissionAlertGate.begin() else { return }
+        defer { permissionAlertGate.end() }
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "NeverType needs Microphone access"
+        alert.informativeText = "Recording did not start. Enable NeverType in System Settings › Privacy & Security › Microphone, then try again."
+        alert.addButton(withTitle: "Open System Settings")
+        alert.addButton(withTitle: "Not Now")
+        if alert.runModal() == .alertFirstButtonReturn {
+            openMicrophoneSettings()
+        }
+    }
+
+    /// The app's own word when the microphone request it made is still open,
+    /// or did not come back within the wait (audit D1). Before, the trigger
+    /// only changed the icon, and a prompt that never appeared looked like a
+    /// dead key. One button: there is no page to open, because the Microphone
+    /// list may not hold the app yet and has no + button.
+    private func showMicrophoneWaitingAlert() {
+        guard permissionAlertGate.begin() else { return }
+        defer { permissionAlertGate.end() }
+        log("microphone: waiting alert shown")
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "NeverType is waiting for the microphone answer"
+        alert.informativeText = "Recording did not start. The macOS prompt may be behind other windows. If there is none, quit NeverType and open it again: it asks at launch."
+        alert.addButton(withTitle: "OK")
+        _ = alert.runModal()
+    }
+
     // MARK: - Menu
 
     /// Rebuilt from scratch on every opening, from the state of that moment.
@@ -875,9 +979,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// method only turns each line into an `NSMenuItem`.
     private func rebuildMenu() {
         menu.removeAllItems()
+        logPermissionsIfChanged()
         let loginState = loginItemState
         let conditions = MenuLayout.Conditions(
-            microphoneAuthorized: micAuthorized,
+            microphone: MicrophoneAccess.current,
             accessibilityAuthorized: HotkeyMonitor.hasAccessibilityPermission,
             // Read here, in the rebuild, because this is the one moment the
             // contents are decided. Holding Option after the menu is already
@@ -916,6 +1021,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         case .microphoneMissing:
             return disabled("Microphone: missing")
+
+        case .openMicrophoneSettings:
+            return action("Open Microphone Settings…", #selector(openMicrophoneSettings))
+
+        case .askForMicrophone:
+            return action("Ask for Microphone Access…", #selector(askForMicrophoneFromMenu))
 
         case .trigger:
             return disabled("Trigger: \(monitor.trigger.label) (hold and speak)")
@@ -1106,6 +1217,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func openAccessibilitySettings() {
         let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
         NSWorkspace.shared.open(url)
+    }
+
+    @objc private func openMicrophoneSettings() {
+        let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")!
+        NSWorkspace.shared.open(url)
+    }
+
+    /// Never answered, the Microphone page may not list the app, so the item
+    /// asks again instead (audit B2).
+    @objc private func askForMicrophoneFromMenu() {
+        askAgainForMicrophone()
     }
 
     @objc private func toggleLoginItem() {

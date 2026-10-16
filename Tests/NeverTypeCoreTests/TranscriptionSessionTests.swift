@@ -10,7 +10,7 @@ struct TranscriptionSessionTests {
         let started = session.begin()
         let first = try #require(started)
         let decision = DictationAttempt.decide(
-            microphoneAuthorized: true, accessibilityAuthorized: true,
+            microphone: .authorized, accessibilityAuthorized: true,
             isTranscribing: session.isTranscribing)
         #expect(decision == .waitForTranscription)
         #expect(!decision.startsRecording)
@@ -21,7 +21,7 @@ struct TranscriptionSessionTests {
         let finished = session.finish(first)
         #expect(finished)
         #expect(DictationAttempt.decide(
-            microphoneAuthorized: true, accessibilityAuthorized: true,
+            microphone: .authorized, accessibilityAuthorized: true,
             isTranscribing: session.isTranscribing).startsRecording)
     }
 

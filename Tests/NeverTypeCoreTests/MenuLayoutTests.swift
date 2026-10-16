@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import NeverTypeCore
 
@@ -18,7 +19,7 @@ struct MenuLayoutTests {
         .microphoneMissing, .accessibilityMissing, .loginItemTurnedOff,
     ]
 
-    private func conditions(microphone: Bool = true,
+    private func conditions(microphone: MicrophoneAccess = .authorized,
                             accessibility: Bool = true,
                             option: Bool = false,
                             history: Int = 0,
@@ -30,7 +31,7 @@ struct MenuLayoutTests {
                             pillAlwaysVisible: Bool = true,
                             pausesMedia: Bool = true,
                             updateCheck: Bool = false) -> MenuLayout.Conditions {
-        MenuLayout.Conditions(microphoneAuthorized: microphone,
+        MenuLayout.Conditions(microphone: microphone,
                               accessibilityAuthorized: accessibility,
                               showsDiagnostics: option,
                               historyCount: history,
@@ -109,14 +110,18 @@ struct MenuLayoutTests {
         #expect(!rows.contains(.microphoneMissing), "the microphone was granted")
     }
 
-    /// The microphone line comes alone: the prompt for it is the system's, asked
-    /// once at launch, and the app has no settings item to offer for it.
-    @Test("a missing microphone shows its line and no item under it")
-    func microphoneMissing() {
-        let rows = MenuLayout.rows(for: conditions(microphone: false))
+    /// The microphone line comes with its way out, like the Accessibility one.
+    /// It used to come alone, on the idea that macOS asks once at launch; on
+    /// 2026-10-15 a person got the Accessibility prompt and never the
+    /// microphone one, and the menu had nothing to offer.
+    @Test("a denied or restricted microphone shows its line with its settings item under it",
+          arguments: [MicrophoneAccess.denied, .restricted])
+    func microphoneMissing(access: MicrophoneAccess) {
+        let rows = MenuLayout.rows(for: conditions(microphone: access))
 
         #expect(rows == [
             .microphoneMissing,
+            .openMicrophoneSettings,
             .separator,
             .hotkey(trigger: "Right ⌘"),
             .handsFree(enabled: true),
@@ -129,16 +134,195 @@ struct MenuLayoutTests {
         ])
     }
 
-    @Test("with both permissions missing both lines show, Accessibility first")
-    func bothPermissionsMissing() {
-        let rows = MenuLayout.rows(for: conditions(microphone: false, accessibility: false))
+    /// Audit B2: never answered, the app may not be in the Microphone list
+    /// yet, and that page has no + button. The way out is the prompt, so the
+    /// item asks again instead of sending the person to a list with nothing
+    /// to turn on.
+    @Test("a microphone never answered offers to ask again, never the Settings page")
+    func undeterminedMicrophoneAsksAgain() {
+        let rows = MenuLayout.rows(for: conditions(microphone: .notDetermined))
 
         #expect(Array(rows.prefix(4)) == [
+            .microphoneMissing,
+            .askForMicrophone,
+            .separator,
+            .hotkey(trigger: "Right ⌘"),
+        ])
+        #expect(!rows.contains(.openMicrophoneSettings),
+                "the Microphone page may not list the app yet: \(rows)")
+    }
+
+    @Test("a granted microphone takes no line and no item")
+    func microphoneGrantedHasNoItem() {
+        let rows = MenuLayout.rows(for: conditions(microphone: .authorized, accessibility: false))
+
+        #expect(!rows.contains(.microphoneMissing))
+        #expect(!rows.contains(.openMicrophoneSettings))
+        #expect(!rows.contains(.askForMicrophone))
+    }
+
+    @Test("with both permissions missing both lines show, Accessibility first")
+    func bothPermissionsMissing() {
+        let denied = MenuLayout.rows(for: conditions(microphone: .denied, accessibility: false))
+        let unanswered = MenuLayout.rows(for: conditions(microphone: .notDetermined, accessibility: false))
+
+        #expect(Array(denied.prefix(5)) == [
             .accessibilityMissing,
             .openAccessibilitySettings,
             .microphoneMissing,
+            .openMicrophoneSettings,
             .separator,
         ])
+        #expect(Array(unanswered.prefix(5)) == [
+            .accessibilityMissing,
+            .openAccessibilitySettings,
+            .microphoneMissing,
+            .askForMicrophone,
+            .separator,
+        ])
+    }
+
+    /// `Sources/NeverType/` is not importable from here, so the alert and the
+    /// item are held by the text of `main.swift`: the oracle the repository
+    /// uses for the executable target (`.vibeflow/conventions.md`, Team
+    /// Conventions). The behavior itself is checked by hand.
+    ///
+    /// Each call is looked for inside the body that has to make it, never
+    /// anywhere in the file: audit B1 found `showMicrophoneRequiredAlert()`
+    /// matching its own declaration, and the test stayed green with the call
+    /// deleted from the trigger.
+    @Test("the app draws the microphone items and alerts, and opens the Microphone page")
+    func microphoneWiring() throws {
+        let source = try Self.mainSource()
+        #expect(source.components(separatedBy: "\"Open Microphone Settings…\"").count - 1 == 1,
+                "expected the menu item once")
+        #expect(source.components(separatedBy: "\"Ask for Microphone Access…\"").count - 1 == 1,
+                "expected the menu item once")
+        let openItem = try Self.body(of: "case .openMicrophoneSettings:", in: source)
+        #expect(openItem.contains("#selector(openMicrophoneSettings)"))
+        let askItem = try Self.body(of: "case .askForMicrophone:", in: source)
+        #expect(askItem.contains("#selector(askForMicrophoneFromMenu)"))
+        let opener = try Self.body(of: "@objc private func openMicrophoneSettings() {", in: source)
+        #expect(opener.contains("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"))
+
+        // Denied or restricted: the alert that opens the Microphone page.
+        let refused = try Self.body(of: "case .showMicrophoneWarning:", in: source)
+        #expect(refused.contains("self?.showMicrophoneRequiredAlert()"),
+                "the trigger with a refused microphone must reach its alert:\n\(refused)")
+        try Self.expectAlert("private func showMicrophoneRequiredAlert() {", in: source,
+                             title: "\"NeverType needs Microphone access\"",
+                             text: "\"Recording did not start. Enable NeverType in System Settings › Privacy & Security › Microphone, then try again.\"",
+                             buttons: ["\"Open System Settings\"", "\"Not Now\""])
+        #expect(try Self.body(of: "private func showMicrophoneRequiredAlert() {", in: source)
+            .contains("openMicrophoneSettings()"))
+
+        // Launch goes through the Core rule that waits for the microphone
+        // answer, never the two calls side by side.
+        #expect(source.components(separatedBy: "LaunchPermissions.run(").count - 1 == 1)
+        #expect(!source.contains("requestMicrophoneAccess()\n        warnIfAccessibilityMissing()"),
+                "the two prompts back to back are the race this replaced")
+    }
+
+    /// Audit D1: the trigger with a microphone never answered. With a request
+    /// in flight the waiting alert comes at once; with none, the app asks
+    /// again and the same alert comes when the wait ends with no answer.
+    @Test("the trigger with an unanswered microphone reaches the request and the waiting alert")
+    func undeterminedMicrophoneWiring() throws {
+        let source = try Self.mainSource()
+
+        // The launch request is the one a trigger can find in flight.
+        let launch = try Self.body(of: "func applicationDidFinishLaunching(_ notification: Notification) {", in: source)
+        #expect(launch.contains("requestMicrophone: { await self.microphoneRequest.ask { await self.askForMicrophone() } }"),
+                "the launch request must go through the request in flight:\n\(launch)")
+
+        let handle = try Self.body(of: "private func handle(_ event: HotkeyMonitor.Event) -> Bool {", in: source)
+        #expect(handle.contains("microphoneRequestPending: microphoneRequest.isPending"),
+                "the trigger must tell the rule whether a request is in flight")
+
+        let waiting = try Self.body(of: "case .showMicrophoneWaitingAlert:", in: source)
+        #expect(waiting.contains("self?.showMicrophoneWaitingAlert()"),
+                "with a request in flight the trigger must show the alert:\n\(waiting)")
+
+        let asking = try Self.body(of: "case .requestMicrophoneAccess:", in: source)
+        #expect(asking.contains("self?.askAgainForMicrophone()"),
+                "the unanswered trigger must ask again:\n\(asking)")
+        let menuAction = try Self.body(of: "@objc private func askForMicrophoneFromMenu() {", in: source)
+        #expect(menuAction.contains("askAgainForMicrophone()"))
+
+        let again = try Self.body(of: "private func askAgainForMicrophone() {", in: source)
+        #expect(again.contains("await self.microphoneRequest.askAgain("))
+        #expect(again.contains("request: { await self.askForMicrophone() }"))
+        #expect(again.contains("onNoAnswer: { self.showMicrophoneWaitingAlert() }"),
+                "the alert after the wait must be wired:\n\(again)")
+
+        try Self.expectAlert("private func showMicrophoneWaitingAlert() {", in: source,
+                             title: "\"NeverType is waiting for the microphone answer\"",
+                             text: "\"Recording did not start. The macOS prompt may be behind other windows. If there is none, quit NeverType and open it again: it asks at launch.\"",
+                             buttons: ["\"OK\""])
+    }
+
+    /// The `permissions:` line at launch, before the prompts, and the call
+    /// that writes it. Audit S16 removed the first and stayed green.
+    @Test("the permissions line is written at launch, before and after the prompts")
+    func permissionLineWiring() throws {
+        let source = try Self.mainSource()
+        let launch = try Self.body(of: "func applicationDidFinishLaunching(_ notification: Notification) {", in: source)
+        let before = try #require(launch.range(of: "logPermissionsIfChanged()"),
+                                  "no permissions line at launch")
+        let run = try #require(launch.range(of: "LaunchPermissions.run("))
+        #expect(before.upperBound <= run.lowerBound, "the first line has to come before the prompts")
+        #expect(launch[run.upperBound...].contains("self.logPermissionsIfChanged()"),
+                "and another one after them")
+
+        let writer = try Self.body(of: "private func logPermissionsIfChanged(", in: source)
+        #expect(writer.contains("permissionLog.lineIfChanged("))
+        #expect(writer.contains("log(line)"), "the line has to reach the log:\n\(writer)")
+    }
+
+    // MARK: - Reading main.swift
+
+    private static func mainSource() throws -> String {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        return try String(contentsOf: root.appendingPathComponent("Sources/NeverType/main.swift"),
+                          encoding: .utf8)
+    }
+
+    /// The lines after `marker`, up to the first one indented no deeper than
+    /// the marker's own line: the body of a function or of a `case`. The marker
+    /// has to be unique, or the body found could be the wrong one.
+    private static func body(of marker: String, in source: String) throws -> String {
+        let lines = source.components(separatedBy: "\n")
+        let hits = lines.indices.filter { lines[$0].contains(marker) }
+        try #require(hits.count == 1, "expected \"\(marker)\" once in main.swift, found \(hits.count)")
+        let start = hits[0]
+        let indent = lines[start].prefix { $0 == " " }.count
+        var body: [String] = []
+        for line in lines[(start + 1)...] {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if !trimmed.isEmpty && line.prefix(while: { $0 == " " }).count <= indent { break }
+            body.append(line)
+        }
+        return body.joined(separator: "\n")
+    }
+
+    /// A permission alert: behind the shared gate, with its title, text and
+    /// buttons, shown modally, and with no way out before it is shown (audit
+    /// S17 put a `return` ahead of it and stayed green).
+    private static func expectAlert(_ marker: String, in source: String,
+                                    title: String, text: String, buttons: [String]) throws {
+        let alert = try body(of: marker, in: source)
+        let lines = alert.components(separatedBy: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
+        #expect(lines.first == "guard permissionAlertGate.begin() else { return }",
+                "\(marker): the shared gate has to come first, so two alerts never stack")
+        #expect(lines.contains("defer { permissionAlertGate.end() }"))
+        #expect(lines.contains("alert.messageText = \(title)"), "\(marker): title")
+        #expect(lines.contains("alert.informativeText = \(text)"), "\(marker): text")
+        let added = lines.filter { $0.hasPrefix("alert.addButton(withTitle: ") }
+        #expect(added == buttons.map { "alert.addButton(withTitle: \($0))" }, "\(marker): buttons \(added)")
+        #expect(alert.contains("alert.runModal()"), "\(marker): the alert is never shown")
+        let exits = lines.dropFirst().filter { $0 == "return" || $0.hasPrefix("return ") || $0.contains("{ return }") }
+        #expect(exits.isEmpty, "\(marker): a way out before the alert shows: \(exits)")
     }
 
     /// A missing permission is the only thing that puts unclickable text in the
@@ -313,7 +497,7 @@ struct MenuLayoutTests {
         let states = [
             conditions(),
             conditions(history: 30),
-            conditions(microphone: false, accessibility: false, option: true, history: 30,
+            conditions(microphone: .denied, accessibility: false, option: true, history: 30,
                        startsAtLogin: true, needsApproval: true),
             conditions(updateCheck: true),
         ]

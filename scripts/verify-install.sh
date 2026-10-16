@@ -6,14 +6,21 @@
 # before recording and opens an alert with the repair path; the slashed icon,
 # menu and log repeat the same diagnosis.
 #
-# This script does NOT verify permissions, and says so out loud at the end. It
-# is not an implementation limitation: what matters is not TCC saying it
-# granted, but dictation inserting text. Only dictating proves that.
+# Permissions are not checked from the outside: TCC belongs to the system. What
+# the script does is read the last `permissions:` line the app wrote to its log,
+# and say exactly which one is missing. That is a warning and never a failure:
+# `update.sh` runs this script, and a permission still being granted is not a
+# broken installation. What matters is still dictation inserting text, and the
+# end of the script says so out loud.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP="/Applications/NeverType.app"
 MODEL="$HOME/Library/Application Support/NeverType/models/ggml-large-v3-turbo-q5_0.bin"
+# Truncated at every launch, and the app writes a `permissions:` line at launch
+# and whenever a reading changes (`PermissionLog` in NeverTypeCore holds the
+# format).
+APP_LOG="$HOME/Library/Application Support/NeverType/nevertype.log"
 
 # The ggml magic is 0x67676d6c written as a little-endian uint32, so in the file
 # it comes out reversed: 6c6d6767, which read as text becomes "lmgg". Comparing
@@ -131,6 +138,55 @@ else
   fi
 fi
 
+# --- permissions, as the app last read them -----------------------------------
+
+# Before the count of problems, so it shows even when something else failed,
+# and with `warn` only: the exit code stays the structure's.
+#
+# Added on 2026-10-15: a person installed through an agent, macOS showed the
+# Accessibility prompt and never the microphone one, and the trigger did nothing.
+# Nothing the agent could read said which permission was missing.
+info "Permissions (as NeverType last read them)"
+permissions_line=""
+if [ -f "$APP_LOG" ]; then
+  permissions_line="$(grep -E '^nevertype: permissions: ' "$APP_LOG" | tail -n 1 || true)"
+fi
+if [ -z "$permissions_line" ]; then
+  warn "no permissions line in $APP_LOG.
+      The app writes one at launch. Open NeverType (or quit and reopen it) and
+      run this script again."
+else
+  mic_state="$(printf '%s\n' "$permissions_line" | sed -nE 's/.* microphone=([A-Za-z]+).*/\1/p')"
+  ax_state="$(printf '%s\n' "$permissions_line" | sed -nE 's/.* accessibility=([A-Za-z]+).*/\1/p')"
+  case "$mic_state" in
+    authorized)
+      ok "microphone: authorized" ;;
+    notDetermined)
+      warn "microphone: never answered. The macOS prompt did not appear, or nobody clicked it.
+      Quit NeverType and open it again: it asks for the microphone at launch.
+      System Settings may not list NeverType under Microphone until it is answered." ;;
+    denied)
+      warn "microphone: denied. macOS will not ask again.
+      Open System Settings › Privacy & Security › Microphone and turn on NeverType." ;;
+    restricted)
+      warn "microphone: restricted. A configuration profile or Screen Time blocks it,
+      and the switch in System Settings is not the person's to turn on. Ask whoever
+      manages this Mac." ;;
+    *)
+      warn "microphone: unreadable in the log line: $permissions_line" ;;
+  esac
+  case "$ax_state" in
+    granted)
+      ok "accessibility: granted" ;;
+    missing)
+      warn "accessibility: missing. Without it the text cannot be inserted.
+      Open System Settings › Privacy & Security › Accessibility and turn on
+      NeverType. If it is not in the list, click + and choose $APP." ;;
+    *)
+      warn "accessibility: unreadable in the log line: $permissions_line" ;;
+  esac
+fi
+
 # --- what this script does not know -------------------------------------------
 
 echo
@@ -140,10 +196,13 @@ fi
 
 info "The part only you can verify"
 cat <<'MSG'
-  Microphone and Accessibility were NOT verified here, and cannot be verified
-  from the outside. Without Accessibility, a trigger is blocked before recording
-  and an alert offers to open the right System Settings page. The menu also says
-  "Accessibility: missing" and offers "Open Accessibility Settings…".
+  The permissions above are what NeverType last read, not proof that dictation
+  works. With either one missing, a trigger is blocked before recording and an
+  alert says why. Accessibility missing, or the microphone denied or
+  restricted: the alert offers to open the right System Settings page. The
+  microphone never answered: the app asks again, and if no answer comes the
+  alert says to quit NeverType and open it again. The menu also says "Accessibility: missing" or "Microphone:
+  missing", each with its item under it.
 
   Prove it by dictating:
 

@@ -6,19 +6,39 @@
 /// event while Accessibility is off; what fails later is the synthetic paste.
 public enum DictationAttempt: Equatable, Sendable {
     case startRecording
+    /// Nobody answered the microphone prompt yet, so the trigger shows it
+    /// again. On 2026-10-15 it never appeared at launch for one person, and
+    /// the trigger stayed silent with nothing saying why.
+    case requestMicrophoneAccess
+    /// Denied or restricted: macOS will not show the prompt again, so the way
+    /// out is the warning that opens the Microphone page in System Settings.
     case showMicrophoneWarning
+    /// A microphone request is already in flight, at launch or from an
+    /// earlier trigger. Asking again joins it and shows nothing, so the app
+    /// says it is waiting (audit D1, 2026-10-15).
+    case showMicrophoneWaitingAlert
     case showAccessibilityWarning
     case waitForTranscription
 
     public static func decide(
-        microphoneAuthorized: Bool,
+        microphone: MicrophoneAccess,
         accessibilityAuthorized: Bool,
-        isTranscribing: Bool = false
+        isTranscribing: Bool = false,
+        microphoneRequestPending: Bool = false
     ) -> Self {
         guard !isTranscribing else { return .waitForTranscription }
+        // Ahead of Accessibility, as at launch: its alert opens System Settings
+        // on top of everything, and with the microphone prompt still up that
+        // rebuilt, from the trigger, the race the launch order removed.
+        if microphone == .notDetermined && microphoneRequestPending {
+            return .showMicrophoneWaitingAlert
+        }
         guard accessibilityAuthorized else { return .showAccessibilityWarning }
-        guard microphoneAuthorized else { return .showMicrophoneWarning }
-        return .startRecording
+        switch microphone {
+        case .authorized: return .startRecording
+        case .notDetermined: return .requestMicrophoneAccess
+        case .denied, .restricted: return .showMicrophoneWarning
+        }
     }
 
     public var startsRecording: Bool { self == .startRecording }
