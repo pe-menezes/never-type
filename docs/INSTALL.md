@@ -188,7 +188,8 @@ This is the easiest one to miss, and the most likely failure mode of a fresh
 installation. Without it the app cannot insert text. If the person tries to
 dictate anyway, recording is blocked before audio is captured and an alert
 offers to open the right System Settings page. The slashed icon, the menu line
-"Accessibility: missing" and `nevertype.log` carry the same diagnosis.
+"Accessibility: missing" and `nevertype.log` carry the same diagnosis, and the
+slash goes away by itself about a second after Accessibility is turned on.
 
 > Open **System Settings › Privacy & Security › Accessibility** and **turn on
 > NeverType** in the list. If it is not there, click the **+** and choose

@@ -279,6 +279,75 @@ struct MenuLayoutTests {
         #expect(writer.contains("log(line)"), "the line has to reach the log:\n\(writer)")
     }
 
+    /// The icon slashed with both permissions granted, until the first trigger
+    /// (2026-10-16 08:28). The app now re-reads the two permissions while one
+    /// is missing, and each change writes the `permissions:` line and redraws
+    /// by the Core rule, which keeps the model's slash (`StatusIcon`). The
+    /// watch stops itself in Core; what is held here is that the app starts
+    /// it, reads the system with it, and redraws from what it reads.
+    @Test("the app re-reads the permissions while one is missing, and redraws by the Core rule")
+    func permissionWatchWiring() throws {
+        let source = try Self.mainSource()
+
+        let property = try Self.body(of: "private lazy var permissionWatch = PermissionWatch(", in: source)
+        #expect(property.contains("read: { PermissionReading.current }"),
+                "the watch has to read the system:\n\(property)")
+        #expect(property.contains("onChange: { [weak self] reading in self?.permissionsChanged(reading) }"),
+                "a change has to reach the app:\n\(property)")
+        #expect(!property.contains("interval:"),
+                "the app re-reads every second, the default:\n\(property)")
+
+        let changed = try Self.body(of: "private func permissionsChanged(_ reading: PermissionReading) {", in: source)
+        #expect(changed.contains("logPermissionsIfChanged(microphone: reading.microphone, accessibility: reading.accessibilityGranted)"),
+                "a change has to write the permissions line:\n\(changed)")
+        #expect(changed.contains("renderResting(reading)"), "a change has to redraw the icon:\n\(changed)")
+
+        let resting = try Self.body(of: "private func renderResting(", in: source)
+        #expect(resting.contains("StatusIcon.resting(permissions: permissions, model: modelState)"),
+                "the resting icon is the Core rule's:\n\(resting)")
+        #expect(resting.contains("render("))
+
+        let launch = try Self.body(of: "func applicationDidFinishLaunching(_ notification: Notification) {", in: source)
+        let run = try #require(launch.range(of: "LaunchPermissions.run("))
+        let afterPrompts = launch[run.upperBound...]
+        #expect(afterPrompts.contains("self.permissionWatch.start()"),
+                "the watch has to start after the launch prompts:\n\(launch)")
+        #expect(afterPrompts.contains("self.renderResting()"))
+        #expect(!launch.contains("if !self.micAuthorized { self.render(.blocked) }"),
+                "the launch redraw went back to looking at the microphone alone")
+        for state in ["self.modelState = .ready", "self.modelState = .noMetal", "self.modelState = .notLoaded"] {
+            #expect(launch.contains(state), "the model load has to record \(state)")
+        }
+
+        let handle = try Self.body(of: "private func handle(_ event: HotkeyMonitor.Event) -> Bool {", in: source)
+        #expect(handle.contains("permissionWatch.start()"),
+                "a trigger that finds a permission missing has to watch again:\n\(handle)")
+
+        // Audit L6 of part 1: the normal icon drawn over a model failure.
+        let again = try Self.body(of: "private func askAgainForMicrophone() {", in: source)
+        #expect(again.contains("self.renderResting()"), "asking again redraws by the rule:\n\(again)")
+        #expect(again.contains("self.permissionWatch.start()"))
+        #expect(!again.contains("micAuthorized ? .idle"), "asking again draws the normal icon over the model")
+    }
+
+    /// Audit N2 of part 1: a call commented out counted as the call, and the
+    /// sabotage S14c survived.
+    @Test("a commented-out line counts neither as the call nor as the marker")
+    func bodyIgnoresComments() throws {
+        let source = """
+        // func wired() {
+        func wired() {
+            // self?.showAlert()
+            /// self?.showAlert()
+                // self?.showAlert()
+            other()
+        }
+        """
+        let body = try Self.body(of: "func wired() {", in: source)
+        #expect(!body.contains("showAlert()"), "a commented call counted:\n\(body)")
+        #expect(body.contains("other()"))
+    }
+
     // MARK: - Reading main.swift
 
     private static func mainSource() throws -> String {
@@ -291,8 +360,13 @@ struct MenuLayoutTests {
     /// The lines after `marker`, up to the first one indented no deeper than
     /// the marker's own line: the body of a function or of a `case`. The marker
     /// has to be unique, or the body found could be the wrong one.
+    ///
+    /// Lines that are only a comment are dropped first, the marker's own
+    /// included: a call commented out is not the call (audit N2 of part 1,
+    /// where `// self?.showMicrophoneRequiredAlert()` kept the test green).
     private static func body(of marker: String, in source: String) throws -> String {
         let lines = source.components(separatedBy: "\n")
+            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
         let hits = lines.indices.filter { lines[$0].contains(marker) }
         try #require(hits.count == 1, "expected \"\(marker)\" once in main.swift, found \(hits.count)")
         let start = hits[0]

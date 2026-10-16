@@ -166,6 +166,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// say it is waiting instead of joining it in silence. About the request,
     /// never the permission, which is still read from the system every time.
     private let microphoneRequest = MicrophoneRequest()
+    /// Re-reads both permissions while one is missing. macOS says nothing when
+    /// one is turned on in System Settings, and on 2026-10-16 the icon stayed
+    /// slashed with both granted until the first trigger. Stops by itself
+    /// once both are granted (`PermissionWatch`).
+    private lazy var permissionWatch = PermissionWatch(
+        read: { PermissionReading.current },
+        onChange: { [weak self] reading in self?.permissionsChanged(reading) })
+    /// How the model load ended. App state, not system state: nothing outside
+    /// the process changes it, and the resting icon needs it so a permission
+    /// granted never hides a model that failed (audit L6 of part 1).
+    private var modelState = ModelState.loading
     private let recorder = AudioRecorder(destination: lastRecordingURL())
     private let media = MediaPause()
     private let menu = NSMenu()
@@ -297,8 +308,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 accessibilityGranted: { HotkeyMonitor.hasAccessibilityPermission },
                 requestMicrophone: { await self.microphoneRequest.ask { await self.askForMicrophone() } },
                 requestAccessibility: { self.warnIfAccessibilityMissing() })
-            if !self.micAuthorized { self.render(.blocked) }
+            self.renderResting()
             self.logPermissionsIfChanged()
+            // After the prompts, so the watch never stands in for them: the
+            // Accessibility prompt returns at once and the person is still in
+            // System Settings when this runs.
+            self.permissionWatch.start()
         }
 
         // Load and warm up off the main thread: it is hundreds of MB and a
@@ -315,9 +330,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.log("ggml devices: \(await self.transcription.deviceList())")
                 if await !self.transcription.isMetalActive() {
                     self.log("WARNING: without Metal, transcription runs on the CPU and is ~11x slower.")
+                    self.modelState = .noMetal
                     self.render(.blocked)
+                } else {
+                    self.modelState = .ready
                 }
             } else {
+                self.modelState = .notLoaded
                 self.render(.blocked)
             }
         }
@@ -381,6 +400,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let microphone = MicrophoneAccess.current
             let accessibility = HotkeyMonitor.hasAccessibilityPermission
             logPermissionsIfChanged(microphone: microphone, accessibility: accessibility)
+            // A permission taken away after the watch stopped: watch again, so
+            // the slash this trigger draws goes away once it is back.
+            permissionWatch.start()
             switch DictationAttempt.decide(
                 microphone: microphone,
                 accessibilityAuthorized: accessibility,
@@ -887,15 +909,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             await self.microphoneRequest.askAgain(
                 request: { await self.askForMicrophone() },
                 onNoAnswer: { self.showMicrophoneWaitingAlert() })
-            self.render(self.micAuthorized ? .idle : .blocked)
+            // By the rule, never the microphone alone: the normal icon used to
+            // be drawn here over a model that failed to load (audit L6).
+            self.renderResting()
             self.logPermissionsIfChanged()
+            self.permissionWatch.start()
         }
+    }
+
+    /// A reading from the watch that differs from the one before: the line in
+    /// the log, and the icon redrawn. Not while dictating, where the icon says
+    /// recording and the end of the dictation redraws it.
+    private func permissionsChanged(_ reading: PermissionReading) {
+        logPermissionsIfChanged(microphone: reading.microphone, accessibility: reading.accessibilityGranted)
+        guard !recorder.isRecording, !transcriptionSession.isTranscribing else { return }
+        renderResting(reading)
+    }
+
+    /// The icon at rest, by `StatusIcon`: slashed while a permission is
+    /// missing, the model failed to load or there is no Metal.
+    private func renderResting(_ permissions: PermissionReading = .current) {
+        render(StatusIcon.resting(permissions: permissions, model: modelState) == .normal ? .idle : .blocked)
     }
 
     /// Writes the `permissions:` line when a reading differs from the last one
     /// written: at launch, after each prompt is answered, on each trigger and
-    /// each time the menu opens. Those are the moments the app looks; a change
-    /// made in System Settings in between shows up at the next one.
+    /// each time the menu opens, and every second while a permission is
+    /// missing (`permissionWatch`), so a switch turned on in System Settings
+    /// shows up about a second later.
     private func logPermissionsIfChanged(microphone: MicrophoneAccess = .current,
                                          accessibility: Bool = HotkeyMonitor.hasAccessibilityPermission) {
         if let line = permissionLog.lineIfChanged(microphone: microphone, accessibilityGranted: accessibility) {
