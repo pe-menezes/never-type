@@ -496,7 +496,7 @@ the two permissions.
 | `scripts/bench.sh` | measures latency and quality per model |
 | `scripts/build-app.sh` | compiles static whisper, assembles and signs |
 | `scripts/install.sh` | installs into `/Applications` |
-| `scripts/verify-install.sh` | checks app, signature, process and model by bytes |
+| `scripts/verify-install.sh` | checks app, signature, process and model by bytes; warns about permissions from the app log |
 | `scripts/update.sh` | fetches the remote, rebuilds, reinstalls and verifies |
 | [`INSTALL.md`](INSTALL.md) | installation guide written for a coding agent to execute |
 | [`pitfalls.md`](pitfalls.md) | what broke, and why |

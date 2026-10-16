@@ -100,6 +100,7 @@ public enum MenuLayout {
         case accessibilityMissing
         case openAccessibilitySettings
         case microphoneMissing
+        case openMicrophoneSettings
         case trigger
         case gestureHint
         /// Carries the chosen key, because the title is where the gesture is
@@ -151,10 +152,13 @@ public enum MenuLayout {
             rows.append(.accessibilityMissing)
             rows.append(.openAccessibilitySettings)
         }
-        // No way out under this one: the microphone prompt is the system's, it
-        // is asked for once at launch, and the app has no settings item for it.
+        // With its way out under it, like Accessibility. It used to come alone,
+        // on the idea that macOS asks once at launch and that settles it; on
+        // 2026-10-15 a person never saw that prompt and the menu offered
+        // nothing.
         if !conditions.microphoneAuthorized {
             rows.append(.microphoneMissing)
+            rows.append(.openMicrophoneSettings)
         }
         if !rows.isEmpty { rows.append(.separator) }
 

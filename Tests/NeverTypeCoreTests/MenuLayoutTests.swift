@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import NeverTypeCore
 
@@ -109,14 +110,17 @@ struct MenuLayoutTests {
         #expect(!rows.contains(.microphoneMissing), "the microphone was granted")
     }
 
-    /// The microphone line comes alone: the prompt for it is the system's, asked
-    /// once at launch, and the app has no settings item to offer for it.
-    @Test("a missing microphone shows its line and no item under it")
+    /// The microphone line comes with its way out, like the Accessibility one.
+    /// It used to come alone, on the idea that macOS asks once at launch; on
+    /// 2026-10-15 a person got the Accessibility prompt and never the
+    /// microphone one, and the menu had nothing to offer.
+    @Test("a missing microphone shows its line with its settings item under it")
     func microphoneMissing() {
         let rows = MenuLayout.rows(for: conditions(microphone: false))
 
         #expect(rows == [
             .microphoneMissing,
+            .openMicrophoneSettings,
             .separator,
             .hotkey(trigger: "Right ⌘"),
             .handsFree(enabled: true),
@@ -129,16 +133,52 @@ struct MenuLayoutTests {
         ])
     }
 
+    @Test("a granted microphone takes no line and no settings item")
+    func microphoneGrantedHasNoItem() {
+        let rows = MenuLayout.rows(for: conditions(microphone: true, accessibility: false))
+
+        #expect(!rows.contains(.microphoneMissing))
+        #expect(!rows.contains(.openMicrophoneSettings))
+    }
+
     @Test("with both permissions missing both lines show, Accessibility first")
     func bothPermissionsMissing() {
         let rows = MenuLayout.rows(for: conditions(microphone: false, accessibility: false))
 
-        #expect(Array(rows.prefix(4)) == [
+        #expect(Array(rows.prefix(5)) == [
             .accessibilityMissing,
             .openAccessibilitySettings,
             .microphoneMissing,
+            .openMicrophoneSettings,
             .separator,
         ])
+    }
+
+    /// `Sources/NeverType/` is not importable from here, so the alert and the
+    /// item are held by the text of `main.swift`: the oracle the repository
+    /// uses for the executable target (`.vibeflow/conventions.md`, Team
+    /// Conventions). The behavior itself is checked by hand.
+    @Test("the app draws the microphone item, its alert, and opens the Microphone page")
+    func microphoneWiring() throws {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let source = try String(contentsOf: root.appendingPathComponent("Sources/NeverType/main.swift"),
+                                encoding: .utf8)
+        #expect(source.components(separatedBy: "\"Open Microphone Settings…\"").count - 1 == 1,
+                "expected the menu item once")
+        #expect(source.contains("case .openMicrophoneSettings:"))
+        #expect(source.contains("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"))
+        #expect(source.contains("\"NeverType needs Microphone access\""))
+        #expect(source.contains("Recording did not start. Enable NeverType in System Settings › Privacy & Security › Microphone"))
+        // The trigger's two microphone answers each reach their own path.
+        #expect(source.contains("case .requestMicrophoneAccess:"))
+        #expect(source.contains("showMicrophoneRequiredAlert()"))
+        // Launch goes through the Core rule that waits for the microphone
+        // answer, never the two calls side by side.
+        #expect(source.components(separatedBy: "LaunchPermissions.run(").count - 1 == 1)
+        #expect(!source.contains("requestMicrophoneAccess()\n        warnIfAccessibilityMissing()"),
+                "the two prompts back to back are the race this replaced")
+        #expect(source.contains("PermissionLog"), "the permissions line comes from the Core rule")
     }
 
     /// A missing permission is the only thing that puts unclickable text in the

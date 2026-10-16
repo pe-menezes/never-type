@@ -6,19 +6,28 @@
 /// event while Accessibility is off; what fails later is the synthetic paste.
 public enum DictationAttempt: Equatable, Sendable {
     case startRecording
+    /// Nobody answered the microphone prompt yet, so the trigger shows it
+    /// again. On 2026-10-15 it never appeared at launch for one person, and
+    /// the trigger stayed silent with nothing saying why.
+    case requestMicrophoneAccess
+    /// Denied or restricted: macOS will not show the prompt again, so the way
+    /// out is the warning that opens the Microphone page in System Settings.
     case showMicrophoneWarning
     case showAccessibilityWarning
     case waitForTranscription
 
     public static func decide(
-        microphoneAuthorized: Bool,
+        microphone: MicrophoneAccess,
         accessibilityAuthorized: Bool,
         isTranscribing: Bool = false
     ) -> Self {
         guard !isTranscribing else { return .waitForTranscription }
         guard accessibilityAuthorized else { return .showAccessibilityWarning }
-        guard microphoneAuthorized else { return .showMicrophoneWarning }
-        return .startRecording
+        switch microphone {
+        case .authorized: return .startRecording
+        case .notDetermined: return .requestMicrophoneAccess
+        case .denied, .restricted: return .showMicrophoneWarning
+        }
     }
 
     public var startsRecording: Bool { self == .startRecording }

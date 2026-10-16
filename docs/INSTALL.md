@@ -155,12 +155,23 @@ If you opened the app before installing or replacing the model, quit it from
 the menu and reopen it. The model loads only at launch. Running `install.sh`
 also quits the previous instance and opens the new one.
 
-The app requests two permissions when it opens. **Both require your interaction.**
+The app requests two permissions when it opens, one at a time: the microphone
+first, and Accessibility only after the microphone prompt is answered. **Both
+require your interaction.**
 
 ### Microphone: STOP AND ASK
 
 > macOS is going to ask whether NeverType may use the microphone. Click
 > **Allow**. Without it there is no audio.
+>
+> If no prompt appears within about 10 seconds, open **System Settings ›
+> Privacy & Security › Microphone** and **turn on NeverType** in the list.
+
+Do not move on to Accessibility until the person confirms one of the two. If
+the microphone is still missing later, holding the key asks again while macOS
+has no answer, and once it was denied an alert offers to open the Microphone
+page. The menu line "Microphone: missing" comes with **Open Microphone
+Settings…** under it.
 
 ### Accessibility: STOP AND ASK
 
@@ -191,8 +202,10 @@ bash scripts/verify-install.sh
 It checks the installed app, the signature, a live process and a model valid by
 bytes. It exits with a non-zero code and lists everything that is wrong at once.
 
-**It does not verify permissions, and they cannot be verified from the outside.**
-The only proof is the dictation inserting text.
+It also reads the last `permissions:` line the app wrote to `nevertype.log` and
+says which permission is missing and where to turn it on. That part is a
+warning, and it never changes the exit code. It is what the app last read, so
+the only proof is still the dictation inserting text.
 
 ### The test that closes the installation: STOP AND ASK
 

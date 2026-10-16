@@ -150,12 +150,23 @@ Se você abriu o app antes de instalar ou substituir o modelo, encerre-o pelo
 menu e abra novamente. O modelo é carregado apenas na inicialização. Executar
 `install.sh` também encerra a instância anterior e abre a nova.
 
-O app pede duas permissões ao abrir. **As duas exigem sua interação.**
+O app pede duas permissões ao abrir, uma de cada vez: primeiro o microfone, e a
+Acessibilidade só depois que o pedido do microfone for respondido. **As duas
+exigem sua interação.**
 
 ### Microfone: PARE E PEÇA
 
 > O macOS vai perguntar se o NeverType pode usar o microfone. Clique em
 > **Permitir**. Sem isso não há áudio.
+>
+> Se o pedido não aparecer em uns 10 segundos, abra **Ajustes do Sistema ›
+> Privacidade e Segurança › Microfone** e **ligue o NeverType** na lista.
+
+Não passe para a Acessibilidade sem que a pessoa confirme uma das duas coisas.
+Se o microfone ainda faltar depois, segurar a tecla pede de novo enquanto o
+macOS não tiver resposta, e depois de uma recusa um aviso oferece abrir a
+página do Microfone. A linha "Microphone: missing" no menu vem com **Open
+Microphone Settings…** embaixo.
 
 ### Acessibilidade: PARE E PEÇA
 
@@ -187,8 +198,10 @@ bash scripts/verify-install.sh
 Confere app instalado, assinatura, processo vivo e modelo válido por bytes. Sai
 com código diferente de zero e lista tudo que está errado de uma vez.
 
-**Ele não verifica permissão, e não dá para verificar de fora.** O que interessa
-não é o sistema dizer que concedeu, é o ditado inserir texto.
+Também lê a última linha `permissions:` que o app escreveu no `nevertype.log` e
+diz qual permissão falta e onde ligá-la. Essa parte é aviso, e nunca muda o
+código de saída. É o que o app leu por último, então a prova continua sendo o
+ditado inserir texto.
 
 ### O teste que fecha a instalação: PARE E PEÇA
 
