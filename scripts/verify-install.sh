@@ -201,8 +201,9 @@ cat <<'MSG'
   alert says why. Accessibility missing, or the microphone denied or
   restricted: the alert offers to open the right System Settings page. The
   microphone never answered: the app asks again, and if no answer comes the
-  alert says to quit NeverType and open it again. The menu also says "Accessibility: missing" or "Microphone:
-  missing", each with its item under it.
+  alert says to quit NeverType and open it again. The menu also says
+  "Accessibility: missing" or "Microphone: missing", each with its item under
+  it.
 
   Prove it by dictating:
 

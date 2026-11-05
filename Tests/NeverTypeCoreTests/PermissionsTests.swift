@@ -119,6 +119,9 @@ struct PermissionsTests {
         var waits = 0
         var answer: CheckedContinuation<Void, Never>?
         var waitOver: CheckedContinuation<Void, Never>?
+        /// What the system says when asked. Stands in for
+        /// `MicrophoneAccess.current`; a test changes it to answer.
+        var microphone = MicrophoneAccess.notDetermined
         /// Set when `askAgain` returns, so a test waits for it by turns and
         /// a regression fails instead of hanging (audit L4).
         var returned = false
@@ -186,6 +189,7 @@ struct PermissionsTests {
             await request.askAgain(
                 request: { await prompt.request() },
                 wait: { prompt.waits += 1 },
+                microphone: { prompt.microphone },
                 onNoAnswer: { prompt.alerts += 1 })
             prompt.returned = true
         }
@@ -200,7 +204,9 @@ struct PermissionsTests {
     }
 
     /// The second path of D1: the prompt that never appears. The request stays
-    /// open, the wait ends, and the alert comes once.
+    /// open, the wait ends, and the alert comes once. The request then comes
+    /// back with the microphone still unanswered, which alone would alert
+    /// (audit N3 of part 1); the person was already told, so nothing is added.
     @Test("a request with no answer when the wait ends shows the alert, once",
           .timeLimit(.minutes(1)))
     @MainActor
@@ -211,6 +217,7 @@ struct PermissionsTests {
             await request.askAgain(
                 request: { await prompt.request() },
                 wait: { await prompt.wait() },
+                microphone: { prompt.microphone },
                 onNoAnswer: { prompt.alerts += 1 })
             prompt.returned = true
         }
@@ -232,16 +239,19 @@ struct PermissionsTests {
     }
 
     /// An answer inside the wait is the normal case and shows nothing, even
-    /// when the wait ends afterwards.
-    @Test("an answer before the wait ends shows no alert", .timeLimit(.minutes(1)))
+    /// when the wait ends afterwards. The reading starts unanswered and changes
+    /// only with the answer, so a reading taken before the request alerts here.
+    @Test("an answer before the wait ends shows no alert", .timeLimit(.minutes(1)),
+          arguments: [MicrophoneAccess.authorized, .denied, .restricted])
     @MainActor
-    func answerWithinTheWaitIsSilent() async throws {
+    func answerWithinTheWaitIsSilent(answer: MicrophoneAccess) async throws {
         let request = MicrophoneRequest()
         let prompt = Prompt()
         Task { @MainActor in
             await request.askAgain(
                 request: { await prompt.request() },
                 wait: { await prompt.wait() },
+                microphone: { prompt.microphone },
                 onNoAnswer: { prompt.alerts += 1 })
             prompt.returned = true
         }
@@ -249,6 +259,7 @@ struct PermissionsTests {
         try #require(prompt.answer != nil)
         try #require(prompt.waitOver != nil, "the wait never started, so the test proves nothing")
 
+        prompt.microphone = answer
         prompt.answer?.resume()
         await turns { prompt.returned }
         #expect(prompt.returned, "the answer has to end the request, without waiting out the wait")
@@ -256,7 +267,68 @@ struct PermissionsTests {
 
         prompt.waitOver?.resume()
         for _ in 0..<100 { await Task.yield() }
-        #expect(prompt.alerts == 0, "answered in time and still alerted")
+        #expect(prompt.alerts == 0, "answered \(answer) in time and still alerted")
+    }
+
+    /// Audit N3 of part 1: the request comes back and macOS still has no
+    /// answer. Treating "it came back" as "it was answered" left each trigger
+    /// with the slashed icon and a log line, the case this front started from.
+    /// The alert comes when the request returns, with the wait still open.
+    @Test("a request that comes back still unanswered shows the alert at once, once",
+          .timeLimit(.minutes(1)))
+    @MainActor
+    func comingBackUnansweredAlertsAtOnce() async throws {
+        let request = MicrophoneRequest()
+        let prompt = Prompt()
+        Task { @MainActor in
+            await request.askAgain(
+                request: { await prompt.request() },
+                wait: { await prompt.wait() },
+                microphone: { prompt.microphone },
+                onNoAnswer: { prompt.alerts += 1 })
+            prompt.returned = true
+        }
+        await turns { prompt.answer != nil && prompt.waitOver != nil }
+        try #require(prompt.answer != nil)
+        try #require(prompt.waitOver != nil, "the wait never started, so the test proves nothing")
+        #expect(prompt.alerts == 0, "no alert while the request is open and the wait is running")
+
+        prompt.answer?.resume()
+        await turns { prompt.returned }
+        #expect(prompt.returned)
+        #expect(prompt.alerts == 1, "came back unanswered, expected the alert at once: \(prompt.alerts)")
+        #expect(!request.isPending)
+
+        prompt.waitOver?.resume()
+        for _ in 0..<100 { await Task.yield() }
+        #expect(prompt.alerts == 1, "the wait ending afterwards adds no second alert: \(prompt.alerts)")
+    }
+
+    /// The same with a request that returns without suspending, as a prompt
+    /// that never shows would: the wait has not even started when it comes back.
+    @Test("a request that returns at once, unanswered, shows the alert once",
+          .timeLimit(.minutes(1)))
+    @MainActor
+    func returningAtOnceUnansweredAlerts() async {
+        let request = MicrophoneRequest()
+        let prompt = Prompt()
+        Task { @MainActor in
+            await request.askAgain(
+                request: { prompt.asked += 1 },
+                wait: { await prompt.wait() },
+                microphone: { prompt.microphone },
+                onNoAnswer: { prompt.alerts += 1 })
+            prompt.returned = true
+        }
+        await turns { prompt.returned }
+        #expect(prompt.returned)
+        #expect(prompt.asked == 1)
+        #expect(prompt.alerts == 1, "came back unanswered, expected the alert: \(prompt.alerts)")
+
+        await turns { prompt.waitOver != nil }
+        prompt.waitOver?.resume()
+        for _ in 0..<100 { await Task.yield() }
+        #expect(prompt.alerts == 1, "the wait ending afterwards adds no second alert: \(prompt.alerts)")
     }
 
     // MARK: - The log line

@@ -349,6 +349,41 @@ two instances.
 With two global key monitors, one dictation becomes two recordings, two
 transcriptions and two ⌘V. `flock` solves it in one indivisible step.
 
+### `.timeLimit` does not end a test stuck on a continuation nobody resumes
+
+The audit of 2026-10-15 reintroduced a bug on purpose: the launch rule asking
+again for a microphone already answered. The test's fake prompt was a
+continuation only the test resumed, the test was not expecting a request, and
+instead of failing the suite stopped. The process was killed after **10 minutes**.
+
+The obvious fix is a `.timeLimit`, and it went in. It does not do the job. On
+2026-10-16, with `.timeLimit(.minutes(1))` on the test, the same shape of hang
+ran for **4 min 11 s** with no time-limit issue in the output, until the process
+was killed with `kill`. Measured again on 2026-11-05, one run each way: under a
+pseudoterminal the time-limit issue comes out at **65.7 s** and the test stays
+stuck; through a pipe not one swift-testing line appears before the `kill`,
+because the buffered output is lost with the process. A test that hangs is worse
+than one that fails: the run has no verdict, and in CI it spends the job's
+timeout to say nothing.
+
+The way out is a test that does not wait on something that may not come back.
+The fake answers at once unless the test is about to hold it open, so a
+regression fails on the recorded steps:
+
+```swift
+if journal.holdsAnswer && journal.pendingAnswer == nil {
+    await withCheckedContinuation { journal.pendingAnswer = $0 }
+}
+```
+
+Where the test does hold it, it runs the code in a separate `Task` and waits a
+bounded number of `Task.yield()` turns for the state it expects, then resumes
+what it opened. The sabotage of the first paragraph then dies in **0.71 s**.
+
+**Rule:** a time limit is a net, not a way out. A test that awaits a continuation
+has to be the one guaranteed to resume it, on every path, including the one where
+the code under test is wrong.
+
 ---
 
 ## Audio

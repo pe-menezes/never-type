@@ -333,8 +333,9 @@ Quit NeverType             ⌘Q
   open the menu, above everything else, each with its item right under it:
   - Accessibility missing: **Open Accessibility Settings…**.
   - Microphone never answered: **Ask for Microphone Access…**, which shows the
-    macOS prompt again. If a request is already open, or no answer comes
-    within 10 seconds, an alert says the app is waiting, with one button, OK.
+    macOS prompt again. If a request is already open, the request comes back
+    still unanswered, or no answer comes within 10 seconds, an alert says the
+    app is waiting, with one button, OK.
     The Microphone page is not offered here: until the prompt is answered the
     app may not be in that list, and it has no + to add it.
   - Microphone denied or restricted: **Open Microphone Settings…**.

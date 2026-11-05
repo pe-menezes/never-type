@@ -279,7 +279,7 @@ struct MenuLayoutTests {
         #expect(launch[run.upperBound...].contains("self.logPermissionsIfChanged()"),
                 "and another one after them")
 
-        let writer = try Self.body(of: "private func logPermissionsIfChanged(", in: source)
+        let writer = try Self.body(of: "private func logPermissionsIfChanged(microphone: MicrophoneAccess = .current,", in: source)
         #expect(writer.contains("permissionLog.lineIfChanged("))
         #expect(writer.contains("log(line)"), "the line has to reach the log:\n\(writer)")
     }
@@ -492,6 +492,7 @@ struct MenuLayoutTests {
             "Task { @MainActor in",
             "await self.microphoneRequest.askAgain(",
             "request: { await self.askForMicrophone() },",
+            "microphone: { MicrophoneAccess.current },",
             "onNoAnswer: { self.showMicrophoneWaitingAlert() })",
             "self.renderResting()",
             "self.logPermissionsIfChanged()",
@@ -694,6 +695,91 @@ struct MenuLayoutTests {
         #expect(body.contains("other()"))
     }
 
+    /// Opening the menu is what rebuilds it, and this is the only caller.
+    /// Reaudit 3 of part 1b, B11: an exit here, or an always-false `if` around
+    /// the call, opened an empty menu with the suite green (Y-MU1, Y-MU2).
+    @Test("opening the menu rebuilds it, held whole")
+    func menuNeedsUpdateWiring() throws {
+        let source = try Self.mainSource()
+        let update = try Self.body(of: "func menuNeedsUpdate(_ menu: NSMenu) {", in: source)
+        #expect(Self.codeLines(update) == ["rebuildMenu()"], "opening the menu:\n\(update)")
+    }
+
+    /// Every oracle here reads text, and text under `#if false`, inside a block
+    /// comment or inside a multi-line string is still there to read. Reaudit 3
+    /// of part 1b: launch off under `#if false`, with the suite green (Y-PP1).
+    /// Part 2: the same with launch inside a raw string, `#"""` (F-RAW).
+    @Test("main.swift hides no code from the oracles: no #if, no block comment, no multi-line string, no regex literal")
+    func noCodeHiddenFromTheOracles() throws {
+        let hidden = Self.linesHidingCode(in: try Self.mainSource())
+        #expect(hidden.isEmpty, "the text-based oracles would read these as live code: \(hidden)")
+    }
+
+    /// `main.swift` is clean, so on its own it exercises none of these: audit
+    /// A6 of part 2 took each one out of the filter with the suite green.
+    @Test("each way of hiding code is found, wherever on the line it starts",
+          arguments: [
+            "#if false",
+            "    #if false",
+            "private func keep() {}; #if false",
+            "\u{0C}#if false",
+            "    /*",
+            "private func keep() {} /*",
+            "/*\u{0301} off",
+            "private static let keep\u{0600}/* off",
+            "let hidden = \"\"\"",
+            "let hidden = #\"\"\"",
+            "let hidden = #/",
+          ])
+    func hidingFormsAreFound(line: String) {
+        let source = "func wired() {\n    other()\n}\n\(line)\nfunc more() {\n    other()\n}"
+        #expect(Self.linesHidingCode(in: source) == [line], "in:\n\(source)")
+    }
+
+    @Test("a source with none of those forms hides nothing")
+    func cleanSourceHidesNothing() {
+        let source = "// a comment\nlet ratio = a / b\nlet tag = \"#tag\"\nfunc wired() {\n    other()\n}"
+        #expect(Self.linesHidingCode(in: source).isEmpty)
+    }
+
+    /// The two edges of a body. Reaudit 3 of part 1b: an exit written after the
+    /// `{` of the marker's own line, or an `if` opened there and closed with
+    /// `}}`, switched off launch, the menu and every alert with the suite green
+    /// (Y-ML1 to Y-ML10).
+    @Test("a marker is its whole line, and a function ends on a line that is only its brace",
+          arguments: [
+            "func wired() { return\n    other()\n}",
+            "func wired() { if never {\n    other()\n}}",
+            "func wired() {\n    other()\n}}",
+            "func wired() {\n    other()\n}; return nothing }",
+            "func wired() {\n    other()",
+            "func wired() {\n\tother()\n}",
+            "func wired() {\n    other()\n}\nfunc wired() {\n    more()\n}",
+            "func wired() { return\n    other()\n}\nstruct Decoy {\n    func wired() {\n        other()\n    }\n}",
+          ])
+    func bodyHoldsItsEdges(source: String) {
+        #expect(throws: BodyNotFound.self, "accepted:\n\(source)") {
+            try Self.body(of: "func wired() {", in: source)
+        }
+    }
+
+    @Test("a part of the line is not a marker")
+    func aPartialMarkerIsNotFound() {
+        #expect(throws: BodyNotFound.self) {
+            try Self.body(of: "func wired(", in: "func wired() {\n    other()\n}")
+        }
+    }
+
+    /// A `case` ends at the next one and a property at whatever follows: only
+    /// a function promises the brace, so only a function has to show it.
+    @Test("a case and a property end where the next line at their level starts")
+    func onlyFunctionsEndOnABrace() throws {
+        let cases = "    case .a:\n        other()\n    case .b:\n        more()\n"
+        #expect(try Self.body(of: "case .a:", in: cases) == "        other()")
+        let property = "    private lazy var a = A(\n        b: c)\n\n    private var d = 1\n"
+        #expect(Self.codeLines(try Self.body(of: "private lazy var a = A(", in: property)) == ["b: c)"])
+    }
+
     // MARK: - Reading main.swift
 
     private static func mainSource() throws -> String {
@@ -703,9 +789,44 @@ struct MenuLayoutTests {
                           encoding: .utf8)
     }
 
+    /// The lines that open a region the compiler skips while a text oracle
+    /// still reads it. Searched anywhere on the line: looking only at the start
+    /// let launch go off under `; #if false` or a form feed before the `#if`,
+    /// and `#/` let the menu go off inside a regex literal, all with 309 tests
+    /// green (audit A1 of part 2).
+    ///
+    /// Compared literally, not by `Character`: the compiler reads scalars, and
+    /// `contains` read U+0301 after `/*`, or U+0600 before it, as one grapheme
+    /// with the token and did not find it. Launch or the menu went off inside
+    /// that comment with 310 tests green (reaudit 1 of part 2, N-COMBLAUNCH,
+    /// N-COMBMENU, N-PREPMENU2).
+    private static func linesHidingCode(in source: String) -> [String] {
+        let tokens = ["#if", "#/", "/*", "\"\"\""]
+        return source.components(separatedBy: "\n").filter { line in
+            tokens.contains { line.range(of: $0, options: .literal) != nil }
+        }
+    }
+
+    /// A body with an edge that does not hold. An error of its own, not
+    /// `#require`, so a test can expect it (`bodyHoldsItsEdges`).
+    private struct BodyNotFound: Error, CustomStringConvertible {
+        let description: String
+    }
+
     /// The lines after `marker`, up to the first one indented no deeper than
-    /// the marker's own line: the body of a function or of a `case`. The marker
-    /// has to be unique, or the body found could be the wrong one.
+    /// the marker's own line: the body of a function or of a `case`.
+    ///
+    /// Both edges are held, because whatever sits on them is outside what a
+    /// test compares (reaudit 3 of part 1b, Y-ML1 to Y-ML10). The marker is a
+    /// whole line, trimmed, and appears once: nothing can follow the `{`, and
+    /// the body found cannot be the wrong one. A function ends on a line that
+    /// is exactly `}`. A `case` or a property has no brace of its own to end on
+    /// and ends at the next line at its level.
+    ///
+    /// Hits are counted by `contains` and only then held to the whole line:
+    /// counting only exact lines let an exit after the real function's `{` pass
+    /// beside an exact copy of it in another type, an empty menu with the suite
+    /// green (audit A2 of part 2, R-DECOY).
     ///
     /// Lines that are only a comment are dropped first, the marker's own
     /// included: a call commented out is not the call (audit N2 of part 1,
@@ -714,14 +835,23 @@ struct MenuLayoutTests {
         let lines = source.components(separatedBy: "\n")
             .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
         let hits = lines.indices.filter { lines[$0].contains(marker) }
-        try #require(hits.count == 1, "expected \"\(marker)\" once in main.swift, found \(hits.count)")
+        guard hits.count == 1, hits.allSatisfy({ lines[$0].trimmingCharacters(in: .whitespaces) == marker }) else {
+            throw BodyNotFound(description: "expected \"\(marker)\" once, as a whole line, found: \(hits.map { lines[$0] })")
+        }
         let start = hits[0]
         let indent = lines[start].prefix { $0 == " " }.count
         var body: [String] = []
+        var closing: String?
         for line in lines[(start + 1)...] {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if !trimmed.isEmpty && line.prefix(while: { $0 == " " }).count <= indent { break }
+            if !trimmed.isEmpty && line.prefix(while: { $0 == " " }).count <= indent {
+                closing = trimmed
+                break
+            }
             body.append(line)
+        }
+        if marker.contains("func "), closing != "}" {
+            throw BodyNotFound(description: "\"\(marker)\" has to end on a line that is exactly }, ended on: \(closing ?? "the end of the file")")
         }
         return body.joined(separator: "\n")
     }
