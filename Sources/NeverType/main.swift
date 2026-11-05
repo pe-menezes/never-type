@@ -454,7 +454,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Feedback.stopped()
             let url = recorder.stop()
             resumeMedia()
-            render(.idle)
+            settleIcon()
             guard url != nil else {
                 overlay.hide()
                 return false
@@ -495,10 +495,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     }
                     self.log(line)
                     self.overlay.hide()
+                    // After `finish`, because the rule draws nothing while
+                    // transcribing. Before `deliver`, whose failures draw the
+                    // two-second slash. Without it, a slash that arrived during
+                    // the transcription was lost (audit B7 of part 1b).
+                    self.settleIcon()
                     self.deliver(corrected)
                 case .failure(let failure):
                     // Visible signal: without this the dictation vanished in
-                    // silence — the icon is already back to normal, the app has
+                    // silence: the icon is already back at rest, the app has
                     // no window, and stderr goes nowhere when opened from Finder.
                     self.log("TRANSCRIPTION FAILED: \(failure.reason)")
                     self.overlay.hide()
@@ -526,7 +531,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         recorder.cancel()
         resumeMedia()
         overlay.hide()
-        render(.idle)
+        settleIcon()
         log("cancelled: \(reason)")
     }
 
@@ -613,14 +618,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Back to the normal icon after signaling a problem, so the app does not
-    /// stay stuck in an error state because of one dictation.
+    /// Back to the icon at rest after signaling a problem, so the app does not
+    /// stay stuck in an error state because of one dictation, and a slash with
+    /// another cause stays (audit B3 of part 1b). The rule already draws
+    /// nothing during a dictation, so that condition does not repeat here.
     private func flashIdle() {
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(2))
-            if !self.recorder.isRecording && !self.transcriptionSession.isTranscribing {
-                self.render(.idle)
-            }
+            self.settleIcon()
         }
     }
 
@@ -915,11 +920,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// The icon at rest, by `StatusIcon.redraw`: slashed while a permission is
     /// missing, the model failed to load or there is no Metal, and nothing
-    /// drawn while dictating. While recording the icon is the waveform, and
-    /// the release draws the normal icon without this rule (audit B3 of part
-    /// 1b); a transcription that succeeds redraws nothing, so a reading that
-    /// arrives meanwhile waits for the next redraw (audits B7 and B8). The
-    /// decision is the Core's, under test; this only draws it (audit A1).
+    /// drawn while dictating, because the end of a dictation redraws through
+    /// `settleIcon`, except a transcription failure and `recorder.onError`,
+    /// which draw the slash on purpose. The normal icon used to be drawn
+    /// directly at the end of a dictation, and that hid the other causes
+    /// (audits B3 and B7 of part 1b). The decision is the Core's, under test;
+    /// this only draws it (audit A1).
     private func renderResting(_ permissions: PermissionReading = .current) {
         if let visual = StatusIcon.redraw(permissions: permissions, recording: recorder.isRecording,
                                           transcribing: transcriptionSession.isTranscribing, model: modelState) {
@@ -927,11 +933,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// The icon at the end of a dictation or of a failure's two seconds, and
+    /// the watch when a permission is missing. The watch only starts at launch,
+    /// on a trigger and on asking again, so a permission taken away during a
+    /// dictation and given back would leave the slash with both granted until
+    /// the next key press, the defect of 2026-10-16 08:28 by another door.
+    ///
+    /// The line comes first because the watch takes this reading as its base,
+    /// so it never hands the loss over as a change: without the line, the slash
+    /// and its return stay in the log without the cause (audit L1 of part 2b).
+    ///
+    /// Not inside `renderResting`: the model load calls that, and a load ending
+    /// has no reason to start the watch. With both granted this is the one
+    /// read, because `start()` reads again.
+    private func settleIcon() {
+        let reading = PermissionReading.current
+        logPermissionsIfChanged(microphone: reading.microphone, accessibility: reading.accessibilityGranted)
+        renderResting(reading)
+        if !reading.isComplete {
+            permissionWatch.start()
+        }
+    }
+
     /// Writes the `permissions:` line when a reading differs from the last one
-    /// written: at launch, after each prompt is answered, on each trigger and
-    /// each time the menu opens, and every second while a permission is
-    /// missing (`permissionWatch`), so a switch turned on in System Settings
-    /// shows up about a second later.
+    /// written: at launch, after each prompt is answered, on each trigger, at
+    /// the end of a dictation and each time the menu opens, and every second
+    /// while a permission is missing (`permissionWatch`), so a switch turned on
+    /// in System Settings shows up about a second later.
     private func logPermissionsIfChanged(microphone: MicrophoneAccess = .current,
                                          accessibility: Bool = HotkeyMonitor.hasAccessibilityPermission) {
         if let line = permissionLog.lineIfChanged(microphone: microphone, accessibilityGranted: accessibility) {
@@ -1304,7 +1332,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         // The alert is modal and takes the focus. Mid-dictation, the ⌘V would
         // land on the alert instead of the app the person was speaking into.
-        // The same refusal, with the same two-second slash, as the login item's.
+        // The same refusal as the login item's, with a slash that stays until
+        // the recording or the transcription ends.
         guard !recorder.isRecording, !transcriptionSession.isTranscribing else {
             log("check for updates: ignored, dictation in progress")
             render(.blocked)
