@@ -306,7 +306,9 @@ Quit NeverType             ⌘Q
 - **Start NeverType with macOS**: the app checks its own path when you click,
   since the login item must point at `/Applications` or `~/Applications`. A copy
   running from
-  any other folder is turned down with the two-second slash and a log line that
+  any other folder is turned down with a slash that lasts two seconds or, with a
+  dictation in progress, until it ends, whether that is before or after the two
+  seconds, and a log line that
   says to run `install.sh`. If you turn it off in System Settings, the menu says
   so and offers a shortcut to that pane. What it costs at boot is measured in
   [`launch-at-login.md`](launch-at-login.md).
@@ -321,10 +323,10 @@ Quit NeverType             ⌘Q
   nothing checks on a timer or at launch. The line only shows while the
   checkout exists with its `scripts/update.sh`; a copy built without the stamp,
   or whose checkout moved, has no line. Clicked mid-dictation, it refuses with
-  a slash that stays until the recording or the transcription ends; and if a
-  dictation starts while the fetch is still running, the alert waits for it to
-  end rather than taking the focus from the window your text is about to land
-  in.
+  a slash that lasts two seconds or, with a dictation in progress, until it
+  ends, whether that is before or after the two seconds; and if a dictation
+  starts while the fetch is still running, the alert waits for it to end rather
+  than taking the focus from the window your text is about to land in.
 - **Quit NeverType** (⌘Q). Opening the app while it is already running activates
   the running copy, and the new process exits.
 

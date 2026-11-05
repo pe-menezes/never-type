@@ -159,6 +159,17 @@ Só texto, a pedido do PG, pelo relatório `.vibeflow/audits/never-type-permisso
 * `swift test`, uma vez: **317 testes em 34 suítes, passou** (saída do XCTest: 0 testes).
 * `shasum` no estado entregue: `main.swift` c2251f4d, `StatusIcon.swift` 182a3e2b. Eles substituem os anteriores; `MenuLayoutTests.swift` e `docs/reference.md` não mudaram nesta troca.
 
+### Duração do risco nas recusas do menu
+
+Só texto em `docs/reference.md`, a pedido do PG. O login recusado prometia "the two-second slash", que não vale com um ditado em curso, e a atualização recusada passa a dizer o mesmo com as mesmas palavras: "a slash that lasts two seconds or, with a dictation in progress, until it ends, whether that is before or after the two seconds". Isso substitui a frase do L6 e a promessa do login.
+
+* **Linhas alteradas e largura (`awk`, `length`):** login, 309 a 311, com 80, 79 e 30 colunas; atualização, 326 a 329, com 75, 75, 79 e 70. Nenhuma passa de 80.
+* **Linha curta de propósito:** a 311 fica com 30 colunas para a linha seguinte não mudar.
+* **Reflow:** de 326 a 329 só a frase da recusa muda de palavras; o resto do item só muda de quebra.
+* **Nenhum teste lê o arquivo:** `grep` por `reference\.md`, `two-second` e `until the recording` em `Tests`, `scripts` e `Package.swift` não achou nada; `grep` por `docs/`, `docs"`, `\.md"` e `reference` em `Tests` e `Package.swift` só achou outros usos da palavra ("preference", variável `reference`). Por isso a suíte não rodou nesta troca, como o PG combinou.
+* `shasum` no estado entregue: `docs/reference.md` 0100f576, que substitui o anterior.
+* **Para o PG:** o comentário junto do `render(.blocked)` de "Check for Updates" em `main.swift` diz "a slash that stays until the recording or the transcription ends". Continua verdadeiro, porque esse caminho só roda com ditado em curso, mas não usa mais as mesmas palavras do `docs/reference.md`. Não mexi, porque o pedido foi só o `docs/reference.md`.
+
 ### Para o teste manual do Pedro
 
 Muda o passo 2 da auditoria: com a permissão tirada durante o ditado, o log agora mostra a linha `permissions:` com a perda logo antes de `icon → brand.slash`, e outra linha `permissions:` com a volta. Com tudo concedido, nenhuma linha `permissions:` nova a cada ditado.
