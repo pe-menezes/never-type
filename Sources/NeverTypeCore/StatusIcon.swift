@@ -110,10 +110,12 @@ public enum StatusIcon: Equatable, Sendable {
     }
 
     /// What to draw at rest with this reading, or nothing while a dictation
-    /// is on. While recording the icon is the waveform, and the release draws
-    /// the normal icon, without this rule (audit B3 of part 1b). While
-    /// transcribing, nothing redraws when the transcription succeeds, so a
-    /// reading that arrives then waits for the next redraw (audit B7).
+    /// is on: the end of a dictation asks again, so what arrives in the
+    /// meantime is drawn then, except on a transcription failure or a recorder
+    /// error, which draw the slash on purpose. The end of a dictation used to
+    /// draw the normal icon without this rule, and on a Mac with no Metal one
+    /// good dictation cleared the warning until the app was reopened (audits
+    /// B3 and B7 of part 1b).
     ///
     /// In the app, an early return or an inverted guard here brought back the
     /// slash of 2026-10-16 08:28 with every test green (audit A1 of part 1b).

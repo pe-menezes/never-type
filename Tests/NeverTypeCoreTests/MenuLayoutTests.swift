@@ -481,6 +481,133 @@ struct MenuLayoutTests {
                 "the trigger starts the watch once, before the decision:\n\(handle)")
     }
 
+    /// Every end of a dictation goes back to the icon by the Core rule. The
+    /// normal icon drawn directly hid a missing permission, a model that failed
+    /// to load and a missing Metal device, and on a Mac with no Metal one good
+    /// dictation cleared that warning until the app was reopened (audits B3 and
+    /// B7 of part 1b). The one direct draw left is launch's, before anything
+    /// has been read, held in place by `launchWiring`.
+    @Test("the normal icon is drawn directly only at launch")
+    func idleIsDrawnOnlyAtLaunch() throws {
+        let source = try Self.mainSource()
+        let code = source.components(separatedBy: "\n")
+            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+            .joined(separator: "\n")
+        #expect(code.components(separatedBy: "render(.idle)").count - 1 == 1,
+                "render(.idle) outside launch skips the rule")
+        let launch = try Self.body(of: "func applicationDidFinishLaunching(_ notification: Notification) {", in: source)
+        #expect(Self.codeLines(launch).contains("render(.idle)"), "launch draws the first icon:\n\(launch)")
+    }
+
+    @Test("releasing the trigger redraws by the rule before the pill says it is working")
+    func releaseWiring() throws {
+        let source = try Self.mainSource()
+        let handle = try Self.body(of: "private func handle(_ event: HotkeyMonitor.Event) -> Bool {", in: source)
+        let lines = Self.codeLines(handle)
+        let start = try #require(lines.firstIndex(of: "case .released:"), "no release:\n\(handle)")
+        let end = try #require(lines.firstIndex(of: "overlay.transcribing()"), "no pill:\n\(handle)")
+        #expect(Array(lines[start...end]) == [
+            "case .released:",
+            "guard recorder.isRecording else { return false }",
+            "Feedback.stopped()",
+            "let url = recorder.stop()",
+            "resumeMedia()",
+            "settleIcon()",
+            "guard url != nil else {",
+            "overlay.hide()",
+            "return false",
+            "}",
+            "overlay.transcribing()",
+        ], "the release:\n\(handle)")
+    }
+
+    /// From the session ending to the brace that closes the `switch`, so nothing
+    /// leaves ahead of the redraw and nothing follows the failure's slash: a
+    /// `settleIcon()` right after it erased the slash at once, and an oracle
+    /// ending on that line stayed green (audit L3 of part 2b). It comes after
+    /// `finish`, because the rule draws nothing while transcribing, and before
+    /// `deliver`, whose failures draw the slash that has to stay for two seconds.
+    /// On success the redraw is what brings back a slash that arrived during the
+    /// dictation (audit B7 of part 1b).
+    @Test("a finished transcription redraws by the rule, then delivers, and a failure keeps its slash")
+    func transcriptionEndWiring() throws {
+        let source = try Self.mainSource()
+        let handle = try Self.body(of: "private func handle(_ event: HotkeyMonitor.Event) -> Bool {", in: source)
+        let lines = Self.codeLines(handle)
+        let start = try #require(lines.firstIndex(of: "guard self.transcriptionSession.finish(session) else { return }"),
+                                 "no end of the session:\n\(handle)")
+        let slash = try #require(lines.firstIndex(of: "self.render(.blocked)"), "no slash on failure:\n\(handle)")
+        #expect(Array(lines[start..<min(slash + 2, lines.count)]) == [
+            "guard self.transcriptionSession.finish(session) else { return }",
+            "switch result {",
+            "case .success(let result):",
+            "let corrected = self.vocabulary.apply(to: result.text)",
+            "var line = \"transcribed in \\(result.ms) ms: \\(result.text.count) chars\"",
+            "if corrected != result.text {",
+            "line += \", \\(corrected.count) after replacements\"",
+            "}",
+            "self.log(line)",
+            "self.overlay.hide()",
+            "self.settleIcon()",
+            "self.deliver(corrected)",
+            "case .failure(let failure):",
+            "self.log(\"TRANSCRIPTION FAILED: \\(failure.reason)\")",
+            "self.overlay.hide()",
+            "self.render(.blocked)",
+            "}",
+        ], "the end of the transcription:\n\(handle)")
+    }
+
+    @Test("discarding a recording redraws by the rule, held whole")
+    func discardWiring() throws {
+        let source = try Self.mainSource()
+        let discard = try Self.body(of: "private func discardRecording(reason: String) {", in: source)
+        #expect(Self.codeLines(discard) == [
+            "Feedback.discarded()",
+            "recorder.cancel()",
+            "resumeMedia()",
+            "overlay.hide()",
+            "settleIcon()",
+            "log(\"cancelled: \\(reason)\")",
+        ], "discarding:\n\(discard)")
+    }
+
+    /// No condition around the redraw: `StatusIcon.redraw` already draws nothing
+    /// during a dictation, and a second copy of that rule here can drift.
+    @Test("after two seconds the slash of a failure gives way to the rule, held whole")
+    func flashIdleWiring() throws {
+        let source = try Self.mainSource()
+        let flash = try Self.body(of: "private func flashIdle() {", in: source)
+        #expect(Self.codeLines(flash) == [
+            "Task { @MainActor in",
+            "try? await Task.sleep(for: .seconds(2))",
+            "self.settleIcon()",
+            "}",
+        ], "the two seconds:\n\(flash)")
+    }
+
+    /// A permission taken away during a dictation and given back: the end of
+    /// the dictation draws the slash, and with nothing re-reading the icon
+    /// stayed slashed with both granted until the next key press, the defect
+    /// of 2026-10-16 08:28 by another door. One read for the line, the icon and
+    /// the decision, and `start()` only with one missing, so nothing is read a
+    /// second time with both granted. The line comes first because the watch
+    /// takes this reading as its base: without it, the slash and its return
+    /// stay in the log without the cause (audit L1 of part 2b).
+    @Test("the end of a dictation logs and redraws from one reading, and watches when one is missing")
+    func settleIconWiring() throws {
+        let source = try Self.mainSource()
+        let settle = try Self.body(of: "private func settleIcon() {", in: source)
+        #expect(Self.codeLines(settle) == [
+            "let reading = PermissionReading.current",
+            "logPermissionsIfChanged(microphone: reading.microphone, accessibility: reading.accessibilityGranted)",
+            "renderResting(reading)",
+            "if !reading.isComplete {",
+            "permissionWatch.start()",
+            "}",
+        ], "settling the icon:\n\(settle)")
+    }
+
     /// Asking again, from the trigger or the menu: the request, the alert
     /// when no answer comes, then the redraw by the rule (audit L6 of part 1),
     /// the line and the watch.
