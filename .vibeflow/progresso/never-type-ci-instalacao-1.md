@@ -6,11 +6,10 @@
 * Blocos exercitados com logs e ferramentas falsas, sempre extraídos do YAML real por `extract.rb`.
 
 ## Falta (do PG, pelo briefing)
-* Rodar o workflow de verdade e a sabotagem. Nada aqui rodou num runner.
-* Commit.
+* Commit do conserto 1, rodada real do workflow com o conserto e reauditoria.
 
-## Provas (rodadas nesta sessão, com o resultado visto)
-A pasta temporária é `/private/tmp/claude-501/-Users-pedromenezess-Library-Mobile-Documents-iCloud-md-obsidian-Documents-Obsidian-Vault/d82bcdb9-6cbb-4721-9ee5-ade7373bb568/scratchpad`, abaixo `<tmp>`. Os comandos reais levam o caminho literal.
+## Provas da primeira rodada (com o resultado visto naquela sessão)
+A pasta temporária da sessão fica abaixo como `<tmp>`. Os comandos reais levam o caminho literal.
 
 | Prova | Comando | Resultado |
 |---|---|---|
@@ -32,7 +31,7 @@ A cópia do passo 12 troca só `limit=180` por `limit=3`. A do passo 4 troca só
 ## Não rodado
 * `actionlint`: não existe na máquina (`command -v` vazio). O critério era "se existir", e não instalei nada. Sintaxe de expressão e de `if` do GitHub só a rodada real confirma.
 * Suíte Swift e verificador de tipos: esta parte não muda Swift nem scripts, e o build do worktree exigiria baixar e compilar o whisper.cpp. Não vi placar nenhum dela.
-* Workflow num runner: é do PG.
+* Workflow num runner, na primeira rodada: quem rodou foi o PG, e o resultado está no relatório da auditoria (`41966080335` e `41966083968`).
 
 ## Decisões dentro do desenho
 * Rótulos da matriz: `macos-15, system Python` e `macos-26, Homebrew Python`.
@@ -45,5 +44,52 @@ A cópia do passo 12 troca só `limit=180` por `limit=3`. A do passo 4 troca só
 * Os fatos dizem "hoje são 20 dias" e o bloco mede 19: o `floor` conta dias inteiros desde o commit. O teste do limite 45 e do 0 não muda.
 * Os testes dos blocos ficaram fora do repositório, porque o perímetro não previa arquivo de teste. Se valer guardá-los, vira parte nova. Estão em `<tmp>`, que é temporário: `extract.rb`, `extract-all.sh`, `test-model-check.sh`, `test-other-blocks.sh`, `naive-block.sh`. O briefing dizia `$TMPDIR`, e usei a pasta temporária da sessão, igualmente fora do repositório.
 * `docs/INSTALL.md` diz que o tempo do `setup-bench.sh` não foi medido, e os jobs agora dão a ordem de grandeza (6 a 9 min no total). `docs/` está fora desta parte.
-* O passo do Python só imprime a versão, como pede o desenho. Se a imagem deixar de ter o 3.9.6 em `/usr/bin/python3`, o job segue e testa outra versão sem falhar.
-* `brew uninstall --formula cmake` falha se a imagem deixar de trazer o cmake pelo Homebrew: seria um aviso de falha sem quebra real da instalação. O comentário do passo já diz isso.
+* O passo do Python só imprimia a versão, e o `brew uninstall` quebrava em imagem sem a fórmula: os dois saíram no conserto 1, abaixo.
+
+## Conserto 1
+Volta 1 de 2, sobre a auditoria em PASS com 7 baixos e a revisão do Codex. Feito em `.github/workflows/install.yml` e na entrada de 2026-11-05 de `decisions.md`.
+
+### O que mudou
+* cmake: lista as fórmulas, desinstala só se `grep -qFx cmake` acha, dá `::error::` nomeando o caminho se ainda há cmake, e só então a linha literal do INSTALL.
+* Cache: `PIP_NO_CACHE_DIR: "1"` no `env` do job e passo novo `Give Homebrew an empty cache`, antes do primeiro `brew`.
+* Passo novo `Update Homebrew`, depois da prova de runner limpo e antes do cmake. `HOMEBREW_NO_AUTO_UPDATE: ""` saiu do job, e o comentário foi junto.
+* `Record the Python in use` virou `Prove which Python is in use`, com `EXPECTED_PYTHON` no `env` do passo.
+* SDK em duas linhas, mensagem da guarda nova, e os textos pedidos: Metal reportado, guarda como heurística, datas, Python, números, promessas de prazo, rede e o que a imagem traz.
+
+### Provas (rodadas nesta sessão, com o resultado visto)
+`<tmp>` é a pasta temporária da sessão, e os scripts desta volta estão em `<tmp>/conserto1`. Os comandos reais levam o caminho literal.
+
+| Prova | Comando | Resultado |
+|---|---|---|
+| Vermelho, comportamento | `/bin/bash <tmp>/conserto1/test-conserto.sh <tmp>/conserto1/blocks-antes` (blocos extraídos do YAML antes do conserto) | 11 passam, 24 falham |
+| Vermelho, estrutura e texto | `ruby <tmp>/conserto1/estrutura.rb .github/workflows/install.yml .vibeflow/decisions.md` antes do conserto | 58 falhas |
+| Verde, comportamento | `/bin/bash <tmp>/conserto1/test-conserto.sh <tmp>/conserto1/blocks-depois` | 35 de 35 |
+| Verde, estrutura e texto | o mesmo `estrutura.rb` depois do conserto | 70 de 70 |
+| YAML carrega | `ruby -ryaml -e 'YAML.load_file(".github/workflows/install.yml")'` | sem erro |
+| Sintaxe dos blocos antigos | `/bin/bash <tmp>/extract-all.sh` | 5 de 5 |
+| Passo de carga, testes antigos | `SCRATCH_DIR=<tmp> /bin/bash <tmp>/test-model-check.sh <tmp>/blocks/model.sh` | 13 de 13 |
+| Demais blocos, testes antigos | `/bin/bash <tmp>/test-other-blocks.sh` | 30 de 30 |
+
+Casos do cmake: fórmula presente; fórmula ausente sem cmake nenhum (quebrava); nome parecido (`cmake-docs`); cmake de fora no `PATH`; fórmula e cmake de fora juntos (passava calado); `brew` falhando na listagem; `uninstall` falhando; `install` falhando. Casos do Python: `system` e `homebrew`, certo e errado; prefixo parecido nos dois; `python3` quebrado; `brew --prefix` quebrado; valor desconhecido na matriz; `system` sem depender de `brew`.
+
+### Sondas do auditor
+Rodei `sondas.rb` e `sondas.sh` sobre o YAML novo, com os blocos extraídos em pasta minha. Não editei nenhuma, porque o briefing não autoriza reescrever. As quatro falhas são as que este conserto torna falsas de propósito, e a reauditoria decide a reescrita:
+
+* `sondas.rb`: 1 falha entre as estruturais, `HOMEBREW_NO_AUTO_UPDATE e string vazia`; a variável saiu do job.
+* `sondas.sh`: 63 passam, 3 falham. `imagem sem cmake do Homebrew fica vermelha` e `e nao chega a instalar` (o defeito consertado: agora sai 0 e instala) e `outro cmake no PATH sai 0` (agora é `::error::`).
+
+`mutantes.sh` não rodou: com essas sondas já vermelhas, todo mutante daria "morto" sem provar nada. Depende da reescrita pela reauditoria.
+
+### Conferido agora
+* PR #15: `createdAt 2026-09-18T01:36:06Z`, `mergedAt 2026-09-22T00:02:20Z` (`gh pr view 15`). O commit do rename vem do relatório da auditoria, sem nova consulta.
+* `build-app.sh:123` é o `openssl req`, e `build-app.sh:221` fixa `306c88f4d1286aec1bf96e544632897886af5501`.
+* `sys.base_prefix` nesta máquina: `/opt/homebrew/bin/python3` dá `/opt/homebrew/opt/python@3.14/Frameworks/...`, que começa com o prefixo esperado. `/usr/bin/python3` dá `/Applications/Xcode.app/Contents/Developer/Library/Frameworks/...`, com o `xcode-select` aqui no Xcode. Por isso a prova roda depois da seleção das Command Line Tools.
+
+### Não provado sem rodada real
+* O caminho `/Library/Developer/CommandLineTools/` do `base_prefix` no runner: é a expectativa do briefing, e esta máquina não o mostra, por estar no Xcode. Se a rodada real der outro caminho, o job de `macos-15` fica vermelho no passo novo.
+* `brew update`, `HOMEBREW_CACHE` e `PIP_NO_CACHE_DIR` de verdade: não rodei `brew` nem `pip`. Sobre eles só há prova de ordem e de texto.
+* A data de 04/11/2026 do e-mail veio do briefing, sem conferência: a API não expõe, e não abri a caixa de e-mail.
+
+### Fora deste conserto
+* `docs/INSTALL.md` dizer que o tempo não foi medido: `docs/` não é desta parte.
+* Resumo em job cancelado: segue sem rodada real.

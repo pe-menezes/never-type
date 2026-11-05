@@ -3,10 +3,17 @@
 #
 # What it proves: on an image with no NeverType and no whisper.cpp, today's
 # Homebrew formula and today's model downloads still take a clone to an app in
-# /Applications, signed, running, with the model loaded on Metal and its warm-up
-# inference finished. The installation broke from 2026-08-22 to 2026-09-21
+# /Applications, signed, running, with the app reporting Metal and its warm-up
+# inference finished. The installation broke from 2026-09-12 to 2026-09-21
 # because a Homebrew rename moved a path, nothing in this repository changed,
 # and a contributor found it in PR #15.
+#
+# The app reports Metal, and that report has a limit: usesMetal lists the devices
+# ggml registered (Transcriber.swift:193-198) and does not say which backend the
+# context used. What the report does prove today comes from a test: with the
+# pinned whisper.cpp (306c88f) and the Metal library refused, the process aborts
+# with exit 134 and writes no model line, so that path is red here. That is
+# behavior of this commit, and changing the commit reopens the question.
 #
 # What stays out, with no pretense of coverage:
 # - Granting Microphone and Accessibility: TCC needs a person. verify-install.sh
@@ -14,10 +21,16 @@
 # - Actually dictating: the key, audio capture, speech transcription and pasting
 #   at the cursor. The deepest point reached is the app's warm-up inference.
 # - xcode-select --install and installing Homebrew: the runner already has both,
-#   plus git and a full Xcode that only stops being the selected one.
+#   plus git and a full Xcode that only stops being the selected one. Any other
+#   tool the image already ships goes unproven too, such as openssl, used by
+#   scripts/build-app.sh:123.
 # - Metal speed: the GPU here is an Apple Paravirtual device.
 # - Filtered networks and copying the model from another machine,
 #   scripts/update.sh, and macOS 14.
+#
+# A network failure (CDN, brew, pip, the GitHub API) also turns this red with
+# nothing broken in the installation, so reread a red run before it becomes a
+# diagnosis.
 #
 # Why it is a separate workflow from ci.yml: decisions in
 # .vibeflow/decisions.md (2026-11-05).
@@ -35,9 +48,8 @@ on:
   workflow_dispatch:
   # Only the files a person runs to install. Each round downloads 6.9 GB, so a
   # Swift PR stays with ci.yml, which builds and tests it and never opens the app:
-  # a launch or model-load break from Swift shows up here in the next weekly run,
-  # at most 7 days later. There is no push to main because it is the tree the PR
-  # already proved.
+  # a launch or model-load break from Swift shows up here in the next weekly run
+  # that happens. There is no push to main for the same cost: 6.9 GB per commit.
   pull_request:
     paths:
       - .github/workflows/install.yml
@@ -67,29 +79,34 @@ jobs:
           - os: macos-15
             label: macos-15, system Python
             python: system
-          # The developer's machine: Homebrew Python 3.15.x with torch 2.15.0.
-          # Both produced models of identical size in bytes (574041195,
+          # Homebrew's current python3, which on this runner is 3.15.x with torch
+          # 2.15.0. Both produced models of identical size in bytes (574041195,
           # 539212467, 190085487; measured 2026-11-05).
           - os: macos-26
             label: macos-26, Homebrew Python
             python: homebrew
     runs-on: ${{ matrix.os }}
-    # Whole jobs measured 6 min 09 s to 8 min 59 s (2026-11-05).
+    # Whole jobs measured about 6 to 9 min (2026-11-05).
     timeout-minutes: 40
     # No cache of any kind, on purpose: a cached formula or model is the failure
-    # this workflow exists to see.
+    # this workflow exists to see. pip's cache goes off here, and Homebrew's goes
+    # to an empty folder in the step below, because the `runner` context does not
+    # exist in a job's env.
     env:
-      # The runner sets HOMEBREW_NO_AUTO_UPDATE=1 with a tap 8 to 10 days old:
-      # with the variable it installed ggml 0.27.0, without it ggml 0.29.0. A
-      # stale tap would hide a rename for that long, and a person installing
-      # gets the updated tap.
-      HOMEBREW_NO_AUTO_UPDATE: ""
+      PIP_NO_CACHE_DIR: "1"
 
+    # These steps copy docs/INSTALL.md by hand, and leaving docs/ out of `paths` is
+    # a choice: a change there has to be repeated here.
     steps:
       - name: Check out repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+
+      # Before the first brew, so no bottle the image left in its cache can stand
+      # in for a download that stopped working.
+      - name: Give Homebrew an empty cache
+        run: echo "HOMEBREW_CACHE=$RUNNER_TEMP/homebrew-cache" >> "$GITHUB_ENV"
 
       # docs/INSTALL.md sends people to the Command Line Tools, and the runner
       # defaults to a full Xcode. Measured with this selection: Swift 6.1.2 and
@@ -100,7 +117,8 @@ jobs:
           sw_vers -productVersion
           xcode-select -p
           swift --version
-          echo "SDK $(xcrun --show-sdk-version)"
+          sdk="$(xcrun --show-sdk-version)"
+          echo "SDK $sdk"
 
       # python3 on the runner is Homebrew's. A link at the front of the PATH is
       # enough for setup-bench.sh to use the one a clean Mac has.
@@ -111,10 +129,33 @@ jobs:
           ln -s /usr/bin/python3 "$RUNNER_TEMP/system-python/python3"
           echo "$RUNNER_TEMP/system-python" >> "$GITHUB_PATH"
 
-      - name: Record the Python in use
+      # The matrix promises two different Pythons, and an image that changes its
+      # PATH would keep the job green on the wrong one. base_prefix names the real
+      # installation behind a link. /usr/bin/python3 answers from whatever
+      # xcode-select points at, so this step has to come after the selection above.
+      - name: Prove which Python is in use
+        env:
+          EXPECTED_PYTHON: ${{ matrix.python }}
         run: |
+          set -euo pipefail
           command -v python3
           python3 --version
+          base_prefix="$(python3 -c 'import sys; print(sys.base_prefix)')"
+          case "$EXPECTED_PYTHON" in
+            system) wanted="/Library/Developer/CommandLineTools/" ;;
+            homebrew) wanted="$(brew --prefix)/" ;;
+            *)
+              echo "::error::unknown matrix.python: $EXPECTED_PYTHON"
+              exit 1
+              ;;
+          esac
+          case "$base_prefix" in
+            "$wanted"*) echo "$EXPECTED_PYTHON Python at $base_prefix" ;;
+            *)
+              echo "::error::expected the $EXPECTED_PYTHON Python under $wanted, found $base_prefix"
+              exit 1
+              ;;
+          esac
 
       # setup-bench.sh skips `brew install` when whisper-cli already exists, so a
       # runner image that started shipping it would leave this job green without
@@ -151,13 +192,31 @@ jobs:
           fi
           echo "runner is clean"
 
+      # The runner sets HOMEBREW_NO_AUTO_UPDATE=1 with a tap 8 to 10 days old:
+      # with the variable it installed ggml 0.27.0, without it ggml 0.29.0. A
+      # stale tap would hide a rename for that long, and a person installing
+      # gets the updated tap. An automatic update can fail without stopping the
+      # install that asked for it, so this one has its own step, and a failed
+      # `brew update` turns the job red on purpose.
+      - name: Update Homebrew
+        run: brew update
+
       # The image ships cmake from Homebrew, and a clean Mac has none. Removing
-      # it makes the literal INSTALL line do the work (17 s measured). The
-      # uninstall fails loudly if an image stops shipping it, which is the signal
-      # to review this step.
+      # the formula makes the literal INSTALL line do the work (17 s measured). An
+      # image that stops shipping the formula changes nothing here: the uninstall
+      # is skipped and the line still runs. A cmake from outside Homebrew would
+      # keep that line from running, so it stops the step by name.
       - name: Install cmake as docs/INSTALL.md says
         run: |
-          brew uninstall --ignore-dependencies --formula cmake
+          set -euo pipefail
+          formulas="$(brew list --formula)"
+          if grep -qFx cmake <<<"$formulas"; then
+            brew uninstall --ignore-dependencies --formula cmake
+          fi
+          if outside="$(command -v cmake)"; then
+            echo "::error::cmake at $outside is not the Homebrew formula, and it keeps the docs/INSTALL.md line from running"
+            exit 1
+          fi
           command -v cmake || brew install cmake
 
       - name: Build the app
@@ -166,7 +225,7 @@ jobs:
       - name: Set up the models
         run: bash scripts/setup-bench.sh
 
-      # `brew install whisper-cpp` exits 0 in 14 to 15 s and installs whisper.cpp
+      # `brew install whisper-cpp` exits 0 in about 15 s and installs whisper.cpp
       # 1.9.5, because whisper-cpp is an `oldname` of the formula. That line alone
       # never shows a rename. What broke in September was the path
       # (share/whisper.cpp exists, share/whisper-cpp does not), and the Metal
@@ -211,6 +270,11 @@ jobs:
       # usesMetal is true and warmUp() succeeded. Ending in `ms` refuses
       # "(WARM-UP FAILED)", and starting with `Metal ·` refuses "CPU (SLOW)" and
       # the text of a load error.
+      #
+      # `Metal ·` is what the app reports. It proves ggml registered a Metal device
+      # and the model loaded and warmed up, and it does not say which backend the
+      # context used (top of this file). With the pinned whisper.cpp and the Metal
+      # library refused, the exit 134 lands in the "exited before writing" branch.
       #
       # The line appeared after 37 s (macos-15) and 30 s (macos-26), and the 180 s
       # limit leaves room for a slower paravirtual GPU.
@@ -282,7 +346,7 @@ jobs:
 
           - Granting Microphone and Accessibility: TCC needs a person. verify-install.sh only warns, and here it reads microphone=notDetermined accessibility=missing.
           - Actually dictating: the key, audio capture, speech transcription and pasting at the cursor. The deepest point reached is the app's warm-up inference.
-          - xcode-select --install and installing Homebrew: the runner already has both, plus git and a full Xcode that only stops being the selected one.
+          - xcode-select --install and installing Homebrew: the runner already has both, plus git and a full Xcode that only stops being the selected one. Any other tool the image already ships goes unproven too, such as openssl, used by scripts/build-app.sh:123.
           - Metal speed: the GPU here is an Apple Paravirtual device.
           - Filtered networks and copying the model from another machine, scripts/update.sh, and macOS 14.
           EOF
@@ -290,11 +354,19 @@ jobs:
           exit 0
 
   # GitHub turns a public repository's schedule off after 60 days with no activity
-  # (docs: Disabling and enabling a workflow), and a scheduled run does not count
-  # as activity. Then the install job above stops without a word. The last commit
-  # on main was 2026-10-16, so a quiet stretch this long is an ordinary event.
+  # (docs: Disabling and enabling a workflow). Then the install job above stops
+  # without a word. The last commit on main was 2026-10-16, so a quiet stretch this
+  # long is an ordinary event.
   #
-  # With a weekly run, a limit of 45 gives two warnings before day 60.
+  # This job is a heuristic. GitHub does not define "activity", and the age of the
+  # last commit on main is the conservative reading. That a scheduled run does not
+  # count as activity is an inference from that silence. Two cases go red with the
+  # schedule alive: a commit from long ago pushed today, and a schedule re-enabled
+  # by hand with no commit. Both stay red until the next commit.
+  #
+  # With a weekly run, a limit of 45 gives two warnings before day 60. The docs warn
+  # that a scheduled run can be delayed or dropped, and with one dropped it is one
+  # warning.
   #
   # Discarded: keeping it alive with `gh api -X PUT .../enable` and this token,
   # because the failure e-mail would go to whoever re-enabled it. Discarded: an
@@ -323,6 +395,6 @@ jobs:
           esac
           echo "last commit on main: $days days ago, limit $QUIET_DAYS_LIMIT"
           if [ "$days" -gt "$QUIET_DAYS_LIMIT" ]; then
-            echo "::error::$days days without a commit on main. GitHub turns this schedule off at 60. Any commit on main resets the count."
+            echo "::error::$days days without a commit on main. GitHub turns a quiet public repository's schedule off at 60 days. Any commit on main resets this count."
             exit 1
           fi
