@@ -3,6 +3,67 @@
 Registro das decisões de arquitetura, a mais recente primeiro. O backlog guarda
 a lista curta em "Decidido e fechado"; aqui fica o contexto de cada uma.
 
+### 2026-11-05: Instalar do zero roda toda semana e em PR só dos scripts de instalação
+**Decision:** O workflow `.github/workflows/install.yml` instala o NeverType do
+zero num runner macOS, na ordem do `docs/INSTALL.md`, sem cache nenhum:
+`PIP_NO_CACHE_DIR` no job e `HOMEBREW_CACHE` numa pasta vazia antes do primeiro
+`brew`. Os passos copiam o `docs/INSTALL.md` à mão, e `docs/` fora de `paths` é
+escolha, então mudança lá se repete aqui. Roda por agendamento semanal (quinta,
+09:17 UTC), por `workflow_dispatch` e em PR que toca o próprio workflow ou
+`build-app.sh`, `fetch-model.sh`, `install.sh`, `model-artifacts.sh`,
+`setup-bench.sh` e `verify-install.sh`. A matriz tem `macos-15` com o Python 3.9.6
+das Command Line Tools (o Mac limpo) e `macos-26` com o `python3` que a
+imagem traz do Homebrew, 3.15.x com torch 2.15.0, e um passo exige que o
+`sys.base_prefix` venha da origem que a matriz promete. O ponto mais fundo que ele
+prova é a linha inteira `nevertype: model: Metal · load <n> ms · warm-up <n> ms` no
+log do app, com o processo vivo. Essa linha é o que o app reporta: prova que o ggml
+registrou um device Metal e que o modelo carregou e aqueceu, e não prova qual
+backend o contexto usou, porque `usesMetal` enumera devices
+(`Transcriber.swift:193-198`). Com o whisper fixado (`306c88f`) e a biblioteca Metal
+recusada, o processo aborta com exit 134 sem linha `model:`, então hoje esse caminho
+fica vermelho. Isso é comportamento desse commit, e trocar o commit reabre a
+pergunta. Permissões do TCC, ditado de verdade e qualquer outra ferramenta que a
+imagem já traz, como o `openssl` de `build-app.sh:123`, ficam fora, escritos no topo
+do arquivo e no resumo de cada rodada.
+**Context:** A instalação ficou quebrada de 12/09 a 21/09/2026, 9 dias: o rename
+entrou no homebrew-core em 12/09 (`dfc545ca32`, committer `2026-09-12T16:21:44Z`; o
+22/08 é a data de autoria), o PR #15 abriu em 17/09 no Rio e
+mesclou em 21/09 no Rio (`2026-09-22T00:02Z`). A contribuidora achou em 5 dias, e o ganho do
+agendamento é não depender de alguém instalar. O rename da fórmula no Homebrew não
+gerou commit aqui, então só um gatilho de calendário vê esse tipo de quebra. Medido
+nas sondas de 05/11: 6 a 9 min por job e 6,9 GB baixados por rodada (dois jobs, 3,4
+GB cada de checkpoints do CDN da OpenAI). O tempo saiu pequeno, e o motivo de ficar
+fora de todo PR é o download. PR de Swift fica com o `ci.yml`, que compila e testa e
+nunca abre o app, então um defeito de Swift na abertura ou na carga do modelo só
+aparece aqui na próxima rodada semanal que acontecer, porque a doc do GitHub avisa
+que agendamento pode atrasar ou se perder. Trocar só a linha do `brew install` não
+acusa nada: `brew install whisper-cpp` sai com exit 0 e instala `whisper.cpp 1.9.5`,
+porque `whisper-cpp` é `oldname` da fórmula, e o que quebrou em setembro foi o
+caminho em `share/`. O runner traz `HOMEBREW_NO_AUTO_UPDATE=1` com o tap de 8 a 10
+dias, e o job roda `brew update` num passo próprio para ver a fórmula de hoje; falha
+dele deixa o job vermelho, de propósito. Falha de rede (CDN, `brew`, `pip`, API do
+GitHub) também deixa vermelho sem quebra da instalação, e uma rodada vermelha se
+relê antes de virar diagnóstico. Falha de `schedule` chega por e-mail a quem criou o
+workflow ou mudou o cron por último, e workflow reabilitado passa a avisar quem
+reabilitou. Esse e-mail depende de a conta ter o aviso de Actions ligado, o que a
+API não expõe; chegou em 05/11/2026 na rodada sabotada deste workflow, por PR. Em repositório público o GitHub desliga o
+agendamento depois de 60 dias sem atividade. O segundo job falha quando a `main`
+passa de 45 dias sem commit, e isso é heurística: o GitHub não define "activity", e
+a idade do último commit na `main` é a leitura conservadora. Que rodada agendada não
+conta como atividade é inferência, não frase da doc. Um commit antigo empurrado hoje
+ou um agendamento reabilitado à mão sem commit deixam a guarda vermelha até o
+próximo commit. Com rodada semanal são dois avisos antes dos 60, ou um se uma rodada
+se perder, e qualquer commit na `main` zera a contagem da guarda.
+**Discarded alternatives:** Rodar em todo PR (6,9 GB por PR; o ganho é ver no
+próprio PR de Swift a quebra de abertura ou de carga do modelo, que fica para a
+próxima rodada semanal). Só em PR (não veria rename, a causa da quebra que motivou o
+workflow). Rodada em todo push na `main` (6,9 GB por commit). Rodada diária (48 GB
+por semana no CDN de outra empresa para encurtar o intervalo de uma semana para um
+dia). Manter o agendamento vivo com `gh api -X PUT .../enable`
+pelo token do job (o aviso de falha passaria a ir para quem reabilitou). Commit
+vazio automático (o `Check for Updates…` do app mostraria atualização a quem
+instalou).
+
 ### 2026-10-03: Pausar a música começa ligado só em instalação nova
 **Decision:** O item `Pause Media While Dictating` (PR #17, vcamaral) começa
 ligado numa instalação nova e desligado numa que rodou antes de o item existir.
