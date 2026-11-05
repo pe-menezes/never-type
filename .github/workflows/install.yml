@@ -79,9 +79,9 @@ jobs:
           - os: macos-15
             label: macos-15, system Python
             python: system
-          # Homebrew's current python3, which on this runner is 3.15.x with torch
-          # 2.15.0. Both produced models of identical size in bytes (574041195,
-          # 539212467, 190085487; measured 2026-11-05).
+          # The python3 this image brought from Homebrew, 3.15.x with torch 2.15.0;
+          # brew update does not upgrade it. Both produced models of identical size
+          # in bytes (574041195, 539212467, 190085487; measured 2026-11-05).
           - os: macos-26
             label: macos-26, Homebrew Python
             python: homebrew

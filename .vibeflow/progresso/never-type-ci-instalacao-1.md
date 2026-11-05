@@ -5,8 +5,8 @@
 * `.vibeflow/decisions.md`: entrada `2026-11-05` no topo da lista, em português.
 * Blocos exercitados com logs e ferramentas falsas, sempre extraídos do YAML real por `extract.rb`.
 
-## Falta (do PG, pelo briefing)
-* Commit do conserto 1, rodada real do workflow com o conserto e reauditoria.
+## Falta
+* Nada desta parte. Conserto 1 commitado em `63505ef`, rodada real 41969293402 verde, sabotagem 41969294555 vermelha, reauditoria em PASS. O que a rodada real respondeu está no relatório da reauditoria.
 
 ## Provas da primeira rodada (com o resultado visto naquela sessão)
 A pasta temporária da sessão fica abaixo como `<tmp>`. Os comandos reais levam o caminho literal.
@@ -88,7 +88,7 @@ Rodei `sondas.rb` e `sondas.sh` sobre o YAML novo, com os blocos extraídos em p
 ### Não provado sem rodada real
 * O caminho `/Library/Developer/CommandLineTools/` do `base_prefix` no runner: é a expectativa do briefing, e esta máquina não o mostra, por estar no Xcode. Se a rodada real der outro caminho, o job de `macos-15` fica vermelho no passo novo.
 * `brew update`, `HOMEBREW_CACHE` e `PIP_NO_CACHE_DIR` de verdade: não rodei `brew` nem `pip`. Sobre eles só há prova de ordem e de texto.
-* A data de 04/11/2026 do e-mail veio do briefing, sem conferência: a API não expõe, e não abri a caixa de e-mail.
+* A data de 04/11/2026 do e-mail veio do briefing, sem conferência. Corrigida pelo PG: o e-mail da rodada sabotada chegou em 05/11/2026 às 01:17 no Rio, lido na caixa de entrada.
 
 ### Fora deste conserto
 * `docs/INSTALL.md` dizer que o tempo não foi medido: `docs/` não é desta parte.

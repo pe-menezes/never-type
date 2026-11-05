@@ -12,8 +12,8 @@ escolha, então mudança lá se repete aqui. Roda por agendamento semanal (quint
 09:17 UTC), por `workflow_dispatch` e em PR que toca o próprio workflow ou
 `build-app.sh`, `fetch-model.sh`, `install.sh`, `model-artifacts.sh`,
 `setup-bench.sh` e `verify-install.sh`. A matriz tem `macos-15` com o Python 3.9.6
-das Command Line Tools (o Mac limpo) e `macos-26` com o `python3` atual do
-Homebrew, que neste runner é 3.15.x com torch 2.15.0, e um passo exige que o
+das Command Line Tools (o Mac limpo) e `macos-26` com o `python3` que a
+imagem traz do Homebrew, 3.15.x com torch 2.15.0, e um passo exige que o
 `sys.base_prefix` venha da origem que a matriz promete. O ponto mais fundo que ele
 prova é a linha inteira `nevertype: model: Metal · load <n> ms · warm-up <n> ms` no
 log do app, com o processo vivo. Essa linha é o que o app reporta: prova que o ggml
@@ -27,8 +27,8 @@ imagem já traz, como o `openssl` de `build-app.sh:123`, ficam fora, escritos no
 do arquivo e no resumo de cada rodada.
 **Context:** A instalação ficou quebrada de 12/09 a 21/09/2026, 9 dias: o rename
 entrou no homebrew-core em 12/09 (`dfc545ca32`, committer `2026-09-12T16:21:44Z`; o
-22/08 é a data de autoria), o PR #15 abriu em 18/09 e mesclou em
-`2026-09-22T00:02Z`, 21/09 no Rio. A contribuidora achou em 6 dias, e o ganho do
+22/08 é a data de autoria), o PR #15 abriu em 17/09 no Rio e
+mesclou em 21/09 no Rio (`2026-09-22T00:02Z`). A contribuidora achou em 5 dias, e o ganho do
 agendamento é não depender de alguém instalar. O rename da fórmula no Homebrew não
 gerou commit aqui, então só um gatilho de calendário vê esse tipo de quebra. Medido
 nas sondas de 05/11: 6 a 9 min por job e 6,9 GB baixados por rodada (dois jobs, 3,4
