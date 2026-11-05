@@ -374,12 +374,12 @@ jobs:
   # update to everyone who installed.
   schedule-guard:
     name: Warn before GitHub turns this schedule off
-    if: github.event_name != 'pull_request'
+    if: true
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
       GH_TOKEN: ${{ github.token }}
-      QUIET_DAYS_LIMIT: 45
+      QUIET_DAYS_LIMIT: 0
     steps:
       - name: Count the days since the last commit on main
         run: |
