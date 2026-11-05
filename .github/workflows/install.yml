@@ -1,0 +1,328 @@
+# Installs NeverType from scratch on a macOS runner, in the order of
+# docs/INSTALL.md.
+#
+# What it proves: on an image with no NeverType and no whisper.cpp, today's
+# Homebrew formula and today's model downloads still take a clone to an app in
+# /Applications, signed, running, with the model loaded on Metal and its warm-up
+# inference finished. The installation broke from 2026-08-22 to 2026-09-21
+# because a Homebrew rename moved a path, nothing in this repository changed,
+# and a contributor found it in PR #15.
+#
+# What stays out, with no pretense of coverage:
+# - Granting Microphone and Accessibility: TCC needs a person. verify-install.sh
+#   only warns, and here it reads microphone=notDetermined accessibility=missing.
+# - Actually dictating: the key, audio capture, speech transcription and pasting
+#   at the cursor. The deepest point reached is the app's warm-up inference.
+# - xcode-select --install and installing Homebrew: the runner already has both,
+#   plus git and a full Xcode that only stops being the selected one.
+# - Metal speed: the GPU here is an Apple Paravirtual device.
+# - Filtered networks and copying the model from another machine,
+#   scripts/update.sh, and macOS 14.
+#
+# Why it is a separate workflow from ci.yml: decisions in
+# .vibeflow/decisions.md (2026-11-05).
+name: Install
+
+on:
+  schedule:
+    # A Homebrew rename produces no commit here, so this is the trigger that
+    # matters. Thursday 09:17 UTC, 06:17 in Rio, off the full hour, where GitHub
+    # delays scheduled runs less.
+    #
+    # Whoever changes this line starts receiving the failure e-mail: GitHub sends
+    # scheduled failures to the person who last changed the cron.
+    - cron: "17 9 * * 4"
+  workflow_dispatch:
+  # Only the files a person runs to install. Each round downloads 6.9 GB, so a
+  # Swift PR stays with ci.yml, which builds and tests it and never opens the app:
+  # a launch or model-load break from Swift shows up here in the next weekly run,
+  # at most 7 days later. There is no push to main because it is the tree the PR
+  # already proved.
+  pull_request:
+    paths:
+      - .github/workflows/install.yml
+      - scripts/build-app.sh
+      - scripts/fetch-model.sh
+      - scripts/install.sh
+      - scripts/model-artifacts.sh
+      - scripts/setup-bench.sh
+      - scripts/verify-install.sh
+
+permissions:
+  contents: read
+
+concurrency:
+  group: install-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  install:
+    name: Install from scratch (${{ matrix.label }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The clean Mac: Command Line Tools and Homebrew leave python3 at
+          # /usr/bin/python3, 3.9.6, which gets torch 2.8.0 and numpy 2.0.2.
+          - os: macos-15
+            label: macos-15, system Python
+            python: system
+          # The developer's machine: Homebrew Python 3.15.x with torch 2.15.0.
+          # Both produced models of identical size in bytes (574041195,
+          # 539212467, 190085487; measured 2026-11-05).
+          - os: macos-26
+            label: macos-26, Homebrew Python
+            python: homebrew
+    runs-on: ${{ matrix.os }}
+    # Whole jobs measured 6 min 09 s to 8 min 59 s (2026-11-05).
+    timeout-minutes: 40
+    # No cache of any kind, on purpose: a cached formula or model is the failure
+    # this workflow exists to see.
+    env:
+      # The runner sets HOMEBREW_NO_AUTO_UPDATE=1 with a tap 8 to 10 days old:
+      # with the variable it installed ggml 0.27.0, without it ggml 0.29.0. A
+      # stale tap would hide a rename for that long, and a person installing
+      # gets the updated tap.
+      HOMEBREW_NO_AUTO_UPDATE: ""
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      # docs/INSTALL.md sends people to the Command Line Tools, and the runner
+      # defaults to a full Xcode. Measured with this selection: Swift 6.1.2 and
+      # SDK 15.5 on macos-15, Swift 6.3.3 and SDK 26.5 on macos-26.
+      - name: Select the Command Line Tools toolchain
+        run: |
+          sudo xcode-select -s /Library/Developer/CommandLineTools
+          sw_vers -productVersion
+          xcode-select -p
+          swift --version
+          echo "SDK $(xcrun --show-sdk-version)"
+
+      # python3 on the runner is Homebrew's. A link at the front of the PATH is
+      # enough for setup-bench.sh to use the one a clean Mac has.
+      - name: Put the system Python first on the PATH
+        if: matrix.python == 'system'
+        run: |
+          mkdir -p "$RUNNER_TEMP/system-python"
+          ln -s /usr/bin/python3 "$RUNNER_TEMP/system-python/python3"
+          echo "$RUNNER_TEMP/system-python" >> "$GITHUB_PATH"
+
+      - name: Record the Python in use
+        run: |
+          command -v python3
+          python3 --version
+
+      # setup-bench.sh skips `brew install` when whisper-cli already exists, so a
+      # runner image that started shipping it would leave this job green without
+      # testing the formula. The same goes for each leftover below, which would
+      # let a step reuse what it is meant to produce.
+      - name: Prove the runner is clean
+        run: |
+          set -euo pipefail
+          found=()
+          for tool in whisper-cli whisper-quantize; do
+            if command -v "$tool" >/dev/null; then
+              found+=("$tool at $(command -v "$tool")")
+            fi
+          done
+          formulas="$(brew list --formula)"
+          if grep -qFx whisper.cpp <<<"$formulas"; then
+            found+=("Homebrew formula whisper.cpp")
+          fi
+          for path in \
+            "/Applications/NeverType.app" \
+            "$HOME/Library/Application Support/NeverType" \
+            "$HOME/Library/Keychains/nevertype-signing.keychain-db" \
+            "$HOME/.cache/whisper" \
+            models vendor build .cache; do
+            if [ -e "$path" ]; then
+              found+=("$path")
+            fi
+          done
+          if [ "${#found[@]}" -gt 0 ]; then
+            for item in "${found[@]}"; do
+              echo "::error::this runner is not clean, it already has: $item"
+            done
+            exit 1
+          fi
+          echo "runner is clean"
+
+      # The image ships cmake from Homebrew, and a clean Mac has none. Removing
+      # it makes the literal INSTALL line do the work (17 s measured). The
+      # uninstall fails loudly if an image stops shipping it, which is the signal
+      # to review this step.
+      - name: Install cmake as docs/INSTALL.md says
+        run: |
+          brew uninstall --ignore-dependencies --formula cmake
+          command -v cmake || brew install cmake
+
+      - name: Build the app
+        run: bash scripts/build-app.sh
+
+      - name: Set up the models
+        run: bash scripts/setup-bench.sh
+
+      # `brew install whisper-cpp` exits 0 in 14 to 15 s and installs whisper.cpp
+      # 1.9.5, because whisper-cpp is an `oldname` of the formula. That line alone
+      # never shows a rename. What broke in September was the path
+      # (share/whisper.cpp exists, share/whisper-cpp does not), and the Metal
+      # smoke test in setup-bench.sh is what reads it. That script accepts any
+      # whisper-cli on the PATH, and this one has to be Homebrew's.
+      - name: Prove whisper.cpp came from Homebrew
+        run: |
+          set -euo pipefail
+          brew list --versions whisper.cpp
+          prefix="$(brew --prefix)"
+          missing=0
+          for tool in whisper-cli whisper-quantize; do
+            if [ ! -x "$prefix/bin/$tool" ]; then
+              echo "::error::$tool is not under $prefix/bin"
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - name: Validate and install the model
+        run: bash scripts/fetch-model.sh
+
+      - name: Install the app
+        run: bash scripts/install.sh
+
+      # The wait passes no judgment: verify-install.sh is what lists everything
+      # wrong at once, a missing process included.
+      - name: Verify the installation
+        run: |
+          for _ in $(seq 1 20); do
+            if pgrep -x NeverType >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          bash scripts/verify-install.sh
+
+      # verify-install.sh proves the process is alive and the model is valid by
+      # bytes. Only the app says it loaded it, and a word search in this log would
+      # prove nothing (.vibeflow/conventions.md, Don'ts). So the whole line has to
+      # match what prepare() in Sources/NeverType/main.swift writes when
+      # usesMetal is true and warmUp() succeeded. Ending in `ms` refuses
+      # "(WARM-UP FAILED)", and starting with `Metal ·` refuses "CPU (SLOW)" and
+      # the text of a load error.
+      #
+      # The line appeared after 37 s (macos-15) and 30 s (macos-26), and the 180 s
+      # limit leaves room for a slower paravirtual GPU.
+      - name: Prove the app loaded the model
+        run: |
+          set -euo pipefail
+          log="$HOME/Library/Application Support/NeverType/nevertype.log"
+          limit=180
+          SECONDS=0
+          line=""
+          while :; do
+            if [ -f "$log" ]; then
+              line="$(grep -E '^nevertype: model: ' "$log" | tail -n 1 || true)"
+            fi
+            if [ -n "$line" ]; then
+              break
+            fi
+            if ! pgrep -x NeverType >/dev/null; then
+              echo "::error::NeverType exited before writing a model line. Log: $log"
+              if [ -f "$log" ]; then
+                tail -n 20 "$log"
+              fi
+              exit 1
+            fi
+            if [ "$SECONDS" -ge "$limit" ]; then
+              echo "::error::no model line in $log after $limit s, with NeverType still running"
+              if [ -f "$log" ]; then
+                tail -n 20 "$log"
+              fi
+              exit 1
+            fi
+            sleep 2
+          done
+          echo "$line"
+          if ! grep -Eq '^nevertype: model: Metal · load [0-9]+ ms · warm-up [0-9]+ ms$' <<<"$line"; then
+            echo "::error::the app did not load the model on Metal with a good warm-up: $line"
+            exit 1
+          fi
+          if ! pgrep -x NeverType >/dev/null; then
+            echo "::error::NeverType exited after writing its model line. Log: $log"
+            tail -n 20 "$log"
+            exit 1
+          fi
+          echo "model loaded and NeverType still running"
+
+      # Reads the log on failures too, and states what a green job leaves
+      # unproven. It never decides the result of the job.
+      - name: Summarize what this run saw and what stays out
+        if: always()
+        run: |
+          set +e
+          log="$HOME/Library/Application Support/NeverType/nevertype.log"
+          permissions_line=""
+          model_line=""
+          if [ -f "$log" ]; then
+            permissions_line="$(grep -E '^nevertype: permissions: ' "$log" | tail -n 1)"
+            model_line="$(grep -E '^nevertype: model: ' "$log" | tail -n 1)"
+          fi
+          {
+            echo "### What the app wrote"
+            echo
+            echo '```'
+            echo "${permissions_line:-no permissions line in the log}"
+            echo "${model_line:-no model line in the log}"
+            echo '```'
+            echo
+            cat <<'EOF'
+          ### What this workflow does not prove
+
+          - Granting Microphone and Accessibility: TCC needs a person. verify-install.sh only warns, and here it reads microphone=notDetermined accessibility=missing.
+          - Actually dictating: the key, audio capture, speech transcription and pasting at the cursor. The deepest point reached is the app's warm-up inference.
+          - xcode-select --install and installing Homebrew: the runner already has both, plus git and a full Xcode that only stops being the selected one.
+          - Metal speed: the GPU here is an Apple Paravirtual device.
+          - Filtered networks and copying the model from another machine, scripts/update.sh, and macOS 14.
+          EOF
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+
+  # GitHub turns a public repository's schedule off after 60 days with no activity
+  # (docs: Disabling and enabling a workflow), and a scheduled run does not count
+  # as activity. Then the install job above stops without a word. The last commit
+  # on main was 2026-10-16, so a quiet stretch this long is an ordinary event.
+  #
+  # With a weekly run, a limit of 45 gives two warnings before day 60.
+  #
+  # Discarded: keeping it alive with `gh api -X PUT .../enable` and this token,
+  # because the failure e-mail would go to whoever re-enabled it. Discarded: an
+  # automatic empty commit, because `Check for Updates…` in the app would show an
+  # update to everyone who installed.
+  schedule-guard:
+    name: Warn before GitHub turns this schedule off
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      QUIET_DAYS_LIMIT: 45
+    steps:
+      - name: Count the days since the last commit on main
+        run: |
+          set -euo pipefail
+          days="$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq '(now - (.commit.committer.date | fromdate)) / 86400 | floor')"
+          # An empty or malformed answer makes `[ -gt ]` error, and an `if` reads
+          # that as false: this job would go green with nothing measured.
+          case "${days#-}" in
+            ''|*[!0-9]*)
+              echo "::error::could not read the age of the last commit on main, got: $days"
+              exit 1
+              ;;
+          esac
+          echo "last commit on main: $days days ago, limit $QUIET_DAYS_LIMIT"
+          if [ "$days" -gt "$QUIET_DAYS_LIMIT" ]; then
+            echo "::error::$days days without a commit on main. GitHub turns this schedule off at 60. Any commit on main resets the count."
+            exit 1
+          fi

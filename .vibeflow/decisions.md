@@ -3,6 +3,44 @@
 Registro das decisões de arquitetura, a mais recente primeiro. O backlog guarda
 a lista curta em "Decidido e fechado"; aqui fica o contexto de cada uma.
 
+### 2026-11-05: Instalar do zero roda toda semana e em PR só dos scripts de instalação
+**Decision:** O workflow `.github/workflows/install.yml` instala o NeverType do
+zero num runner macOS, na ordem do `docs/INSTALL.md`, sem cache nenhum. Roda por
+agendamento semanal (quinta, 09:17 UTC), por `workflow_dispatch` e em PR que toca
+o próprio workflow ou `build-app.sh`, `fetch-model.sh`, `install.sh`,
+`model-artifacts.sh`, `setup-bench.sh` e `verify-install.sh`. A matriz tem
+`macos-15` com o Python 3.9.6 das Command Line Tools (o Mac limpo) e `macos-26`
+com o Python do Homebrew (a máquina de quem desenvolve). O ponto mais fundo que
+ele prova é a linha inteira `nevertype: model: Metal · load <n> ms · warm-up <n> ms`
+no log do app, com o processo vivo. Permissões do TCC e ditado de verdade ficam
+fora, escritos no topo do arquivo e no resumo de cada rodada.
+**Context:** A instalação ficou quebrada de 22/08 a 21/09/2026, e quem achou foi
+uma contribuidora, no PR #15. O rename da fórmula no Homebrew não gerou commit
+aqui, então só um gatilho de calendário vê esse tipo de quebra. Medido nas sondas
+de 05/11: 6 a 9 min por job e 6,9 GB baixados por rodada (dois jobs, 3,4 GB cada
+de checkpoints do CDN da OpenAI). O tempo saiu pequeno, e o motivo de ficar fora
+de todo PR é o download. PR de Swift fica com o `ci.yml`, que compila e testa e
+nunca abre o app, então um defeito de Swift na abertura ou na carga do modelo só
+aparece aqui na rodada semanal, até 7 dias depois. Trocar só a linha do `brew install` não acusa
+nada: `brew install whisper-cpp` sai com exit 0 e instala `whisper.cpp 1.9.5`,
+porque `whisper-cpp` é `oldname` da fórmula, e o que quebrou em setembro foi o
+caminho em `share/`. O runner traz `HOMEBREW_NO_AUTO_UPDATE=1` com o tap de 8 a
+10 dias, e o job limpa a variável para ver a fórmula de hoje. Falha de `schedule`
+chega por e-mail a quem criou o workflow ou mudou o cron por último, e workflow
+reabilitado passa a avisar quem reabilitou. Em repositório público o GitHub
+desliga o agendamento depois de 60 dias sem atividade, e rodada agendada não conta
+como atividade. Por isso o segundo job falha quando a `main` passa de 45 dias sem
+commit: com rodada semanal, são dois avisos antes dos 60, e qualquer commit na
+`main` zera a contagem.
+**Discarded alternatives:** Rodar em todo PR (6,9 GB por PR; o ganho é ver no
+próprio PR de Swift a quebra de abertura ou de carga do modelo, que a rodada
+semanal vê em até 7 dias). Só em PR (não veria rename, a causa da quebra que motivou o
+workflow). Rodada diária (48 GB por semana no CDN de outra empresa para reduzir o
+atraso de 7 dias para 1). Manter o agendamento vivo com `gh api -X PUT .../enable`
+pelo token do job (o aviso de falha passaria a ir para quem reabilitou). Commit
+vazio automático (o `Check for Updates…` do app mostraria atualização a quem
+instalou).
+
 ### 2026-10-03: Pausar a música começa ligado só em instalação nova
 **Decision:** O item `Pause Media While Dictating` (PR #17, vcamaral) começa
 ligado numa instalação nova e desligado numa que rodou antes de o item existir.
