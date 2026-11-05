@@ -889,12 +889,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// The trigger and the menu item with the microphone never answered: asks
-    /// again, and when no answer comes within the wait, or a request was
-    /// already open, says so (audit D1). `MicrophoneRequest` holds the rule.
+    /// again, and when no answer comes within the wait, the request comes back
+    /// still unanswered, or a request was already open, says so (audits D1 and
+    /// N3). `MicrophoneRequest` holds the rule.
     private func askAgainForMicrophone() {
         Task { @MainActor in
             await self.microphoneRequest.askAgain(
                 request: { await self.askForMicrophone() },
+                microphone: { MicrophoneAccess.current },
                 onNoAnswer: { self.showMicrophoneWaitingAlert() })
             // By the rule, never the microphone alone: the normal icon used to
             // be drawn here over a model that failed to load (audit L6).
@@ -988,10 +990,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// The app's own word when the microphone request it made is still open,
-    /// or did not come back within the wait (audit D1). Before, the trigger
-    /// only changed the icon, and a prompt that never appeared looked like a
-    /// dead key. One button: there is no page to open, because the Microphone
-    /// list may not hold the app yet and has no + button.
+    /// did not come back within the wait (audit D1), or came back with no
+    /// answer (audit N3). Before, the trigger only changed the icon, and a
+    /// prompt that never appeared looked like a dead key. One button: there is
+    /// no page to open, because the Microphone list may not hold the app yet
+    /// and has no + button.
     private func showMicrophoneWaitingAlert() {
         guard permissionAlertGate.begin() else { return }
         defer { permissionAlertGate.end() }

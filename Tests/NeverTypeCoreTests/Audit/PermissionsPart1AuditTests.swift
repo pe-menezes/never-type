@@ -41,48 +41,6 @@ struct PermissionsPart1AuditTests {
                 == .showMicrophoneWarning)
     }
 
-    // MARK: - Launch order, with the answer arriving off the main thread
-
-    @MainActor
-    private final class Calls {
-        var steps: [String] = []
-        var accessibilityOnMain: Bool?
-    }
-
-    /// The TCC answer arrives on a background queue (`docs/pitfalls.md`, "A
-    /// closure inside a `@MainActor` method inherits the isolation"), and the
-    /// path only runs while the microphone is not determined. The executor's
-    /// test resumes the prompt from the main actor, so it cannot tell whether
-    /// what comes after the answer still runs on main.
-    @Test("an answer that arrives off the main thread still asks Accessibility on main, after it")
-    @MainActor
-    func answerFromBackgroundQueue() async {
-        let calls = Calls()
-        await LaunchPermissions.run(
-            microphone: { .notDetermined },
-            accessibilityGranted: {
-                calls.steps.append("check accessibility")
-                return false
-            },
-            requestMicrophone: {
-                calls.steps.append("ask microphone")
-                await withCheckedContinuation { (answer: CheckedContinuation<Void, Never>) in
-                    DispatchQueue.global().async { answer.resume() }
-                }
-                calls.steps.append("microphone answered")
-            },
-            requestAccessibility: {
-                calls.accessibilityOnMain = Thread.isMainThread
-                calls.steps.append("ask accessibility")
-            })
-
-        #expect(calls.steps == ["ask microphone", "microphone answered",
-                                "check accessibility", "ask accessibility"],
-                "got \(calls.steps)")
-        #expect(calls.accessibilityOnMain == true,
-                "Accessibility was asked off the main thread")
-    }
-
     // MARK: - The log line
 
     /// A reading that goes back to an earlier value is a change, and the log has

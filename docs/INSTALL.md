@@ -177,8 +177,9 @@ If no prompt appears within about 10 seconds, run
 Do not move on to Accessibility until the person confirms the microphone is
 allowed. If it is still missing later, holding the key asks again while macOS
 has no answer, and an alert says the app is waiting when a prompt is already
-open or no answer comes within 10 seconds. Once it was denied, an alert offers
-to open the Microphone page instead. The menu line "Microphone: missing" comes
+open, when the request comes back still unanswered, or when no answer comes
+within 10 seconds. Once it was denied, an alert offers to open the Microphone
+page instead. The menu line "Microphone: missing" comes
 with **Ask for Microphone Access…** under it while it was never answered, and
 with **Open Microphone Settings…** once it was denied.
 

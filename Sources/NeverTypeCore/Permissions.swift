@@ -73,7 +73,8 @@ public enum LaunchPermissions {
 /// the prompt never appeared at all, every trigger was the slashed icon and
 /// nothing else, which is the case this front started from. Now a trigger that
 /// finds a request open says so at once, and one that asks again says so when
-/// the wait ends with no answer.
+/// the wait ends with no answer, or when the request comes back without one
+/// (audit N3 of part 1).
 ///
 /// What it keeps is about this process, never about the system: a request it
 /// started and that has not returned. The permission itself is still read from
@@ -85,6 +86,8 @@ public enum LaunchPermissions {
 @MainActor
 public final class MicrophoneRequest {
     public private(set) var isPending = false
+    /// Whether the wait of the current `askAgain` already showed the alert.
+    private var alertedByTheWait = false
 
     public init() {}
 
@@ -101,24 +104,36 @@ public final class MicrophoneRequest {
     ///
     /// With a request already in flight, `onNoAnswer` runs at once and nothing
     /// is asked. Otherwise the request starts, and if it has not returned when
-    /// `wait` does, `onNoAnswer` runs, once. An answer first shows nothing.
-    /// Returns when the request returns.
+    /// `wait` does, `onNoAnswer` runs, once. An answer first shows nothing. A
+    /// request that returns with `microphone` still not determined was not
+    /// answered, so `onNoAnswer` runs right then, unless the wait already ran it
+    /// (audit N3 of part 1). Returns after the request has returned and that
+    /// `onNoAnswer` too: in the app, after the click on OK of the alert.
     public func askAgain(request: @escaping @MainActor () async -> Void,
                          wait: @escaping @MainActor () async -> Void = MicrophoneRequest.tenSeconds,
+                         microphone: () -> MicrophoneAccess,
                          onNoAnswer: @escaping @MainActor () -> Void) async {
         guard !isPending else {
             onNoAnswer()
             return
         }
         isPending = true
+        alertedByTheWait = false
         let timer = Task { @MainActor [weak self] in
             await wait()
             guard !Task.isCancelled, let self, self.isPending else { return }
+            self.alertedByTheWait = true
             onNoAnswer()
         }
         await request()
         isPending = false
         timer.cancel()
+        // Read here, after the request: returning does not prove an answer. Left
+        // to the wait, it was cancelled just above and a trigger got the slashed
+        // icon and a log line, the silence of audit D1 by another way in.
+        if !alertedByTheWait && microphone() == .notDetermined {
+            onNoAnswer()
+        }
     }
 
     /// Long enough for a prompt that is on screen to be read and clicked,

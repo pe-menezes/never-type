@@ -121,12 +121,17 @@ cat <<'MSG'
 
 ==> Two permissions are left for you to grant
 
-  Open the app and macOS will ask for both. Both are required:
+  Open the app and macOS will ask for them one at a time: the microphone first,
+  and Accessibility only after the microphone prompt is answered. Both are
+  required:
 
     Microphone      without it there is no audio
     Accessibility   without it the app cannot paste at the cursor. If you try to
                     dictate, recording is blocked before audio is captured and
                     an alert offers to open the right System Settings page
+
+  If no microphone prompt appears within about 10 seconds, run
+  bash scripts/verify-install.sh and follow what it says about the microphone.
 
   If the Accessibility window does not show up, go to
   System Settings › Privacy & Security › Accessibility and turn on NeverType.

@@ -172,8 +172,9 @@ Se o pedido não aparecer em uns 10 segundos, rode
 Não passe para a Acessibilidade sem que a pessoa confirme que o microfone está
 permitido. Se ele ainda faltar depois, segurar a tecla pede de novo enquanto o
 macOS não tiver resposta, e um aviso diz que o app está esperando quando já há
-um pedido aberto ou quando a resposta não vem em 10 segundos. Depois de uma
-recusa, o aviso oferece abrir a página do Microfone. A linha "Microphone:
+um pedido aberto, quando o pedido volta ainda sem resposta ou quando a resposta
+não vem em 10 segundos. Depois de uma recusa, o aviso oferece abrir a página do
+Microfone. A linha "Microphone:
 missing" no menu vem com **Ask for Microphone Access…** embaixo enquanto o
 microfone nunca foi respondido, e com **Open Microphone Settings…** depois de
 uma recusa.
